@@ -83,7 +83,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if not isinstance(source,str) or not source.strip(): raise ValueError('Source must be nonempty text.')
             if self.path=='/api/check': return self.send_json(200,check_source(source,self.project))
             if self.path=='/api/structure': return self.send_json(200,semantic.extract(source,self.project))
-            if self.path=='/api/search': return self.send_json(200,semantic.search(source,data.get('path'),data.get('rule',''),self.project))
+            if self.path=='/api/search': return self.send_json(200,semantic.search(source,data.get('path'),data.get('rule',''),self.project,data.get('required')))
             if self.path=='/api/patch': return self.send_json(200,semantic.patch(source,data.get('path'),data.get('replacement'),self.project))
             if self.path=='/api/informath': return self.send_json(200,semantic.informath(source,self.project))
             if self.path in {'/api/propose','/api/explain'}:

@@ -29,3 +29,19 @@ assert r["candidates"],r
 assert any(c["rule"]=="local elimination" for c in r["candidates"]),r
 assert patch(source2,node["path"],r["candidates"][0]["term"])["statementDefEq"]
 print("Typed library application, multi-step local elimination, and self-reference rejection passed")
+
+
+trans_source="""theorem trans_chain (a b c : Nat) (hab : a = b) (hbc : b = c) : a = c := by
+  exact Eq.trans hab hbc
+"""
+node=next(n for n in walk(extract(trans_source)["tree"]) if n.get("reference")=="Eq.trans")
+r=search(trans_source,node["path"],"Eq.trans",required=["hab","hbc"])
+assert r["candidates"],r
+assert any("hab" in c["term"] and "hbc" in c["term"] for c in r["candidates"]),r
+try:
+    search(trans_source,node["path"],"Eq.trans",required=["notInScope"])
+except ValueError:
+    pass
+else:
+    raise AssertionError("An unresolved named premise was accepted")
+print("Controlled rule intent preserves the named local premises")

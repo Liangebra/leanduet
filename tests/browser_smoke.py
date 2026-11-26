@@ -125,7 +125,7 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
             expect(patch_page.locator("#typedStatus")).to_contain_text("Extracted from Lean elaboration",timeout=60000)
             patch_page.locator("#typedTree").evaluate("(root) => root.querySelectorAll('details.typedNode').forEach(x=>x.open=true)")
             patch_page.locator(".typedNode").filter(has=patch_page.locator("summary").filter(has_text=__import__("re").compile("^Apply Eq.symm$"))).last.locator(":scope > .typedEdit").click()
-            patch_page.locator("#ruleIntent").fill("等式对称性")
+            patch_page.locator("#ruleIntent").fill("由等式对称性，使用 h")
             patch_page.locator("#findRules").click()
             expect(patch_page.locator("#ruleResults")).to_contain_text("Eq.symm",timeout=60000)
             patch_page.locator("#ruleResults").get_by_role("button",name="Use this proof").first.click()

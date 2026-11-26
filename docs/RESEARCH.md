@@ -64,3 +64,7 @@ The bilingual rule intent table is a reviewed finite lexicon, not free-language 
 ### Mathlib integration target
 
 The optional Mathlib topology workflow uses the upstream v4.19.0 tag, which declares exactly the same Lean toolchain as this repository. It retrieves the cache for Mathlib.Topology.Compactness.Compact and executes tests/mathlib_integration.py against that independent Lake project. The test targets IsCompact.image (confirmed in the tagged upstream file), not a guessed translation or hand-coded theorem. The normal CI remains lightweight; the Mathlib job runs for changes to its test/workflow and is manually runnable. Success must be confirmed from its workflow log; availability of the cache and hosted runner is external.
+
+### Explicit evidence constraints
+
+The controlled phrase grammar accepts a mathematical rule followed by named local premises, for example "by transitivity of equality, using hab and hbc" or "由等式传递性，使用 hab、hbc". The frontend returns a structured rule identifier and list of names. Lean resolves these names to distinct local FVarIds, rejects missing or ambiguous names, passes still-unused premises into local elimination, and checks that the final expression contains every requested free-variable occurrence. This is a syntactic evidence-use contract, not a claim that the premises are mathematically indispensable. The search remains bounded and may miss a valid constrained proof.

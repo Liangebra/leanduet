@@ -3,7 +3,7 @@ import {replaceStep,snapshot,restore,lineRange} from './workspace.mjs';
 import {authoredNarrative} from './narratives.mjs';
 import {narrate} from './typed-narrative.mjs';
 import {witnessTerm} from './dependent-edit.mjs';
-import {concepts,resolveIntent} from './rule-intent.mjs';
+import {concepts,parseRuleIntent} from './rule-intent.mjs';
 const $=id=>document.getElementById(id),lean=$('lean'),prose=$('prose'),notes=$('prompt');
 const KEY='leanduet.workspace.v1',THEME='leanduet.theme';
 let typedRoot=null, patchNode=null, patchCandidate=null;
@@ -118,7 +118,7 @@ function openPatch(node){
   if(!clean()||!typedRoot)return;
   patchNode=node;patchCandidate=null;$('typedPatch').hidden=false;$('applyPatch').disabled=true;
   $('patchTarget').textContent=node.path+' · '+node.type;$('patchTerm').value=node.term||'';
-  $('ruleSearch').hidden=node.kind==='witness';$('ruleResults').replaceChildren();$('ruleIntent').value='';$('ruleStatus').textContent='Leave blank for goal-type search across loaded libraries.';
+  $('ruleSearch').hidden=node.kind==='witness';$('ruleResults').replaceChildren();$('ruleIntent').value='';$('ruleStatus').textContent='Leave blank for goal-type search. You can also specify a rule and required premises.';
   const witness=(node.children||[]).find(x=>x.kind==='witness');
   const evidence=(node.children||[]).find(x=>x.kind!=='witness');
   const paired=node.reference==='Exists.intro'&&witness&&evidence;
@@ -157,8 +157,8 @@ $('findRules').onclick=async()=>{
   const target=$('ruleResults');target.replaceChildren();
   $('findRules').disabled=true;$('ruleStatus').textContent='Searching in the selected Lean context…';
   try{
-    const rule=resolveIntent(query);
-    const r=await api('search',{source:lean.value,path:node.path,rule});
+    const intent=parseRuleIntent(query);
+    const r=await api('search',{source:lean.value,path:node.path,...intent});
     if(snapshotRev!==rev||patchNode!==node||$('ruleIntent').value!==query)return;
     const candidates=r.candidates||[];
     $('ruleStatus').textContent=candidates.length?candidates.length+' locally closed candidate(s) · select one, then check replacement.':'No closed candidate found in the bounded search. This is not a proof of impossibility.';

@@ -96,7 +96,7 @@ def patch(source, path, replacement, project=None):
             "statementDefEq":True, "proofShapePreserved":True, "surfaceHeaderChanged":True, "unchanged":False}
 
 
-def search(source, path, rule="", project=None):
+def search(source, path, rule="", project=None, required=None):
     """Discover locally closed proof candidates from Lean's loaded environment."""
     name = _name(source)
     _safe_proof(source)
@@ -104,7 +104,13 @@ def search(source, path, rule="", project=None):
         raise ValueError("Invalid proof node path.")
     if not isinstance(rule, str) or (rule and not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_'.]{0,159}", rule)):
         raise ValueError("Use an exact declaration name or automatic type search.")
-    args = " ".join(json.dumps(x,ensure_ascii=False) for x in (path,rule))
+    required = [] if required is None else required
+    if not isinstance(required,list) or len(required)>8 or any(
+        not isinstance(n,str) or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_']{0,63}",n)
+        for n in required
+    ) or len(set(required))!=len(required):
+        raise ValueError("Specify at most eight distinct, simple local premise names.")
+    args = " ".join(json.dumps(x,ensure_ascii=False) for x in (path,rule,",".join(required)))
     return _run_lean("import Lean\n" + source.rstrip() + "\n\n" + _adapter() +
                      "\n#duet_search " + name + " " + args + "\n", project)
 

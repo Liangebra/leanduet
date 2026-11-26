@@ -245,10 +245,11 @@ partial def mentions (e : Expr) (forbidden : Name) : Bool :=
   | _ => false
 
 def finishCandidate (goal : Expr) (expected : Expr) (forbidden : Name)
-    (label : String) : MetaM (Option Json) := do
+    (label : String) (required : List FVarId) : MetaM (Option Json) := do
   let p ← instantiateMVars goal
   if p.hasMVar || p.hasLevelMVar || mentions p forbidden || mentions p `sorryAx then
     return none
+  unless required.all (fun id => p.containsFVar id) do return none
   Lean.Meta.check p
   unless ← isDefEq (← inferType p) expected do return none
   let term ← withOptions (fun o => o.setBool `pp.fullNames true) do
@@ -258,15 +259,15 @@ def finishCandidate (goal : Expr) (expected : Expr) (forbidden : Name)
 
 /-- Each attempt starts with a fresh metavariable and rolls back all assignments.
     The imported declaration index is Lean's own, including Mathlib when imported. -/
-def findProofs (goalType : Expr) (forbidden : Name) (only : String) : MetaM (Array Json) := do
+def findProofs (goalType : Expr) (forbidden : Name) (only : String) (required : List FVarId) : MetaM (Array Json) := do
   let saved ← getMCtx
   let mut results : Array Json := #[]
   if only.isEmpty then
     let localResult ← observing? do
       let goal ← mkFreshExprMVar goalType
-      let remaining ← LibrarySearch.solveByElim [] false [goal.mvarId!] 4
+      let remaining ← LibrarySearch.solveByElim (required.map mkFVar) false [goal.mvarId!] 4
       unless remaining.isEmpty do throwError "Unsolved premises"
-      finishCandidate goal goalType forbidden "local elimination"
+      finishCandidate goal goalType forbidden "local elimination" required
     setMCtx saved
     if let some (some j) := localResult then results := results.push j
   let candidates ← if only.isEmpty then
@@ -285,19 +286,33 @@ def findProofs (goalType : Expr) (forbidden : Name) (only : String) : MetaM (Arr
         let goal ← mkFreshExprMVar goalType
         let rule ← LibrarySearch.mkLibrarySearchLemma n direction
         let pending ← goal.mvarId!.apply rule
-        let remaining ← LibrarySearch.solveByElim [] false pending 4
+        let partialProof ← instantiateMVars goal
+        let missing := required.filter (fun id => !partialProof.containsFVar id)
+        let remaining ← LibrarySearch.solveByElim (missing.map mkFVar) false pending 4
         unless remaining.isEmpty do throwError "Unsolved premises"
         let label := n.toString ++ (match direction with
           | .none => ""
           | .mp => " (forward)"
           | .mpr => " (backward)")
-        finishCandidate goal goalType forbidden label
+        finishCandidate goal goalType forbidden label required
       setMCtx saved
       if let some (some j) := found then
         unless results.contains j do results := results.push j
   return results
 
-elab "#duet_search " n:ident path:str rule:str : command => do
+def resolveRequired (names : String) : MetaM (List FVarId) := do
+  if names.isEmpty then return []
+  let mut resolved := []
+  for name in names.splitOn "," do
+    let mut ids : Array FVarId := #[]
+    for d in (← getLCtx) do
+      if !d.isImplementationDetail && d.userName.toString == name then
+        ids := ids.push d.fvarId
+    unless ids.size == 1 do throwError "Unknown or ambiguous local premise: {name}"
+    resolved := ids[0]! :: resolved
+  return resolved.reverse
+
+elab "#duet_search " n:ident path:str rule:str required:str : command => do
   liftTermElabM do
     let ci ← getConstInfo n.getId
     match ci with
@@ -307,7 +322,8 @@ elab "#duet_search " n:ident path:str rule:str : command => do
       let j ← withNodeAt v.value (parts.drop 1) fun e => do
         let goal ← inferType e
         unless ← isProp goal do throwError "Search requires a proposition"
-        let candidates ← findProofs goal n.getId rule.getString
+        let premises ← resolveRequired required.getString
+        let candidates ← findProofs goal n.getId rule.getString premises
         pure (Json.mkObj [("schema", toJson (1 : Nat)),
           ("goal", toJson (← ppExpr goal).pretty), ("candidates", Json.arr candidates)])
       logInfo m!"LEANDUET_JSON:{j.compress}"
