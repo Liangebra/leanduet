@@ -67,7 +67,6 @@ partial def inspect (e : Expr) (fuel : Nat) (path : String := "root") : MetaM Js
   let typ := (← ppExpr ty).pretty
   let editable ← isProp ty
   let scope ← localScope ty editable
-  let alternatives ← if editable then localApplications ty else pure #[]
   if fuel == 0 then return node path editable scope "opaque" term typ
   match e with
   | .lam n t b bi =>
@@ -85,6 +84,7 @@ partial def inspect (e : Expr) (fuel : Nat) (path : String := "root") : MetaM Js
         return node path editable scope "let" term typ #[value, body]
           [("binder", toJson n.toString), ("binderType", toJson binderType)]
   | .app .. =>
+      let alternatives ← if editable then localApplications ty else pure #[]
       let head := e.getAppFn
       let headText := (← ppExpr head).pretty
       let headType := (← ppExpr (← inferType head)).pretty
@@ -123,7 +123,7 @@ elab "#duet_extract " n:ident : command => do
     | _ => throwError "Expected a theorem"
 
 /-- Rebuild exactly one expression path, elaborating the replacement in its actual scope. -/
-partial def replaceAt (e : Expr) (path : List String) (stx : Syntax) :
+partial def replaceAt (e : Expr) (path : List String) (stx : Syntax)
     (allowWitness : Bool := false) : TermElabM (Expr × String × String) := do
   match path with
   | [] =>
