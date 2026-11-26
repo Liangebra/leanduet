@@ -18,7 +18,9 @@ theorem Slot.mem {Γ : List Prop} {P : Prop} (s : Slot Γ P) : P ∈ Γ := by
   | there _ ih => exact List.mem_cons_of_mem _ ih
 
 example (P : Prop) : (Slot.here : Slot [P,P] P).index ≠
-    (Slot.there Slot.here : Slot [P,P] P).index := by decide
+    (Slot.there Slot.here : Slot [P,P] P).index := by
+  change 0 ≠ 1
+  decide
 
 /-- A proof object is data, not a proposition: different derivations remain distinguishable. -/
 inductive Derivation : List Prop → Prop → Type where
