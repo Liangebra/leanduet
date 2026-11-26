@@ -119,7 +119,7 @@ function openPatch(node){
   if(!clean()||!typedRoot)return;
   patchNode=node;patchCandidate=null;$('typedPatch').hidden=false;$('applyPatch').disabled=true;
   $('patchTarget').textContent=node.path+' · '+node.type;$('patchTerm').value=node.term||'';
-  $('chainEditor').hidden=node.kind==='witness';$('chainEditor').open=false;$('chainText').value='';$('chainStatus').textContent='';
+  $('chainEditor').hidden=node.kind==='witness';$('chainEditor').open=false;$('chainText').value='';$('chainStatus').textContent='';$('chainBindings').replaceChildren();
   $('ruleSearch').hidden=node.kind==='witness';$('ruleResults').replaceChildren();$('ruleIntent').value='';$('ruleStatus').textContent='Leave blank for goal-type search. You can also specify a rule and required premises.';
   const witness=(node.children||[]).find(x=>x.kind==='witness');
   const evidence=(node.children||[]).find(x=>x.kind!=='witness');
@@ -171,7 +171,7 @@ $('findRules').onclick=async()=>{
   }catch(e){if(snapshotRev===rev&&patchNode===node)$('ruleStatus').textContent=e.message;}
   finally{$('findRules').disabled=false;}
 };
-$('chainText').addEventListener('input',()=>{$('patchTerm').value='';$('patchTerm').dispatchEvent(new Event('input'));$('chainStatus').textContent='Narrative changed. Compile again.';});
+$('chainText').addEventListener('input',()=>{$('chainBindings').replaceChildren();$('patchTerm').value='';$('patchTerm').dispatchEvent(new Event('input'));$('chainStatus').textContent='Narrative changed. Compile again.';});
 $('compileChain').onclick=()=>{
   if(!patchNode||!clean()||patchNode.kind==='witness')return;
   try{
@@ -179,6 +179,24 @@ $('compileChain').onclick=()=>{
     $('patchTerm').value=r.term;$('patchTerm').dispatchEvent(new Event('input'));
     $('chainStatus').textContent=r.steps.length+' steps compiled to a candidate. Check replacement to validate with Lean.';
   }catch(e){$('chainStatus').textContent=e.message;}
+};
+$('inferChain').onclick=async()=>{
+  if(!patchNode||!clean()||patchNode.kind==='witness')return;
+  const node=patchNode,revision=rev,query=$('chainText').value;
+  $('chainBindings').replaceChildren();$('inferChain').disabled=true;
+  $('patchTerm').value='';$('patchTerm').dispatchEvent(new Event('input'));
+  $('chainStatus').textContent='Inferring intermediate propositions in Lean…';
+  try{
+    const {steps}=compileChain(query,(node.scope||[]).map(d=>d.name));
+    const r=await api('chain',{source:lean.value,path:node.path,steps});
+    if(revision!==rev||node!==patchNode||query!==$('chainText').value)return;
+    if(r.status!=='inferred')throw Error('Lean did not confirm inference.');
+    $('patchTerm').value=r.term;$('patchTerm').dispatchEvent(new Event('input'));
+    for(const b of r.bindings){const row=element('div',undefined,'scopeRow');row.append(element('strong',b.name),element('code',b.type));$('chainBindings').append(row);}
+    const goal=element('div',undefined,'scopeRow');goal.append(element('strong','Conclusion'),element('code',r.goal));$('chainBindings').append(goal);
+    $('chainStatus').textContent='Intermediate propositions inferred by Lean. Check replacement before applying.';
+  }catch(e){if(revision===rev&&node===patchNode&&query===$('chainText').value)$('chainStatus').textContent=e.message;}
+  finally{$('inferChain').disabled=false;}
 };
 function stageWitness(){
   if(!patchNode||$('witnessPair').hidden)return;

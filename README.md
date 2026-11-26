@@ -63,7 +63,7 @@ The experimental dependent track adds quantified inference, certified existentia
 
 The local typed editor also offers on-demand proof search by goal type or a reviewed bilingual mathematical-rule alias. It calls Lean's own imported-declaration index, tries bounded applications and local premise solving, and stages candidates for checked replacement. Mathlib must be installed in a compatible project; automatic CI uses core Lean.
 
-The multi-step controlled narrative editor supports named intermediate results and explicit ordered rule applications, for example `Establish hq : Q | f using p`, followed by `Conclude | g using hq`. The candidate is still subject to local Lean verification. Chinese and Japanese project introductions are available; the editor UI is not fully localized.
+The multi-step controlled narrative editor supports named intermediate results and explicit ordered rule applications, for example `Establish hq : Q | f using p`, followed by `Conclude | g using hq`. Intermediate proposition annotations are optional; Infer types in Lean displays the actual elaborated types. The candidate is still subject to independent local Lean export verification. Chinese and Japanese project introductions are available; the editor UI is not fully localized.
 
 See [research references and reuse policy](docs/RESEARCH.md) and the small indexed natural-deduction calculus in [lean/TMN.lean](lean/TMN.lean). The calculus and extractor are included in CI; no claim of full Lean-to-natural-language reversibility.
 

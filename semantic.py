@@ -17,7 +17,7 @@ def _name(source):
         raise ValueError("Semantic extraction currently requires one ASCII-named theorem or lemma.")
     return names[0]
 
-def _run_lean(text, project=None, marker=None):
+def _run_lean(text, project=None, marker=None, trace=False):
     command = ["lake", "env", "lean"] if project else ["lean"]
     if not shutil.which(command[0]):
         raise ValueError("Lean toolchain not available.")
@@ -38,7 +38,11 @@ def _run_lean(text, project=None, marker=None):
             raw = line.split("LEANDUET_JSON:", 1)[1]
             if len(raw.encode()) > MAX_OUTPUT:
                 raise ValueError("Proof tree exceeds the current inspection limit.")
-            return json.loads(raw)
+            result = json.loads(raw)
+            if trace:
+                result['bindings'] = [json.loads(line.split('LEANDUET_BINDING:',1)[1])
+                                      for line in out.splitlines() if 'LEANDUET_BINDING:' in line]
+            return result
     raise ValueError("No semantic result was produced.")
 
 def _adapter():
@@ -95,6 +99,51 @@ def patch(source, path, replacement, project=None):
             "oldTerm":result["oldTerm"], "status":"checked",
             "statementDefEq":True, "proofShapePreserved":True, "surfaceHeaderChanged":True, "unchanged":False}
 
+
+_SIMPLE = r"[A-Za-z_][A-Za-z0-9_']{0,63}"
+_RULE = r"[A-Za-z_][A-Za-z0-9_'.]{0,159}"
+
+def infer_chain(source, path, steps, project=None):
+    """Elaborate an ordered chain at the selected occurrence; never edit source."""
+    name = _name(source)
+    _safe_proof(source)
+    if not isinstance(path,str) or not re.fullmatch(r"root(?:/(?:body|value|arg[0-9]+)){0,16}",path):
+        raise ValueError("Invalid proof node path.")
+    if not isinstance(steps,list) or not 1<=len(steps)<=16:
+        raise ValueError("Use 1–16 proof steps.")
+    lines, traced, names = ["by"], ["by"], []
+    for i,step in enumerate(steps):
+        if not isinstance(step,dict):
+            raise ValueError("Expected a structured proof step.")
+        app = step.get("application")
+        if not isinstance(app,str) or not re.fullmatch(_RULE + r"(?: " + _SIMPLE + r"){0,8}",app):
+            raise ValueError("Expected an ordered application of a named rule.")
+        if step.get("kind")=="conclude" and i==len(steps)-1:
+            lines.append("  exact "+app)
+            traced.append("  exact "+app)
+        elif step.get("kind")=="establish" and i<len(steps)-1:
+            h,ty=step.get("name"),step.get("type")
+            if not isinstance(h,str) or not re.fullmatch(_SIMPLE,h) or h in names:
+                raise ValueError("Invalid or repeated intermediate name.")
+            if ty is not None and (not isinstance(ty,str) or not ty.strip() or len(ty)>2000 or
+                re.search(r"[\r\n;{}]|/-|--|:=|\b(?:by|sorry|admit)\b",ty)):
+                raise ValueError("Expected a single proposition annotation or an inferred type.")
+            names.append(h)
+            line="  have "+h+(" : "+ty if ty is not None else "")+" := "+app
+            lines.append(line)
+            traced.extend([line,"  duet_trace "+h])
+        else:
+            raise ValueError("The chain must conclude exactly once, at its last step.")
+    term=_safe_proof("\n".join(lines))
+    instrumented=_safe_proof("\n".join(traced))
+    args=" ".join(json.dumps(x,ensure_ascii=False) for x in (path,instrumented))
+    result=_run_lean("import Lean\n"+source.rstrip()+"\n\n"+_adapter()+
+                     "\n#duet_patch "+name+" "+args+"\n",project,trace=True)
+    bindings=result["bindings"]
+    if [b.get("name") for b in bindings]!=names:
+        raise ValueError("Lean did not return the expected ordered intermediate bindings.")
+    return {"term":term,"bindings":bindings,"goal":result["localType"],"status":"inferred",
+            "note":"Local elaboration and rebuilt expression checked; export still requires independent validation."}
 
 def search(source, path, rule="", project=None, required=None):
     """Discover locally closed proof candidates from Lean's loaded environment."""

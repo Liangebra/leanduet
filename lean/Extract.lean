@@ -164,6 +164,31 @@ partial def replaceAt (e : Expr) (path : List String) (stx : Syntax)
       return (mkAppN e.getAppFn (args.set! i v), ty, old)
     | _ => throwError "Invalid expression path"
 
+/-- No self-reference, including auxiliary declarations under the theorem name. -/
+partial def mentions (e : Expr) (forbidden : Name) : Bool :=
+  match e with
+  | .const n _ => forbidden.isPrefixOf n
+  | .app f a => mentions f forbidden || mentions a forbidden
+  | .lam _ t b _ | .forallE _ t b _ => mentions t forbidden || mentions b forbidden
+  | .letE _ t v b _ => mentions t forbidden || mentions v forbidden || mentions b forbidden
+  | .mdata _ b | .proj _ _ b => mentions b forbidden
+  | _ => false
+
+/-- Read the actual type of an intermediate fact after Lean elaborates it.
+    This tactic only inspects the local context; it does not solve a goal. -/
+elab "duet_trace " n:ident : tactic => Elab.Tactic.withMainContext do
+  let mut found : Array LocalDecl := #[]
+  for d in (← getLCtx) do
+    if !d.isImplementationDetail && d.userName == n.getId then
+      found := found.push d
+  unless found.size == 1 do throwError "Intermediate fact is missing or ambiguous: {n.getId}"
+  let ty ← instantiateMVars found[0]!.type
+  if ty.hasMVar || ty.hasLevelMVar then
+    throwError "The intermediate fact has unresolved type information: {n.getId}"
+  unless ← isProp ty do throwError "An intermediate fact must be a proposition: {n.getId}"
+  let j := Json.mkObj [("name", toJson n.getId.toString), ("type", toJson (← ppExpr ty).pretty)]
+  logInfo m!"LEANDUET_BINDING:{j.compress}"
+
 elab "#duet_patch " n:ident path:str replacement:str : command => do
   liftTermElabM do
     let ci ← getConstInfo n.getId
@@ -179,6 +204,8 @@ elab "#duet_patch " n:ident path:str replacement:str : command => do
       let (newProof, localType, oldTerm) ← replaceAt v.value (parts.drop 1) stx
       if newProof.hasMVar || newProof.hasLevelMVar || newProof.hasFVar || newProof.hasLooseBVars then
         throwError "Rebuilt proof is not closed"
+      if mentions newProof n.getId || mentions newProof `sorryAx then
+        throwError "Replacement refers to the original theorem or an incomplete proof"
       Lean.Meta.check newProof
       unless ← isDefEq (← inferType newProof) v.type do
         throwError "The entire proof no longer has the original type"
@@ -233,16 +260,6 @@ partial def withNodeAt {α : Type} (e : Expr) (path : List String)
       unless i < args.size do throwError "Argument index out of bounds"
       withNodeAt args[i]! rest k
     | _ => throwError "Invalid expression path"
-
-/-- No self-reference, including auxiliary declarations under the theorem name. -/
-partial def mentions (e : Expr) (forbidden : Name) : Bool :=
-  match e with
-  | .const n _ => forbidden.isPrefixOf n
-  | .app f a => mentions f forbidden || mentions a forbidden
-  | .lam _ t b _ | .forallE _ t b _ => mentions t forbidden || mentions b forbidden
-  | .letE _ t v b _ => mentions t forbidden || mentions v forbidden || mentions b forbidden
-  | .mdata _ b | .proj _ _ b => mentions b forbidden
-  | _ => false
 
 def finishCandidate (goal : Expr) (expected : Expr) (forbidden : Name)
     (label : String) (required : List FVarId) : MetaM (Option Json) := do

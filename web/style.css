@@ -21,3 +21,5 @@
 .ruleSearch{margin:14px 0;border:1px solid var(--line);border-radius:7px;padding:12px;background:var(--soft)}.ruleSearch label{margin:7px 0}.ruleSearch input{width:100%;padding:8px;border:1px solid var(--line);background:var(--paper);color:var(--ink);border-radius:5px;margin-bottom:8px}.ruleResult{padding:10px 0;border-top:1px solid var(--line);display:grid;gap:6px}.ruleResult code{font:12px var(--mono);white-space:pre-wrap;overflow-wrap:anywhere}.ruleResult button{justify-self:start}.ruleSearch #ruleStatus{white-space:pre-wrap}
 
 .chainEditor{padding:12px;border:1px solid var(--line);border-radius:7px;margin:12px 0}.chainEditor summary{cursor:pointer;font-size:13px;color:var(--accent)}.chainEditor textarea{min-height:140px;white-space:pre-wrap;font:13px/1.6 var(--mono)}
+
+.chainBindings:empty{display:none}.chainBindings{margin-top:10px;border:1px solid var(--line);padding:8px 10px;border-radius:6px;background:var(--paper)}

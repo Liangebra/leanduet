@@ -27,3 +27,10 @@ test('Japanese rule phrases support natural evidence separator',()=>{
 test('forward local rules are rejected as well as forward arguments',()=>{
   assert.throws(()=>compileChain('Establish hq : Q | later using p\nEstablish later : P → Q | f\nConclude | g using hq',scope));
 });
+
+test('type annotations may be omitted, without dropping scope checks',()=>{
+  const r=compileChain('建立 hq | f 使用 p\n结论 | g 使用 hq',scope);
+  assert.equal(r.steps[0].type,null);
+  assert.equal(r.term,'by\n  have hq := f p\n  exact g hq');
+  assert.throws(()=>compileChain('Establish hq | later using p\nEstablish later | f\nConclude | g using hq',scope));
+});

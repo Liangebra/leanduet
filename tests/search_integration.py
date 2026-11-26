@@ -57,3 +57,21 @@ node=next(n for n in walk(extract(source2)["tree"]) if n.get("reference")=="g")
 r=patch(source2,node["path"],term)
 assert r["statementDefEq"] and r["proofShapePreserved"],r
 print("Controlled multi-step narrative compiled and verified")
+
+
+from semantic import infer_chain
+inferred=infer_chain(source2,node["path"],[
+    {"kind":"establish","name":"hq","type":None,"application":"f p"},
+    {"kind":"conclude","application":"g hq"}])
+assert inferred["bindings"]==[{"name":"hq","type":"Q"}],inferred
+assert inferred["goal"]=="R",inferred
+assert patch(source2,node["path"],inferred["term"])["proofShapePreserved"]
+try:
+    infer_chain(source2,node["path"],[
+        {"kind":"establish","name":"objectOnly","type":None,"application":"P"},
+        {"kind":"conclude","application":"g hq"}])
+except ValueError:
+    pass
+else:
+    raise AssertionError("Non-proposition or missing premise accepted")
+print("Lean inferred and returned the intermediate proposition Q")
