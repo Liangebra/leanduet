@@ -147,3 +147,6 @@ and supported local relation schemas are used. The incremental cache disables
 prefix reuse after any edit in a draft with backward constraints, since a
 later line may change an earlier binding. Lean independently validates the
 resulting proof.
+
+The integration fixture compiles both left- and right-projection solutions
+selected by distinct downstream constraints using the actual browser compiler.
