@@ -20,3 +20,13 @@ class SemanticTests(unittest.TestCase):
     def test_informath_disabled(self):
         with self.assertRaises(ValueError):
             semantic.informath("theorem t : True := by\n  trivial")
+
+    @patch.dict("os.environ",{"LEANDUET_INFORMATH_ROOT":".","LEANDUET_INFORMATH_TOOLCHAIN":"leanprover/lean4:v4.36.0"},clear=True)
+    @patch("semantic.shutil.which",return_value="/usr/bin/RunInformath")
+    @patch("semantic.subprocess.run",return_value=SimpleNamespace(returncode=0,stdout="Informath output",stderr=""))
+    def test_informath_invokes_external_cli(self,run,_):
+        r=semantic.informath("theorem t : True := by\n  trivial")
+        self.assertEqual(r["provider"],"Informath")
+        self.assertFalse(r["verifiedAlignment"])
+        self.assertEqual(run.call_args.args[0][1:3],["-from-formalism=lean","-proof-text"])
+        self.assertEqual(run.call_args.kwargs["env"]["ELAN_TOOLCHAIN"],"leanprover/lean4:v4.36.0")

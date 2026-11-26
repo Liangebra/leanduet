@@ -50,13 +50,18 @@ def informath(source, project=None):
     executable = os.environ.get("LEANDUET_INFORMATH_BIN", "RunInformath")
     if not root or not Path(root).is_dir() or not shutil.which(executable):
         raise ValueError("Install Informath separately and set LEANDUET_INFORMATH_ROOT and optionally LEANDUET_INFORMATH_BIN.")
+    if project:
+        raise ValueError("Informath project-mode interoperability is not yet implemented. Use a standalone proof.")
     # Upstream's current Lean exporter targets a newer Lean version. The user
     # must provide a compatible upstream installation and toolchain.
     with tempfile.TemporaryDirectory(prefix="leanduet-informath-") as directory:
         path = Path(directory) / "Proof.lean"
         path.write_text(source, encoding="utf-8")
+        env = os.environ.copy()
+        if os.environ.get("LEANDUET_INFORMATH_TOOLCHAIN"):
+            env["ELAN_TOOLCHAIN"] = os.environ["LEANDUET_INFORMATH_TOOLCHAIN"]
         r = subprocess.run([executable, "-from-formalism=lean", "-proof-text", str(path)],
-                           cwd=Path(root).resolve(), capture_output=True, text=True,
+                           cwd=Path(root).resolve(), env=env, capture_output=True, text=True,
                            encoding="utf-8", errors="replace", timeout=90)
     if r.returncode:
         raise ValueError("Informath failed:\n" + r.stderr[-3000:])

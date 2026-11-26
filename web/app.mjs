@@ -1,14 +1,16 @@
 import {parseLean,renderLean,renderProse,planSync,sameStatement,stepSentence,sentenceFragment,EXAMPLES} from './core.mjs';
 import {replaceStep,snapshot,restore,lineRange} from './workspace.mjs';
 import {authoredNarrative} from './narratives.mjs';
+import {narrate} from './typed-narrative.mjs';
 const $=id=>document.getElementById(id),lean=$('lean'),prose=$('prose'),notes=$('prompt');
 const KEY='leanduet.workspace.v1',THEME='leanduet.theme';
+let typedRoot=null;
 let ir,base,rev=0,candidate=null,narrative=null,timer,selected=null,name='proof',exampleIndex=null,view='reading';
 const clean=()=>lean.value===base.lean&&prose.value===base.prose;
 const state=(id,label,kind='')=>{$(id).textContent=label;$(id).dataset.state=kind;};
 function notice(s,error=false){$('notice').textContent=s;$('notice').classList.toggle('error',error);}
 function persist(){try{localStorage.setItem(KEY,JSON.stringify(snapshot(base,{lean:lean.value,prose:prose.value},notes.value,name)));state('saveState','Saved locally','pass');}catch{state('saveState','Not saved','dirty');}}
-function invalidate(){rev++;$('typedTree').replaceChildren();$('informathOutput').textContent='';$('typedStatus').textContent='Proof changed or not inspected. Run extraction for this revision.';candidate=null;narrative=null;$('accept').disabled=true;$('useNarrative').disabled=true;$('proposal').textContent='No proposal yet.';$('output').textContent='Run the local checker to see diagnostics for this revision.';state('verifyState','Not checked');if(location.hostname!=='127.0.0.1'&&location.hostname!=='localhost'){state('verifyState','Local server required');$('output').textContent='Browser-only demo. Run python server.py locally for verification.';}}
+function invalidate(){rev++;typedRoot=null;$('typedNarrative').replaceChildren();$('typedTree').replaceChildren();$('informathOutput').textContent='';$('typedStatus').textContent='Proof changed or not inspected. Run extraction for this revision.';candidate=null;narrative=null;$('accept').disabled=true;$('useNarrative').disabled=true;$('proposal').textContent='No proposal yet.';$('output').textContent='Run the local checker to see diagnostics for this revision.';state('verifyState','Not checked');if(location.hostname!=='127.0.0.1'&&location.hostname!=='localhost'){state('verifyState','Local server required');$('output').textContent='Browser-only demo. Run python server.py locally for verification.';}}
 function dirty(){state('leanDirty',lean.value===base.lean?'Synced':'Edited',lean.value===base.lean?'':'dirty');state('proseDirty',prose.value===base.prose?'Synced':'Edited',prose.value===base.prose?'':'dirty');gutter();}
 function gutter(){$('gutter').textContent=lean.value.split('\n').map((_,i)=>i+1).join('\n');$('gutter').scrollTop=lean.scrollTop;$('cursor').textContent='Ln '+(lean.value.slice(0,lean.selectionStart).split('\n').length);}
 function element(tag,txt,cls){const e=document.createElement(tag);if(txt!==undefined)e.textContent=txt;if(cls)e.className=cls;return e;}
@@ -100,13 +102,22 @@ function renderTyped(node,container,depth=0){
   for(const child of node.children||[])renderTyped(child,block,depth+1);
   container.append(block);
 }
+function showTypedNarrative(){
+  const target=$('typedNarrative');target.replaceChildren();if(!typedRoot)return;
+  target.append(element('div','DERIVED READING · TYPE-DRIVEN','eyebrow'));
+  for(const row of narrate(typedRoot,$('typedLanguage').value)){
+    const line=element('div',undefined,'derivedStep');line.style.marginLeft=Math.min(row.depth,6)*9+'px';
+    line.append(document.createTextNode(row.phrase+' '));formula(line,row.expr);target.append(line);
+  }
+}
+$('typedLanguage').onchange=showTypedNarrative;
 async function typedRequest(mode){
   if(!clean()){notice('Synchronize first.',true);return;}
   const snapshotRev=rev;
   $('extractTerm').disabled=$('informath').disabled=true;
   $('typedStatus').textContent=mode==='structure'?'Elaborating trusted proof locally…':'Running separately installed Informath…';
   try{const r=await api(mode,{source:lean.value});if(snapshotRev!==rev)return;
-    if(mode==='structure'){$('typedTree').replaceChildren();renderTyped(r.tree,$('typedTree'));$('typedStatus').textContent='Extracted from Lean elaboration. Tree is depth-limited; inspect the original proof separately.';}
+    if(mode==='structure'){$('typedTree').replaceChildren();typedRoot=r.tree;showTypedNarrative();renderTyped(r.tree,$('typedTree'));$('typedStatus').textContent='Extracted from Lean elaboration. Tree is depth-limited; inspect the original proof separately.';}
     else{$('informathOutput').textContent=r.narrative;$('typedStatus').textContent='Informath output · alignment not certified.';}
   }catch(e){if(snapshotRev===rev)$('typedStatus').textContent=e.message;}
   finally{$('extractTerm').disabled=$('informath').disabled=false;}

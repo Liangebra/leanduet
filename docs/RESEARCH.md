@@ -20,3 +20,11 @@ lean/Extract.lean independently traverses an actual elaborated theorem value, op
 3. Typed term reification, source-range mapping, binder hygiene and dependent substitution.
 4. Define an editable grammar with checked proof obligations, prove lens laws for its supported fragment.
 5. Add reviewed multilingual lexical entries; use GF/Informath when compatible. Avoid hallucinated theorem statements and silent proof changes.
+
+## Reproducible upstream reference
+
+Inspected Informath revision [9a1b6e1](https://github.com/GrammaticalFramework/informath/tree/9a1b6e10ddb8563cc2392e015957452f950a6f4c), including [exporter documentation](https://github.com/GrammaticalFramework/informath/blob/9a1b6e10ddb8563cc2392e015957452f950a6f4c/scripts/lean/README.md) and Cabal metadata. Its separate [Mathlib informalization](https://github.com/aarneranta/mathlib-informath) is a useful reference corpus; no license was reported by GitHub, so do not copy its data blindly.
+
+The optional CLI adapter can set LEANDUET_INFORMATH_TOOLCHAIN independently of our native Lean toolchain. Project-mode Informath is explicitly rejected until its Lake integration is implemented. Mock tests check invocation only; the external executable is not installed in CI.
+
+The typed viewer now also has a deterministic English/Chinese reading: lambda binders establish scope; applications emit proof-argument premises before the conclusion; a small lexicon recognizes exact core declaration names. Unknown terms are left explicit. This is a partial reading, not a certified natural-language view or a general translator.
