@@ -372,30 +372,35 @@ def parseDecimal (j : Json) : Except String Nat := do
   unless toString n == s do throw "Noncanonical decimal natural"
   return n
 
-def decodeName (j : Json) (fuel : Nat := 96) : Except String Name := do
-  if fuel == 0 then throw "Name nesting limit"
-  let a ← j.getArr?
-  if a.isEmpty then return .anonymous
-  unless a.size == 3 do throw "Invalid structural name"
-  let p ← decodeName a[0]! (fuel - 1)
-  match ← a[1]!.getStr? with
-  | "str" => return .str p (← a[2]!.getStr?)
-  | "num" => return .num p (← parseDecimal a[2]!)
-  | _ => throw "Unknown name constructor"
-termination_by fuel
+def decodeName (j : Json) (fuel : Nat := 96) : Except String Name :=
+  match fuel with
+  | 0 => throw "Name nesting limit"
+  | fuel + 1 => do
+    let a ← j.getArr?
+    if a.isEmpty then return .anonymous
+    unless a.size == 3 do throw "Invalid structural name"
+    let p ← decodeName a[0]! fuel
+    match ← a[1]!.getStr? with
+    | "str" => return .str p (← a[2]!.getStr?)
+    | "num" => return .num p (← parseDecimal a[2]!)
+    | _ => throw "Unknown name constructor"
+termination_by structural fuel
 
-def decodeLevel (j : Json) (fuel : Nat := 96) : Except String Level := do
-  if fuel == 0 then throw "Universe nesting limit"
-  let a ← j.getArr?
-  let tag ← a[0]!.getStr?
-  match tag, a.size with
-  | "zero", 1 => return .zero
-  | "succ", 2 => return .succ (← decodeLevel a[1]! (fuel - 1))
-  | "max", 3 => return .max (← decodeLevel a[1]! (fuel - 1)) (← decodeLevel a[2]! (fuel - 1))
-  | "imax", 3 => return .imax (← decodeLevel a[1]! (fuel - 1)) (← decodeLevel a[2]! (fuel - 1))
-  | "param", 2 => return .param (← decodeName a[1]!)
-  | _, _ => throw "Unknown or unresolved universe constructor"
-termination_by fuel
+def decodeLevel (j : Json) (fuel : Nat := 96) : Except String Level :=
+  match fuel with
+  | 0 => throw "Universe nesting limit"
+  | fuel + 1 => do
+    let a ← j.getArr?
+    if a.isEmpty then throw "Missing universe constructor"
+    let tag ← a[0]!.getStr?
+    match tag, a.size with
+    | "zero", 1 => return .zero
+    | "succ", 2 => return .succ (← decodeLevel a[1]! fuel)
+    | "max", 3 => return .max (← decodeLevel a[1]! fuel) (← decodeLevel a[2]! fuel)
+    | "imax", 3 => return .imax (← decodeLevel a[1]! fuel) (← decodeLevel a[2]! fuel)
+    | "param", 2 => return .param (← decodeName a[1]!)
+    | _, _ => throw "Unknown or unresolved universe constructor"
+termination_by structural fuel
 
 def decodeBinder (j : Json) : Except String BinderInfo := do
   match ← j.getStr? with
