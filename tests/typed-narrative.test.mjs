@@ -39,3 +39,22 @@ test('folding preserves distinct occurrences even if their types coincide',()=>{
 test('extraction limits are explicit, not conflated with user folding',()=>{
   const row=narrate({kind:'opaque',type:'P',path:'root',truncated:true})[0];assert.equal(row.truncated,true);
 });
+
+test('argument view refers to actual immediate premises and prior inferences',()=>{
+ const rows=narrate(tree,'en',{style:'argument'});
+ assert.deepEqual(rows.map(x=>x.path),['root/arg0','root']);
+ assert.equal(rows[0].premises[0].term,'hp');
+ assert.equal(rows[0].premises[0].path,leaf.path);
+ assert.equal(rows[1].premises[0].label,rows[0].stepLabel);
+ assert.equal(rows[1].premises[0].path,mid.path);
+ assert.equal(rows[1].expr,'R');
+});
+test('argument mode does not collapse distinct equal-type premises',()=>{
+ const a={...leaf,path:'root/arg0',term:'h1'},b={...leaf,path:'root/arg1',term:'h2'};
+ const rows=narrate({...tree,children:[a,b]},'en',{style:'argument'});
+ assert.deepEqual(rows.at(-1).premises.map(p=>[p.path,p.term]),[[a.path,'h1'],[b.path,'h2']]);
+});
+test('folded conclusions do not claim hidden derivations as displayed premises',()=>{
+ const row=narrate(tree,'en',{style:'argument',collapsed:new Set(['root'])})[0];
+ assert.deepEqual(row.premises,[]);assert.equal(row.hiddenCount,2);
+});

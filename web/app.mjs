@@ -236,7 +236,7 @@ function showTypedNarrative(){
   target.append(element('div','DERIVED READING · TYPE-DRIVEN','eyebrow'));
   const wordingByKey=new Map(wording.map(a=>[a.anchor,a.text]));
   const detached=wording.filter(a=>!proofIndex.unique(a.anchor));if(detached.length){const details=element('details');details.append(element('summary',detached.length+' detached author annotation(s)'));for(const a of detached){const p=element('p',a.path+' · '+a.text);const b=element('button','Copy to exploration');b.onclick=()=>appendNotes('Detached wording: '+a.text);p.append(b);details.append(p);}target.append(details);}
-  for(const row of narrate(typedRoot,$('typedLanguage').value,{collapsed:foldedPaths,counts:proofIndex.counts})){
+  for(const row of narrate(typedRoot,$('typedLanguage').value,{collapsed:foldedPaths,counts:proofIndex.counts,style:$('narrativeStyle').value})){
     const line=element('div',undefined,'derivedStep');line.style.marginLeft=Math.min(row.depth,6)*9+'px';
     const lang=$('typedLanguage').value;
     if(row.foldable){
@@ -246,7 +246,9 @@ function showTypedNarrative(){
       toggle.onclick=()=>{if(row.folded)foldedPaths.delete(row.path);else foldedPaths.add(row.path);showTypedNarrative();};
       line.append(toggle);
     }
-    const owner=findTypedNode(typedRoot,row.path);const authored=proofIndex.wording(owner,wordingByKey);if(authored)line.append(element('span',authored+' ','authorWording'));line.append(document.createTextNode(row.phrase+' '));formula(line,row.expr);
+    const owner=findTypedNode(typedRoot,row.path);const authored=proofIndex.wording(owner,wordingByKey);if(row.stepLabel)line.append(element('span',row.stepLabel+' ','inferenceNumber'));if(authored)line.append(element('span',authored+' ','authorWording'));line.append(document.createTextNode(row.phrase+' '));formula(line,row.expr);
+    if(row.bindingValue){line.append(document.createTextNode(' := '));formula(line,row.bindingValue);}
+    if(row.premises?.length){const premises=element('div',undefined,'narrativePremises');premises.append(element('span',({en:'Premises shown:',zh:'所用前提：',ja:'表示された前提：'})[lang]||'Premises shown:'));for(const p of row.premises){const detail=element('span',p.label||p.term||p.type,'premiseRef');detail.title=p.type;if(p.path)detail.dataset.proofPath=p.path;premises.append(detail);}line.append(premises);}
     if(row.folded)line.append(element('span',' · '+row.hiddenCount+' '+phrase(lang,'hidden'),'foldCount'));
     if(row.truncated||row.omittedProofArguments)line.append(element('span',phrase(lang,'limited'),'foldCount'));
     if(local&&row.editable){
@@ -282,6 +284,7 @@ $('languageFile').onchange=async()=>{
   }catch(e){$('languageStatus').textContent=e.message;}
   finally{$('languageFile').value='';}
 };
+$('narrativeStyle').onchange=showTypedNarrative;
 $('collapseProof').onclick=()=>{foldedPaths=outlinePaths(typedRoot);showTypedNarrative();};
 $('expandProof').onclick=()=>{foldedPaths.clear();showTypedNarrative();};
 function openPatch(node){
@@ -529,7 +532,7 @@ async function typedRequest(mode,profile='full'){
   $('extractTerm').disabled=$('informath').disabled=true;
   $('typedStatus').textContent=mode==='structure'?'Elaborating trusted proof locally…':'Running separately installed Informath…';
   try{const source=lean.value;
-    const reusable=mode==='structure'&&source===lastTypedSource&&lastTypedTree&&(profile==='reading'||lastTypedProfile==='full');
+    const reusable=mode==='structure'&&profile==='reading'&&source===lastTypedSource&&lastTypedTree;
     const r=reusable?{tree:lastTypedTree}:await api(mode,{source,profile});if(snapshotRev!==rev)return;
     if(mode==='structure'){$('typedTree').replaceChildren();patchNode=null;patchCandidate=null;$('typedPatch').hidden=true;$('applyPatch').disabled=true;foldedPaths.clear();typedRoot=r.tree;proofIndex=indexProof(typedRoot);if(!reusable){lastTypedSource=source;lastTypedProfile=profile;lastTypedTree=r.tree;}$('typedNarrative').classList.remove('staleReading');$('typedTree').classList.remove('staleReading');showTypedNarrative();renderTyped(r.tree,$('typedTree'));$('typedStatus').textContent='Extracted from Lean elaboration. Tree is depth-limited; inspect the original proof separately.'+(profile==='reading'?' Live reading: alternative search deferred.':'');}
     else{$('informathOutput').textContent=r.narrative;$('typedStatus').textContent='Informath output · alignment not certified.';}

@@ -120,3 +120,16 @@ assert ctx["n"]["neededForContext"],ctx
 assert ctx["n"]["contextIndex"] in ctx["f"]["dependsOn"],ctx
 assert ctx["n"]["contextIndex"] in ctx["x"]["dependsOn"],ctx
 print("Dependent context closure retained the type of a referenced local object")
+
+
+# The reading profile projects the same actual proof; it deliberately
+# skips the eager alternative-application search.
+fast=extract(quantified,reading_only=True)
+assert fast["profile"]=="reading",fast
+full=extract(quantified)
+def without_alternatives(t):
+    return {k: ([without_alternatives(c) for c in v] if k=="children" else v)
+            for k,v in t.items() if k!="applications"}
+assert without_alternatives(fast["tree"])==without_alternatives(full["tree"])
+assert all(not n.get("applications") for n in walk(fast["tree"]))
+print("Reading profile preserves occurrence tree and skips eager search")

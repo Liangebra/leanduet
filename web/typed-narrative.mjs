@@ -1,6 +1,7 @@
 import {phrase,rulePhrase} from './languages.mjs';
-export function narrate(root,lang='en',{collapsed=new Set(),counts=null}={}){
-  const result=[];
+export function narrate(root,lang='en',{collapsed=new Set(),counts=null,style='detail'}={}){
+  const result=[],labels=new Map();let serial=0;
+  const argument=style==='argument';
   const say=(key,name)=>phrase(lang,key,name);
   // Collapse is a projection of the original occurrence tree, not a proof rewrite.
   const childrenOf=n=>Array.isArray(n?.children)?n.children:[];
@@ -22,18 +23,23 @@ export function narrate(root,lang='en',{collapsed=new Set(),counts=null}={}){
     }
     if(n.kind==='let'){
       if(children[0])walk(children[0],d+1);
-      add(n,'let',say('let',n.binder),n.binderType,d);
+      add(n,'let',say('let',n.binder),n.binderType,d,{bindingValue:argument?children[0]?.term||null:null});
       if(children[1])walk(children[1],d+1);
       return;
     }
     const foldable=n.kind==='apply'&&children.length>0&&typeof n.path==='string';
     const folded=foldable&&collapsed.has(n.path);
     const hiddenCount=folded?children.reduce((a,c)=>a+(counts?.get(c)??rowCount(c)),0):0;
-    if(!folded)for(const c of children)walk(c,d);
+    if(!folded)for(const c of children)if(!(argument&&n.kind==='apply'&&['hypothesis','reference'].includes(c.kind)&&!childrenOf(c).length&&!c.truncated))walk(c,d);
     if(n.kind==='apply'){
       const lexical=rulePhrase(lang,n.reference);
       const phrase=lexical||say('apply',n.reference||say('function'));
-      add(n,n.kind,phrase+say('obtain'),n.type,d,{foldable,folded,hiddenCount});
+      const premises=argument&&!folded?children.map(c=>({
+        path:c.path??null,kind:c.kind,label:labels.get(c)||null,term:c.reference||c.term||'',type:c.type||''
+      })):[];
+      const stepLabel=argument?'('+String(++serial)+')':null;
+      if(stepLabel)labels.set(n,stepLabel);
+      add(n,n.kind,phrase+say('obtain'),n.type,d,{foldable,folded,hiddenCount,premises,stepLabel});
     }else if(n.kind==='hypothesis'||n.kind==='reference'){
       add(n,n.kind,say('use',n.reference||n.term),n.type,d);
     }else{
