@@ -8,7 +8,7 @@ const clean=()=>lean.value===base.lean&&prose.value===base.prose;
 const state=(id,label,kind='')=>{$(id).textContent=label;$(id).dataset.state=kind;};
 function notice(s,error=false){$('notice').textContent=s;$('notice').classList.toggle('error',error);}
 function persist(){try{localStorage.setItem(KEY,JSON.stringify(snapshot(base,{lean:lean.value,prose:prose.value},notes.value,name)));state('saveState','Saved locally','pass');}catch{state('saveState','Not saved','dirty');}}
-function invalidate(){rev++;candidate=null;narrative=null;$('accept').disabled=true;$('useNarrative').disabled=true;$('proposal').textContent='No proposal yet.';$('output').textContent='Run the local checker to see diagnostics for this revision.';state('verifyState','Not checked');if(location.hostname!=='127.0.0.1'&&location.hostname!=='localhost'){state('verifyState','Local server required');$('output').textContent='Browser-only demo. Run python server.py locally for verification.';}}
+function invalidate(){rev++;$('typedTree').replaceChildren();$('informathOutput').textContent='';$('typedStatus').textContent='Proof changed or not inspected. Run extraction for this revision.';candidate=null;narrative=null;$('accept').disabled=true;$('useNarrative').disabled=true;$('proposal').textContent='No proposal yet.';$('output').textContent='Run the local checker to see diagnostics for this revision.';state('verifyState','Not checked');if(location.hostname!=='127.0.0.1'&&location.hostname!=='localhost'){state('verifyState','Local server required');$('output').textContent='Browser-only demo. Run python server.py locally for verification.';}}
 function dirty(){state('leanDirty',lean.value===base.lean?'Synced':'Edited',lean.value===base.lean?'':'dirty');state('proseDirty',prose.value===base.prose?'Synced':'Edited',prose.value===base.prose?'':'dirty');gutter();}
 function gutter(){$('gutter').textContent=lean.value.split('\n').map((_,i)=>i+1).join('\n');$('gutter').scrollTop=lean.scrollTop;$('cursor').textContent='Ln '+(lean.value.slice(0,lean.selectionStart).split('\n').length);}
 function element(tag,txt,cls){const e=document.createElement(tag);if(txt!==undefined)e.textContent=txt;if(cls)e.className=cls;return e;}
@@ -27,7 +27,7 @@ function describe(n){
   const labels={intro:'Introduce',exact:'Conclude using',have:'Establish',apply:'Apply',rw:'Rewrite using',simp:'Simplify',show:'Show',refine:'Refine using',change:'Change the goal to',cases:'Split into cases on',induction:'Proceed by induction on',opaque:'Formal step'};
   return labels[n.kind]||n.label;
 }
-function setView(next){view=next;for(const key of ['reading','prose','notes']){$(key+'View').hidden=key!==view;}document.querySelectorAll('[data-view]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.view===view)));}
+function setView(next){view=next;for(const key of ['reading','prose','typed','notes']){$(key+'View').hidden=key!==view;}document.querySelectorAll('[data-view]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.view===view)));}
 function selection(id,locate=false){
   if(!clean()){notice('Synchronize edits before navigating or editing a step.',true);return;}
   const n=ir.nodes.find(x=>x.id===id&&x.kind!=='blank');if(!n)return;
@@ -86,6 +86,32 @@ $('download').onclick=()=>download(lean.value,'proof.lean','text/plain');
 $('saveDoc').onclick=()=>download(JSON.stringify(snapshot(base,{lean:lean.value,prose:prose.value},notes.value,name),null,2),'proof.leanduet.json','application/json');
 async function api(path,payload){const r=await fetch('/api/'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});if(!r.headers.get('content-type')?.includes('application/json'))throw Error('Local backend not available. Start python server.py.');const d=await r.json();if(!r.ok)throw Error(d.error||'Request failed');return d;}
 $('check').onclick=async()=>{if(!clean()){notice('Synchronize first.',true);return;}const snapshotRev=rev;$('check').disabled=true;state('verifyState','Checking…');$('output').textContent='Running Lean…';try{const r=await api('check',{source:lean.value});if(snapshotRev!==rev)return;$('output').textContent=r.output;state('verifyState',r.status==='passed'?'Lean passed':r.status,r.status==='passed'?'pass':'dirty');notice('Lean check: '+r.status,r.status!=='passed');}catch(e){if(snapshotRev===rev){state('verifyState','Unavailable','dirty');$('output').textContent=e.message;notice('Checker unavailable: '+e.message,true);}}finally{$('check').disabled=false;}};
+function renderTyped(node,container,depth=0){
+  if(!node||typeof node.kind!=='string'||depth>12)return;
+  const block=element('details',undefined,'typedNode');block.open=depth<3;
+  const title=element('summary');
+  const label={assume:'Assume',introduce:'Introduce',apply:'Apply',let:'Establish local binding',hypothesis:'Use hypothesis',reference:'Use declaration',opaque:'Opaque term'}[node.kind]||node.kind;
+  title.append(element('strong',label+(node.binder?' '+node.binder:node.reference?' '+node.reference:'')));
+  block.append(title);
+  const typ=element('div',undefined,'typedType');typ.append(element('span','Type / conclusion','eyebrow'));typ.append(element('code',node.type||''));block.append(typ);
+  if(node.binderType)block.append(element('code','Binder: '+node.binderType));
+  if(node.referenceType)block.append(element('code','Reference type: '+node.referenceType));
+  const term=element('details');term.append(element('summary','Elaborated term'));term.append(element('pre',node.term||''));block.append(term);
+  for(const child of node.children||[])renderTyped(child,block,depth+1);
+  container.append(block);
+}
+async function typedRequest(mode){
+  if(!clean()){notice('Synchronize first.',true);return;}
+  const snapshotRev=rev;
+  $('extractTerm').disabled=$('informath').disabled=true;
+  $('typedStatus').textContent=mode==='structure'?'Elaborating trusted proof locally…':'Running separately installed Informath…';
+  try{const r=await api(mode,{source:lean.value});if(snapshotRev!==rev)return;
+    if(mode==='structure'){$('typedTree').replaceChildren();renderTyped(r.tree,$('typedTree'));$('typedStatus').textContent='Extracted from Lean elaboration. Tree is depth-limited; inspect the original proof separately.';}
+    else{$('informathOutput').textContent=r.narrative;$('typedStatus').textContent='Informath output · alignment not certified.';}
+  }catch(e){if(snapshotRev===rev)$('typedStatus').textContent=e.message;}
+  finally{$('extractTerm').disabled=$('informath').disabled=false;}
+}
+$('extractTerm').onclick=()=>typedRequest('structure');$('informath').onclick=()=>typedRequest('informath');
 async function ai(mode){if(!clean()){notice('Synchronize first.',true);return;}if(mode==='propose'&&!notes.value.trim()){notice('Enter a mathematical argument first.',true);return;}if(!confirm('Send the current Lean proof and notes to your configured AI provider?'))return;const snapshotRev=rev;candidate=null;narrative=null;$('accept').disabled=$('useNarrative').disabled=true;$('propose').disabled=$('explain').disabled=true;$('proposal').textContent='Requesting unverified output…';try{const r=await api(mode,{source:lean.value,prose:notes.value});if(snapshotRev!==rev)return;if(mode==='explain'){narrative=r.narrative;$('proposal').textContent=narrative;$('useNarrative').disabled=false;notice('AI explanation · unverified.');return;}const next=parseLean(r.source);if(!sameStatement(ir,next))throw Error('Theorem header or environment changed.');candidate=next;$('proposal').textContent=r.source;$('accept').disabled=false;notice('Unverified proposal · review before applying and checking.');}catch(e){if(snapshotRev===rev){$('proposal').textContent=e.message;notice('AI unavailable or rejected.',true);}}finally{$('propose').disabled=$('explain').disabled=false;}}
 $('propose').onclick=()=>ai('propose');$('explain').onclick=()=>ai('explain');$('accept').onclick=()=>{if(candidate&&clean()&&confirm('Apply the proposed Lean source? Review before running Lean.'))install(candidate);};
 $('useNarrative').onclick=()=>{if(narrative&&(!notes.value||confirm('Replace your free-prose notes with this unverified explanation?'))){notes.value=narrative;persist();}};
@@ -95,5 +121,5 @@ try{theme(localStorage.getItem(THEME)||'light');}catch{theme('light');}
 try{const saved=localStorage.getItem(KEY);if(saved)loadWorkspace(JSON.parse(saved));else{name=EXAMPLES[0].name;install(parseLean(EXAMPLES[0].source));}}catch(e){name=EXAMPLES[0].name;install(parseLean(EXAMPLES[0].source),{save:false});notice('Saved workspace could not be restored: '+e.message+'. Original storage retained until the next edit.',true);}
 const local=location.hostname==='127.0.0.1'||location.hostname==='localhost';
 $('envState').textContent=local?'Local workspace':'Static demo · checker and AI require local server';
-if(!local){for(const id of ['check','propose','explain']){$(id).disabled=true;$(id).title='Start the local Python server to use this feature.';}$('output').textContent='Browser-only demo. To verify in Lean or use AI, clone the repository and run python server.py.';state('verifyState','Local server required');}
+if(!local){for(const id of ['check','propose','explain','extractTerm','informath']){$(id).disabled=true;$(id).title='Start the local Python server to use this feature.';}$('output').textContent='Browser-only demo. To verify in Lean or use AI, clone the repository and run python server.py.';state('verifyState','Local server required');}
 document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='s'){e.preventDefault();persist();notice('Workspace saved locally. Export for a portable backup.');}});

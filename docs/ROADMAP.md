@@ -8,3 +8,7 @@
 - v1.0: reliable cross-platform installations and research workspace with collaborative proof exposition.
 
 Non-goals: claiming arbitrary natural-language equivalence; hard-theorem solving as the primary product; public unsandboxed Lean execution.
+
+## Type-theoretic track
+
+See [RESEARCH.md](RESEARCH.md). v0.4-dev introduces indexed derivation data, a compiler, partial lens contracts, a local elaborated proof inspector, and an optional upstream Informath CLI integration. Source alignment and typed local proof replacement remain open.

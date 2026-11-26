@@ -5,7 +5,7 @@
 
 LeanDuet is an experimental mathematical proof workbench. It explores how an informal mathematical argument and a Lean 4 proof can become linked, editable representations rather than unrelated documents.
 
-**v0.3.1 research prototype** — not a universal autoformalizer, Lean LSP client, or certified natural-language translator.
+**v0.4 development prototype** — not a universal autoformalizer, Lean LSP client, or certified natural-language translator.
 
 ## Try it locally
 
@@ -50,6 +50,12 @@ python server.py --project /absolute/path/to/project
 The current parser handles **one theorem or lemma with a single-line or space-indented multiline header** and space-indented proof. It preserves opaque lines rather than pretending to understand them. No full-project parsing, LSP integration, or logical proof dependency extraction yet.
 
 Optional AI: set `LEANDUET_AI_URL` (full OpenAI-compatible chat-completions endpoint), `LEANDUET_AI_MODEL`, and optionally `LEANDUET_AI_KEY`. A local Ollama-compatible endpoint may use `http://localhost:11434/v1/chat/completions`. Requests require consent; the proof and notes go to your configured provider.
+
+## Type-theoretic research track
+
+The Typed proof tab calls a local Lean metaprogram to inspect elaborated theorem terms, inferred types, binders and proof arguments. It is separate from the lexical editor. An optional Informath button invokes the independently installed upstream CLI. Set LEANDUET_INFORMATH_ROOT and optionally LEANDUET_INFORMATH_BIN; upstream needs a compatible Lean toolchain (see its own documentation). This integration has not yet been run against an installed upstream runtime.
+
+See [research references and reuse policy](docs/RESEARCH.md) and the small indexed natural-deduction calculus in [lean/TMN.lean](lean/TMN.lean). The calculus and extractor are included in CI; no claim of full Lean-to-natural-language reversibility.
 
 ## Trust and privacy
 

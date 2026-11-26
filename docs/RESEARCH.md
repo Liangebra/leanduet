@@ -1,0 +1,22 @@
+# Research foundations and upstream reuse
+
+## References
+- Aarne Ranta, [Type theory and the informal language of mathematics](https://ncatlab.org/nlab/files/InfLang.pdf). Design motivation: typed objects, dependent binders, context-sensitive mathematical language.
+- Aarne Ranta, [Symbolic Informalization: Fluent, Productive, Multilingual](https://arxiv.org/abs/2606.16893), 2026 preprint. [Informath](https://github.com/GrammaticalFramework/informath) separates formal interlingua (Dedukti) from grammatical realization (GF).
+- Peter Koepke, [A Natural Language Formalization of Perfectoid Rings in Naproche](https://doi.org/10.4230/LIPIcs.ITP.2025.6), ITP 2025. [Naproche](https://github.com/naproche/naproche) demonstrates controlled mathematical language and proof obligations, but uses a first-order internal logic.
+- [Contract Lenses: Reasoning about Bidirectional Programs via Calculation](https://doi.org/10.1017/S0956796823000059), JFP 33 e10 (2023). Adopt partial update contracts rather than claiming bijection of prose and Lean.
+
+## What is reused
+Informath is an optional external executable called via its documented CLI, not a copied implementation. Upstream informath.cabal declares BSD-3-Clause, but the repository root currently has no standalone license file; preserve attribution and confirm terms before vendoring any source. Upstream scripts/lean/README.md says Export.lean targets Lean 4.36; our pinned Lean 4.19 is not automatically compatible. Use an independently installed, compatible Informath runtime. We have not executed the upstream CLI in CI yet. Its Dedukti output is explicitly a reading-oriented translation, not a faithful kernel serialization. Naproche is GPL-3.0: cite and study, do not copy GPL code into MIT core without resolving licensing. No third-party source is vendored in this change.
+
+## Mathematical core
+lean/TMN.lean encodes a small propositional natural-deduction calculus as data indexed by a context and proposition, with compile : Derivation Γ P → Holds Γ → P. The Lean type checker verifies the implementation when CI compiles it. A typed context is a function from one derivation interface to another. This models substitution at a fixed interface, not general dependent substitution. The partial lens structure encodes GetPut and PutGet; pairLens is a concrete complement-preserving example, not yet a proof of the IDE's update algorithm.
+
+lean/Extract.lean independently traverses an actual elaborated theorem value, opening lambda/let binders with local contexts and inspecting inferred types. Application nodes include named references and proof-argument children. The output intentionally omits nonproof arguments as child nodes, caps depth and branching, and keeps terms as pretty-printed strings. Do not treat it as lossless, nor as a logical dependency graph. A later implementation must serialize typed Expr with binding identity, universe levels, implicit arguments, and provenance, then align to InfoTree source ranges.
+
+## Integration roadmap
+1. Typed proof extraction and small calculus (this development batch).
+2. Compare source and extracted proof with Informath exporter output, especially Mathlib constants and nested tactics.
+3. Typed term reification, source-range mapping, binder hygiene and dependent substitution.
+4. Define an editable grammar with checked proof obligations, prove lens laws for its supported fragment.
+5. Add reviewed multilingual lexical entries; use GF/Informath when compatible. Avoid hallucinated theorem statements and silent proof changes.

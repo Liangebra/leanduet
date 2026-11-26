@@ -10,6 +10,7 @@ import subprocess
 import tempfile
 import urllib.request
 import urllib.error
+import semantic
 
 ROOT = Path(__file__).resolve().parent
 MAX_BODY = 128 * 1024
@@ -81,6 +82,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             source=data.get('source')
             if not isinstance(source,str) or not source.strip(): raise ValueError('Source must be nonempty text.')
             if self.path=='/api/check': return self.send_json(200,check_source(source,self.project))
+            if self.path=='/api/structure': return self.send_json(200,semantic.extract(source,self.project))
+            if self.path=='/api/informath': return self.send_json(200,semantic.informath(source,self.project))
             if self.path in {'/api/propose','/api/explain'}:
                 prose=data.get('prose','')
                 if not isinstance(prose,str): raise ValueError('Prose must be text.')
@@ -88,6 +91,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self.send_json(404,{'error':'Unknown endpoint.'})
         except (ValueError,TypeError,AttributeError,KeyError,IndexError) as exc:
             return self.send_json(400,{'error':str(exc)})
+        except subprocess.TimeoutExpired:
+            return self.send_json(504,{'error':'Semantic tool timed out.'})
         except OSError as exc:
             return self.send_json(502,{'error':f'Local service or AI endpoint failed: {type(exc).__name__}'})
 
