@@ -28,7 +28,7 @@ def _run_lean(text, project=None, marker=None, trace=False):
                            text=True, encoding="utf-8", errors="replace", timeout=45)
     out = r.stdout + r.stderr
     if r.returncode or re.search(r"\bsorry\b", out):
-        raise ValueError("Lean semantic check failed:\n" + out[-4000:])
+        raise ValueError("Lean semantic check failed:\n" + (out if len(out)<=8000 else out[:4000]+"\n…\n"+out[-4000:]))
     if marker:
         if marker not in out:
             raise ValueError("Lean did not confirm the required check.")

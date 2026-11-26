@@ -23,6 +23,11 @@ jobs:
       - run: lean lean/TMN.lean
       - run: lean lean/Dependent.lean
       - run: lean lean/Scoped.lean
+      - name: Compile semantic adapter
+        run: |
+          printf 'import Lean\n' > "$RUNNER_TEMP/LeanDuetAdapter.lean"
+          cat lean/Extract.lean >> "$RUNNER_TEMP/LeanDuetAdapter.lean"
+          lean "$RUNNER_TEMP/LeanDuetAdapter.lean"
       - run: python tests/semantic_integration.py
       - run: python tests/search_integration.py
       - run: python tests/lsp_integration.py
