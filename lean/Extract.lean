@@ -727,12 +727,12 @@ partial def replaceExprAt (e : Expr) (path : List String)
 def factorProof (original : Expr) (path : List String) (lemmaName : Name) :
     MetaM Expr := do
   let ci ← getConstInfo lemmaName
-  let .thmInfo lemma := ci | throwError "Expected an extracted theorem"
-  unless lemma.levelParams.isEmpty do throwError "Polymorphic factoring is not supported yet"
+  let .thmInfo auxiliary := ci | throwError "Expected an extracted theorem"
+  unless auxiliary.levelParams.isEmpty do throwError "Polymorphic factoring is not supported yet"
   replaceExprAt original path fun e => do
     let (t, statement, deps) ← abstractProof e
-    unless ← isDefEq lemma.type statement do throwError "Extracted lemma statement mismatch"
-    unless sameShape t lemma.value do throwError "Extracted lemma proof mismatch"
+    unless ← isDefEq auxiliary.type statement do throwError "Extracted lemma statement mismatch"
+    unless sameShape t auxiliary.value do throwError "Extracted lemma proof mismatch"
     -- A local definition is preserved as a let in the extracted theorem,
     -- so it is not an argument to the lemma.
     let args := (deps.filter (fun d => d.value?.isNone)).map (fun d => mkFVar d.fvarId)
@@ -742,13 +742,13 @@ def factorProof (original : Expr) (path : List String) (lemmaName : Name) :
       throwError "Extracted lemma application has the wrong dependent type"
     return call
 
-elab "#duet_factor " n:ident lemma:ident path:str : command => do
+elab "#duet_factor " n:ident auxiliary:ident path:str : command => do
   liftTermElabM do
     let .thmInfo v ← getConstInfo n.getId | throwError "Expected a theorem"
     unless v.levelParams.isEmpty do throwError "Polymorphic factoring is not supported yet"
     let parts := path.getString.splitOn "/"
     unless parts.head? == some "root" do throwError "Invalid root path"
-    let proof ← factorProof v.value (parts.drop 1) lemma.getId
+    let proof ← factorProof v.value (parts.drop 1) auxiliary.getId
     Lean.Meta.check proof
     unless ← isDefEq (← inferType proof) v.type do throwError "Factored proof changes theorem type"
     if mentions proof n.getId || mentions proof `sorryAx then throwError "Invalid factored proof"
@@ -758,13 +758,13 @@ elab "#duet_factor " n:ident lemma:ident path:str : command => do
       pure (← ppExpr proof).pretty
     logInfo m!"LEANDUET_JSON:{(Json.mkObj [("type", toJson typeText), ("term", toJson termText)]).compress}"
 
-elab "#duet_compare_factor " n:ident m:ident lemma:ident path:str : command => do
+elab "#duet_compare_factor " n:ident m:ident auxiliary:ident path:str : command => do
   liftTermElabM do
     match ← getConstInfo n.getId, ← getConstInfo m.getId with
     | .thmInfo v, .thmInfo candidate =>
       let parts := path.getString.splitOn "/"
       unless parts.head? == some "root" do throwError "Invalid root path"
-      let expected ← factorProof v.value (parts.drop 1) lemma.getId
+      let expected ← factorProof v.value (parts.drop 1) auxiliary.getId
       unless ← isDefEq v.type candidate.type do throwError "Factored export changed the statement"
       unless sameShape expected candidate.value do
         throwError "Factored export changed the proof complement or call\nExpected: {repr (shape expected)}\nActual: {repr (shape candidate.value)}"
