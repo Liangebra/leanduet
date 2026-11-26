@@ -5,7 +5,7 @@
 
 LeanDuet is an experimental mathematical proof workbench. It explores how an informal mathematical argument and a Lean 4 proof can become linked, editable representations rather than unrelated documents.
 
-**v0.3 research prototype** — not a universal autoformalizer, Lean LSP client, or certified natural-language translator.
+**v0.3.1 research prototype** — not a universal autoformalizer, Lean LSP client, or certified natural-language translator.
 
 ## Try it locally
 
@@ -22,11 +22,11 @@ Open <http://127.0.0.1:8765>. Use `python3` or `py` if needed. On Windows, macOS
 ## A proof-oriented workspace
 
 - Mathematical reading view, source-linked steps, outline, line numbers and diagnostics.
-- Four authored examples with mathematical narratives and native MathML for simple expressions. An edited example falls back to explicitly labeled structural text, never stale exposition.
-- Edit a linked formal step, or use the reversible controlled-text tab to synchronize in either direction. Optional auto-sync, conflict protection, explicit statement adoption, and per-side discard.
-- Local autosave of both unsynchronized drafts and free-prose notes. Export a portable JSON workspace or a Lean file. Dark/light themes.
+- Five authored examples with mathematical narratives and native MathML for simple expressions. An edited example falls back to explicitly labeled structural text, never stale exposition.
+- Edit a linked guided sentence or formal step, or use the reversible controlled-text tab to synchronize in either direction. Optional auto-sync, conflict protection, explicit statement adoption, and per-side discard.
+- Local autosave of both unsynchronized drafts and free-prose notes. Export a portable JSON workspace or a Lean file. Dark/light themes, reading focus mode and explicit new-proof creation.
 - Optional AI explanation and Lean proposals from free prose; explicit review before applying. Local Lean CLI verification, separate from narrative fidelity.
-- Browser-only deployment configuration for GitHub Pages. The static site has no Lean execution or AI backend; see [deployment instructions](docs/DEPLOY.md).
+- Browser-only [live demo](https://liangebra.github.io/leanduet/) on GitHub Pages. The static site has no Lean execution or AI backend; see [deployment instructions](docs/DEPLOY.md).
 
 ## Example
 
@@ -47,7 +47,7 @@ After building the project's dependencies, launch:
 python server.py --project /absolute/path/to/project
 ```
 
-The current parser handles **one theorem or lemma with a single-line header** and space-indented proof. It preserves opaque lines rather than pretending to understand them. No full-project parsing, LSP integration, or logical proof dependency extraction yet.
+The current parser handles **one theorem or lemma with a single-line or space-indented multiline header** and space-indented proof. It preserves opaque lines rather than pretending to understand them. No full-project parsing, LSP integration, or logical proof dependency extraction yet.
 
 Optional AI: set `LEANDUET_AI_URL` (full OpenAI-compatible chat-completions endpoint), `LEANDUET_AI_MODEL`, and optionally `LEANDUET_AI_KEY`. A local Ollama-compatible endpoint may use `http://localhost:11434/v1/chat/completions`. Requests require consent; the proof and notes go to your configured provider.
 

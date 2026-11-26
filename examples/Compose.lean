@@ -15,3 +15,11 @@ theorem nested (P : Prop) (h : P) : P ∧ P := by
 
 theorem reverse_eq (a b : Nat) (h : a = b) : b = a := by
   exact h.symm
+
+theorem injective_comp (f : α → β) (g : β → γ)
+    (hf : Function.Injective f) (hg : Function.Injective g) :
+    Function.Injective (fun x => g (f x)) := by
+  intro a b hab
+  apply hf
+  apply hg
+  exact hab

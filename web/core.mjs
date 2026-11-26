@@ -3,7 +3,7 @@ const atoms = [["rfl","By reflexivity."],["assumption","By assumption."],["simp"
 function classify(s){
   const atom=atoms.find(([k])=>k===s);
   if(atom)return {kind:atom[0],label:atom[1],argument:null};
-  const r=rules.find(([k])=>s.startsWith(k+" "));
+  const r=rules.find(([k])=>s.startsWith(k+" ")&&s.slice(k.length+1).length>0&&!/^\s/.test(s.slice(k.length+1)));
   if(r)return {kind:r[0],label:r[1],argument:s.slice(r[0].length+1)};
   return {kind:"opaque",label:"Lean step",argument:s};
 }
@@ -13,8 +13,15 @@ function parseLean(source){
   const lines=source.split("\n"); if(lines.at(-1)==="")lines.pop();
   let i=0;const prelude=[];
   while(i<lines.length&&(/^(import\s+\S.*)$/.test(lines[i])||lines[i]===""))prelude.push(lines[i++]);
-  const header=lines[i++];
-  if(!header||!/^(theorem|lemma)\s+\S.*:= by$/.test(header))throw Error("Expected one single-line theorem or lemma ending in := by.");
+  const declaration=lines[i++];
+  if(!declaration||!/^(theorem|lemma)\s+\S/.test(declaration))throw Error("Expected one named theorem or lemma.");
+  const headerLines=[declaration];
+  while(!/:= by$/.test(headerLines.at(-1))){
+    const line=lines[i++];
+    if(!line||!/^ +\S/.test(line)||line.includes("\t")||/\/-|-\//.test(line))throw Error("Expected a space-indented theorem header ending in := by.");
+    headerLines.push(line);
+  }
+  const header=headerLines.join("\n");
   const nodes=[];const stack=[];
   for(;i<lines.length;i++){
     const line=lines[i];
@@ -45,7 +52,7 @@ function parseProse(text){
   const lines=text.split("\n");if(lines.at(-1)==="")lines.pop();
   const extract=(line,prefix)=>{if(!line?.startsWith(prefix))throw Error("Expected "+prefix);return JSON.parse(line.slice(prefix.length));};
   const prelude=extract(lines.shift(),"Environment "),header=extract(lines.shift(),"Theorem ");
-  if(!Array.isArray(prelude)||prelude.some(s=>typeof s!=="string"||s.includes("\n")||!(/^(import\s+\S.*)$/.test(s)||s===""))||typeof header!=="string"||header.includes("\n"))throw Error("Invalid environment or theorem header.");
+  if(!Array.isArray(prelude)||prelude.some(s=>typeof s!=="string"||s.includes("\n")||!(/^(import\s+\S.*)$/.test(s)||s===""))||typeof header!=="string"||header.includes("\r"))throw Error("Invalid environment or theorem header.");
   const finalNewline=extract(lines.pop(),"Final newline ");if(typeof finalNewline!=="boolean")throw Error("Invalid newline flag.");
   const body=lines.map((line,i)=>{
     if(line==="Blank")return "";
@@ -77,6 +84,22 @@ function planSync(base,lean,prose,side){
   if(!sameStatement(parseLean(base.lean),ir))throw Error("Statement or imports changed. Start a new document explicitly.");
   return {ir,lean:renderLean(ir),prose:renderProse(ir)};
 }
+// Editable sentences are a small deterministic surface language, not arbitrary prose.
+function stepSentence(node){
+  if(node.kind==="blank")throw Error("Blank lines are not editable steps.");
+  return node.label+(node.argument===null?"":" "+node.argument);
+}
+function sentenceFragment(sentence){
+  if(typeof sentence!=="string"||/[\r\n]/.test(sentence))throw Error("Enter one proof sentence.");
+  const atom=atoms.find(([,label])=>sentence===label);
+  if(atom)return atom[0];
+  const rule=rules.find(([,label])=>sentence.startsWith(label+" "));
+  const label=rule?.[1]??"Lean step";
+  if(!sentence.startsWith(label+" "))throw Error("Use a supported phrase: Introduce, Establish, Conclude using, Apply, Rewrite using, or Lean step.");
+  const arg=sentence.slice(label.length+1);
+  if(!arg||/^\s/.test(arg))throw Error("The proof sentence needs a fragment after the phrase.");
+  return rule?rule[0]+" "+arg:arg;
+}
 const EXAMPLES = [
   {
     "name": "Implication composition",
@@ -94,5 +117,6 @@ const EXAMPLES = [
     "name": "Equality symmetry",
     "source": "theorem reverse_eq (a b : Nat) (h : a = b) : b = a := by\n  exact h.symm\n"
   }
+  ,{"name":"Composition of injective maps","source":"theorem injective_comp (f : α → β) (g : β → γ)\n    (hf : Function.Injective f) (hg : Function.Injective g) :\n    Function.Injective (fun x => g (f x)) := by\n  intro a b hab\n  apply hf\n  apply hg\n  exact hab\n"}
 ];
-export { parseLean, renderLean, renderProse, parseProse, sameStatement, planSync, EXAMPLES };
+export { parseLean, renderLean, renderProse, parseProse, sameStatement, planSync, stepSentence, sentenceFragment, EXAMPLES };

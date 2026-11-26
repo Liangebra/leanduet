@@ -37,7 +37,7 @@ def ai_request(source, prose, mode):
     endpoint,model = os.getenv('LEANDUET_AI_URL'),os.getenv('LEANDUET_AI_MODEL')
     if not endpoint or not model:
         raise ValueError('AI is disabled. Set LEANDUET_AI_URL and LEANDUET_AI_MODEL.')
-    system = ('Return only Lean 4 source, no Markdown. Preserve exact imports and one-line theorem header. Use space-indented proof lines; no sorry/admit.' if mode=='propose' else 'Explain the supplied Lean proof as a mathematical narrative, distinguishing actual reasoning from opaque tactics and referenced lemmas. Do not invent omitted arguments. Use LaTeX notation where helpful.')
+    system = ('Return only Lean 4 source, no Markdown. Preserve exact imports and complete theorem header. Use space-indented proof lines; no sorry/admit.' if mode=='propose' else 'Explain the supplied Lean proof as a mathematical narrative, distinguishing actual reasoning from opaque tactics and referenced lemmas. Do not invent omitted arguments. Use LaTeX notation where helpful.')
     payload={'model':model,'messages':[{'role':'system','content':system},{'role':'user','content':json.dumps({'source':source,'requested_proof':prose},ensure_ascii=False)}]}
     headers={'Content-Type':'application/json'}
     if os.getenv('LEANDUET_AI_KEY'):

@@ -7,7 +7,7 @@ The static editor is safe to host as static files; it does not expose Lean or AI
 1. Open Settings → Pages.
 2. Under Build and deployment, choose GitHub Actions.
 3. Open Actions → Deploy browser-only demo → Run workflow (main).
-4. After successful deployment, the workflow reports the actual site URL. Test it before sharing. Expected project URL: https://liangebra.github.io/leanduet/ (not live until deployment succeeds).
+4. Subsequent main-branch pushes deploy automatically after the Tests workflow succeeds. After successful deployment, the workflow reports the actual site URL. Test it before sharing. Expected project URL: https://liangebra.github.io/leanduet/ (not live until deployment succeeds).
 
 ## Repository discoverability (admin UI)
 
