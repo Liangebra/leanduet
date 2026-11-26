@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {contextCandidates,factsFromScope,formulaPremiseSentence,citationCandidates} from '../web/context-grammar.mjs';
+import {contextCandidates,factsFromScope,formulaPremiseSentence,citationCandidates,implicitCandidates} from '../web/context-grammar.mjs';
 import {draftProof} from '../web/natural-draft.mjs';
 import {interpretations} from '../web/interpretations.mjs';
 test('context determines rule and argument order without a Lean invocation',()=>{
@@ -48,4 +48,27 @@ test('unsupported qualifiers and unbound citations are not discarded',()=>{
  const frame=formulaPremiseSentence('由 $a=b$ 和 $b=c$ 可得 $a=c$');
  assert.equal(citationCandidates(frame,['h'],new Map([['h','a=b']])).candidates.length,0);
  assert.equal(formulaPremiseSentence('由 $a=b$ 与 $b=c$ 一致地得到 $a=c$'),null);
+});
+
+test('a named mathematical rule retrieves premises without requiring their names in prose',()=>{
+ const facts=new Map([['firstProof','a=b'],['secondProof','b=c'],['unused','Q']]);
+ const r=draftProof('由等式传递性得到 $a=c$',[...facts.keys()],facts);
+ assert.equal(r.term,'by\n  show (a = c)\n  exact Eq.trans firstProof secondProof');
+ const renamed=new Map([['u','a=b'],['v','b=c'],['unused','Q']]);
+ assert.equal(draftProof('由等式传递性得到 $a=c$',[...renamed.keys()],renamed).rows[0].step.application,'Eq.trans u v');
+});
+test('a bare conclusion exposes possible inference without asserting author intent',()=>{
+ const facts=new Map([['h','P ∧ P']]);
+ const r=draftProof('因此 $P$',['h'],facts);
+ assert.equal(r.rows[0].step.application,'?');
+ assert.deepEqual(r.rows[0].candidates.map(x=>x.term),['And.left h','And.right h']);
+ const p=interpretations('$P$',['h'],facts);
+ assert.deepEqual(p.alternatives.map(x=>x.term),['And.left h','And.right h','']);
+});
+test('indexed retrieval keeps ambiguity and excludes irrelevant premises',()=>{
+ const facts=new Map([['h1','a=b'],['h2','a=b'],['h3','b=c'],['bad','b=d']]);
+ const r=implicitCandidates('a=c',[...facts.keys()],facts,{rule:'Eq.trans',limit:1});
+ assert.equal(r.overflow,true);
+ assert.equal(r.candidates.length,1);
+ assert.equal(draftProof('由等式传递性得到 $a=c$',[...facts.keys()],facts).term,null);
 });

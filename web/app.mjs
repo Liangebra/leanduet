@@ -476,7 +476,8 @@ function previewDraft(){
      const d=element('div',undefined,'ruleResult');
      d.append(element('small','Line '+x.line+' · '+x.status),element('span',x.raw));
      if(x.step)d.append(element('code',x.step.kind==='establish'?'have '+x.step.name+' : '+x.step.type+' := '+x.step.application:'show '+x.step.type+'; '+x.step.application));
-     else {d.append(element('small',x.reason));for(const c of x.candidates||[])d.append(element('code',c.term+' · '+c.schema));}
+     else d.append(element('small',x.reason));
+     for(const c of x.candidates||[]){d.append(element('code',c.term+' · '+c.schema));if(c.premiseFacts?.length)d.append(element('small',c.premiseFacts.map(p=>p.type+' ['+p.name+']').join(' · ')));}
      target.append(d);
    }
    if(r.term)target.append(element('pre',r.term));

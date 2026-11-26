@@ -1,7 +1,7 @@
 import {compileFormula} from './math-formula.mjs';
 import {parseRuleIntent} from './rule-intent.mjs';
 import {renderChain} from './proof-chain.mjs';
-import {premiseFrame,contextCandidates,formulaPremiseSentence,citationCandidates} from './context-grammar.mjs';
+import {premiseFrame,contextCandidates,formulaPremiseSentence,citationCandidates,implicitCandidates,structuralRules} from './context-grammar.mjs';
 const marker=/^(?:(?:therefore|hence|thus|clearly|obviously|indeed|then)(?:\s*[,，:：]\s*|\s+)|(?:因此|从而|于是|显然|事实上|故|则)[，、：:\s]*)/iu;
 const formulaPattern=/\$[^$\n]+\$|\\\([^]*?\\\)|\\\[[^]*?\\\]/g;
 const namePattern=/^[A-Za-z_][A-Za-z0-9_']{0,63}$/;
@@ -13,7 +13,7 @@ function parseLine(raw){
  const occurrences=[...body.matchAll(formulaPattern)];
  if(occurrences.length!==1)throw Error('Write one delimited proposition in each inference.');
  const f=occurrences[0],formula=f[0],before=body.slice(0,f.index).trim(),after=body.slice(f.index+formula.length).trim().replace(/[。.]$/,'').trim();
- let name=null,ruleText='',conclusion=false;
+ let name=null,ruleText='',conclusion=false,forwardText=null;
  const binding=/^(?:建立|记|令|let|establish|have|置く|示す)\s*([A-Za-z_][A-Za-z0-9_']{0,63})\s*[:：]$/iu.exec(before);
  if(binding){name=binding[1];ruleText=after.replace(/^[,，|；;]\s*/,'');}
  else if(/^(?:结论|证明|推出|conclude|show|therefore|示す)\s*[:：]?$/iu.test(before)){conclusion=true;ruleText=after.replace(/^[,，|；;]\s*/,'');}
@@ -22,12 +22,11 @@ function parseLine(raw){
   const forward=/^(?:由|根据|利用|应用|by\s+|using\s+|from\s+)(.+?)\s*(?:[，,]\s*)?(?:得到|可得|推出|we obtain|we get|gives|yields|を得る)\s*[:：]?$/iu.exec(before);
   if(!forward||after)throw Error('Unrecognized mathematical wording; retained without guessing.');
   ruleText=forward[1].trim().replace(/[,，]$/,'').trim();
-  // Keep the premise-only prefix when the entire phrase names local facts.
-  if(/^(?:由|根据|利用|应用|using\s+|by\s+)/iu.test(before)){
-    if(!/使用|利用假设|\busing\b/i.test(ruleText))ruleText='from '+ruleText;
-  }
+  // A rule-first phrase may cite either a theorem or local facts.
+  // Defer this decision until the current context is available.
+  forwardText='from '+ruleText;
  }
- return {raw,formula,type:compileFormula(formula).lean,name,ruleText,conclusion,modifiers};
+ return {raw,formula,type:compileFormula(formula).lean,name,ruleText,conclusion,modifiers,forwardText};
 }
 export function draftProof(input,scope=[],context=new Map()){
  const facts=new Map(context);
@@ -43,7 +42,7 @@ export function draftProof(input,scope=[],context=new Map()){
     if(p.conclusion&&!last)throw Error('A conclusion must be the last inference.');
     if(last&&p.name)throw Error('The final inference must conclude the goal, not name a fact.');
     let application='?',candidates=[];
-    const frame=premiseFrame(p.ruleText,[...visible]);
+    const frame=premiseFrame(p.forwardText||p.ruleText,[...visible]);
     if(p.citation||frame){
       const resolution=p.citation?citationCandidates(p.citation,[...visible],facts):{candidates:contextCandidates(p.type,frame.premises,facts),overflow:false};
       candidates=resolution.candidates;
@@ -57,8 +56,16 @@ export function draftProof(input,scope=[],context=new Map()){
        const r=parseRuleIntent(p.ruleText,{ordered:true});
        if(!r.rule||r.required.some(x=>!visible.has(x)))throw Error('Unknown or ambiguous premise; check scope and wording.');
        if(occupied.has(r.rule)&&!visible.has(r.rule))throw Error('Ambiguous local rule.');
-       application=[r.rule,...r.required].join(' ');
+       if(!r.required.length&&(structuralRules.has(r.rule)||visible.has(r.rule))){
+         const resolution=implicitCandidates(p.type,[...visible],facts,{rule:r.rule});candidates=resolution.candidates;
+         if(resolution.overflow||candidates.length!==1){blocked=true;rows.push({...p,line,status:'unresolved',candidates,reason:'The named rule needs a unique premise correspondence; choose or specify its premises.'});continue;}
+         application=candidates[0].term;
+       }else application=[r.rule,...r.required].join(' ');
       }
+    }else if(!p.ruleText){
+      const resolution=implicitCandidates(p.type,[...visible],facts);candidates=resolution.candidates;
+      // Bare conclusions specify no reasoning. Keep the proof obligation,
+      // even when a limited schema finds just one possible proof.
     }
     let step;
     if(last)step={kind:'conclude',type:p.type,application};

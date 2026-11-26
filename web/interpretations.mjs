@@ -1,6 +1,6 @@
 import {compileFormula} from './math-formula.mjs';
 import {parseRuleIntent} from './rule-intent.mjs';
-import {premiseFrame,contextCandidates,formulaPremiseSentence,citationCandidates} from './context-grammar.mjs';
+import {premiseFrame,contextCandidates,formulaPremiseSentence,citationCandidates,implicitCandidates,structuralRules} from './context-grammar.mjs';
 // Only these explicitly enumerated discourse markers are separated.
 // Arbitrary qualifiers ("nonzero", "uniformly", etc.) are NOT removed.
 const marker=/^(?:(?:therefore|hence|thus|clearly|obviously|indeed)(?:\s*[,，:：]\s*|\s+)|(?:因此|从而|于是|显然|事实上|故)[，、：:\s]*)/iu;
@@ -10,7 +10,7 @@ export function interpretations(input,scope=[],facts=new Map()){
   if(typeof input!=='string'||input.length>12000)throw Error('Exploration input exceeds limit.');
   const alternatives=[],unresolved=[],seen=new Set();
   const visible=new Set(scope.filter((x,i)=>scope.indexOf(x)===i&&scope.lastIndexOf(x)===i));
-  function add(a){const key=JSON.stringify([a.formula,a.rule,a.required,a.term]);if(!seen.has(key)&&alternatives.length<8){seen.add(key);alternatives.push(a);}}
+  function add(a){const key=JSON.stringify([a.formula,a.rule,a.required,a.term]);if(seen.has(key))return;seen.add(key);if(alternatives.length<8)alternatives.push(a);else if(!unresolved.some(x=>x.raw===a.raw&&x.reason==='Additional interpretations outside the eight-candidate limit.'))unresolved.push({raw:a.raw,reason:'Additional interpretations outside the eight-candidate limit.'});}
   const lines=input.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
   for(const raw of lines.slice(8))unresolved.push({raw,reason:'Outside the eight-line check limit.'});
   for(const raw of lines.slice(0,8)){
@@ -30,7 +30,13 @@ export function interpretations(input,scope=[],facts=new Map()){
       const m=/^(\$[^$]+\$|\\\([\s\S]+?\\\)|\\\[[\s\S]+?\\\])(?:\s*[|,，:：]\s*(.*))?$/.exec(body);
       if(m){formula=compileFormula(m[1]).lean;rest=m[2]||'';}
       const base={raw,modifiers,formula,rule:'',required:[],term:''};
-      if(!rest){if(!formula)throw Error('No interpretation.');add({...base,origin:'formula search',specificity:2});continue;}
+      if(!rest){
+        if(!formula)throw Error('No interpretation.');
+        const inferred=implicitCandidates(formula,scope,facts,{limit:6});
+        for(const c of inferred.candidates)add({...base,term:c.term,required:[...new Set(c.premises)],origin:'implicit correspondence · '+c.schema,specificity:3});
+        if(inferred.overflow)unresolved.push({raw,reason:'Additional structural matches exist; refine the intended reasoning.'});
+        add({...base,origin:'formula search',specificity:2});continue;
+      }
       const frame=premiseFrame(rest,scope);
       if(frame&&formula){
         const candidates=contextCandidates(formula,frame.premises,facts);
@@ -45,6 +51,12 @@ export function interpretations(input,scope=[],facts=new Map()){
       const intent=parseRuleIntent(rest);
       if(intent.required.some(x=>!visible.has(x)))throw Error('Unknown or ambiguous premise.');
       if(!intent.rule&&!formula&&!intent.required.length)throw Error('Provide mathematical content.');
+      if(formula&&intent.rule&&!intent.required.length&&structuralRules.has(intent.rule)){
+        const inferred=implicitCandidates(formula,scope,facts,{rule:intent.rule});
+        for(const c of inferred.candidates)add({...base,term:c.term,required:[...new Set(c.premises)],origin:'rule correspondence · '+c.schema,specificity:5});
+        if(inferred.overflow)unresolved.push({raw,reason:'Additional premise correspondences exist.'});
+        add({...base,...intent,origin:'named rule search',specificity:4});continue;
+      }
       if(visible.has(intent.rule)){
         if(new Set([intent.rule,...intent.required]).size>8)throw Error('Too many local premises.');
         add({...base,term:[intent.rule,...intent.required].join(' '),required:[...new Set([intent.rule,...intent.required])],origin:'ordered local application',specificity:5});

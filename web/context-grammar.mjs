@@ -114,3 +114,51 @@ export function citationCandidates(frame,scope,facts,{limit=8}={}){
  visit(0,[]);
  return {candidates:out,overflow,choices};
 }
+
+
+// Retrieve premises by formula structure, not by the author's chosen names.
+// Only the supported one-/two-premise schemas are searched; no Lean call.
+// Index matching uses canonical surface trees, not definitional equality.
+export function implicitCandidates(goal,scope,facts,{rule='',limit=8}={}){
+ const target=parse(goal);
+ if(!target)return {candidates:[],overflow:false};
+ const counts=new Map();for(const name of scope)counts.set(name,(counts.get(name)||0)+1);
+ const entries=[],types=new Map(),relations=new Map();
+ function insert(index,key,entry){if(!index.has(key))index.set(key,[]);index.get(key).push(entry);}
+ const key=t=>JSON.stringify(t);
+ for(const [name,raw] of facts){
+  if(counts.get(name)!==1||!simple.test(name))continue;
+  const t=parse(raw);if(!t)continue;
+  if(entries.length>=128)return {candidates:[],overflow:true};
+  const e={name,t};entries.push(e);insert(types,key(t),e);
+  if(t.kind==='binary'&&['=','≤','<'].includes(t.op))insert(relations,key([t.op,t.left,t.right]),e);
+ }
+ const out=[],seen=new Set();let overflow=false;
+ function probe(names){
+  for(const c of contextCandidates(goal,names,facts)){
+   if(rule&&rule!==c.rule||seen.has(c.term))continue;
+   seen.add(c.term);
+   if(out.length===limit){overflow=true;return;}
+   out.push({...c,premiseFacts:c.premises.map(name=>({name,type:facts.get(name)}))});
+  }
+ }
+ const lookup=t=>types.get(key(t))||[];
+ for(const e of entries){probe([e.name]);if(overflow)break;}
+ if(!overflow)for(const e of entries){
+  const t=e.t;
+  let partners=[];
+  if(binary(t,'→')&&equal(t.right,target))partners.push(...lookup(t.left));
+  if(binary(t,'↔')){
+   if(equal(t.right,target))partners.push(...lookup(t.left));
+   if(equal(t.left,target))partners.push(...lookup(t.right));
+  }
+  if(binary(target,'∧')&&equal(t,target.left))partners.push(...lookup(target.right));
+  if(t.kind==='binary'&&['=','≤','<'].includes(t.op)&&binary(target,t.op)&&equal(t.left,target.left)){
+   partners.push(...(relations.get(key([t.op,t.right,target.right]))||[]));
+  }
+  for(const p of partners){probe([e.name,p.name]);if(overflow)break;}
+  if(overflow)break;
+ }
+ return {candidates:out,overflow};
+}
+export const structuralRules=new Set(['And.left','And.right','And.intro','Eq.symm','Eq.trans','Iff.mp','Iff.mpr','le_trans','lt_trans']);
