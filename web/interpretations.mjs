@@ -1,11 +1,12 @@
 import {compileFormula} from './math-formula.mjs';
 import {parseRuleIntent} from './rule-intent.mjs';
+import {premiseFrame,contextCandidates} from './context-grammar.mjs';
 // Only these explicitly enumerated discourse markers are separated.
 // Arbitrary qualifiers ("nonzero", "uniformly", etc.) are NOT removed.
 const marker=/^(?:(?:therefore|hence|thus|clearly|obviously|indeed)(?:\s*[,，:：]\s*|\s+)|(?:因此|从而|于是|显然|事实上|故)[，、：:\s]*)/iu;
 const simple=/^[A-Za-z_][A-Za-z0-9_']{0,63}$/;
 const rule=/^[A-Za-z_][A-Za-z0-9_'.]{0,159}$/;
-export function interpretations(input,scope=[]){
+export function interpretations(input,scope=[],facts=new Map()){
   if(typeof input!=='string'||input.length>12000)throw Error('Exploration input exceeds limit.');
   const alternatives=[],unresolved=[],seen=new Set();
   const visible=new Set(scope.filter((x,i)=>scope.indexOf(x)===i&&scope.lastIndexOf(x)===i));
@@ -21,6 +22,13 @@ export function interpretations(input,scope=[]){
       if(m){formula=compileFormula(m[1]).lean;rest=m[2]||'';}
       const base={raw,modifiers,formula,rule:'',required:[],term:''};
       if(!rest){if(!formula)throw Error('No interpretation.');add({...base,origin:'formula search',specificity:2});continue;}
+      const frame=premiseFrame(rest,scope);
+      if(frame&&formula){
+        const candidates=contextCandidates(formula,frame.premises,facts);
+        if(!candidates.length)throw Error('No structural match for named premises; retain the wording or specify a rule.');
+        for(const c of candidates)add({...base,term:c.term,required:[...new Set(c.premises)],origin:'context schema · '+c.schema,specificity:5});
+        continue;
+      }
       const words=rest.split(/\s+/);
       if(words.length<=8&&rule.test(words[0])&&words.slice(1).every(x=>simple.test(x)&&visible.has(x))&&visible.has(words[0])){
         add({...base,term:words.join(' '),required:[...new Set(words)],origin:'local application',specificity:5});continue;

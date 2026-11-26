@@ -1,6 +1,7 @@
 import {compileFormula} from './math-formula.mjs';
 import {parseRuleIntent} from './rule-intent.mjs';
 import {renderChain} from './proof-chain.mjs';
+import {premiseFrame,contextCandidates} from './context-grammar.mjs';
 const marker=/^(?:(?:therefore|hence|thus|clearly|obviously|indeed|then)(?:\s*[,，:：]\s*|\s+)|(?:因此|从而|于是|显然|事实上|故|则)[，、：:\s]*)/iu;
 const formulaPattern=/\$[^$\n]+\$|\\\([^]*?\\\)|\\\[[^]*?\\\]/g;
 const namePattern=/^[A-Za-z_][A-Za-z0-9_']{0,63}$/;
@@ -16,13 +17,18 @@ function parseLine(raw){
  else if(/^(?:结论|证明|推出|conclude|show|therefore|示す)\s*[:：]?$/iu.test(before)){conclusion=true;ruleText=after.replace(/^[,，|；;]\s*/,'');}
  else if(!before){ruleText=after.replace(/^[,，|；;]\s*/,'');}
  else{
-  const forward=/^(?:由|利用|应用|by\s+|using\s+)(.+?)\s*(?:[，,]\s*)?(?:得到|可得|推出|we obtain|we get|gives|yields|を得る)\s*[:：]?$/iu.exec(before);
+  const forward=/^(?:由|根据|利用|应用|by\s+|using\s+|from\s+)(.+?)\s*(?:[，,]\s*)?(?:得到|可得|推出|we obtain|we get|gives|yields|を得る)\s*[:：]?$/iu.exec(before);
   if(!forward||after)throw Error('Unrecognized mathematical wording; retained without guessing.');
   ruleText=forward[1].trim().replace(/[,，]$/,'').trim();
+  // Keep the premise-only prefix when the entire phrase names local facts.
+  if(/^(?:由|根据|利用|应用|using\s+|by\s+)/iu.test(before)){
+    if(!/使用|利用假设|\busing\b/i.test(ruleText))ruleText='from '+ruleText;
+  }
  }
  return {raw,formula,type:compileFormula(formula).lean,name,ruleText,conclusion,modifiers};
 }
-export function draftProof(input,scope=[]){
+export function draftProof(input,scope=[],context=new Map()){
+ const facts=new Map(context);
  if(typeof input!=='string'||input.length>12000)throw Error('Draft exceeds 12000 characters.');
  const lines=input.split(/\r?\n/).map((raw,i)=>({raw,line:i+1})).filter(x=>x.raw.trim());
  if(lines.length>16)throw Error('Use at most sixteen inference lines.');
@@ -34,8 +40,13 @@ export function draftProof(input,scope=[]){
     const p=parseLine(raw),last=i===lines.length-1;
     if(p.conclusion&&!last)throw Error('A conclusion must be the last inference.');
     if(last&&p.name)throw Error('The final inference must conclude the goal, not name a fact.');
-    let application='?';
-    if(p.ruleText&&p.ruleText!=='?'){
+    let application='?',candidates=[];
+    const frame=premiseFrame(p.ruleText,[...visible]);
+    if(frame){
+      candidates=contextCandidates(p.type,frame.premises,facts);
+      if(candidates.length!==1){blocked=true;rows.push({...p,line,status:'unresolved',frame,candidates,reason:candidates.length?'Multiple structural interpretations; specify the rule and ordered premises.':'No structural match for these premises. Name a rule or provide context types.'});continue;}
+      application=candidates[0].term;
+    }else if(p.ruleText&&p.ruleText!=='?'){
       const words=p.ruleText.split(/\s+/);
       if(words.length<=9&&words.every(w=>namePattern.test(w)&&visible.has(w)))application=words.join(' ');
       else {
@@ -51,17 +62,17 @@ export function draftProof(input,scope=[]){
       let name=p.name;
       if(name&&occupied.has(name))throw Error('This intermediate name already exists.');
       if(!name){do{name='duet_h'+serial++;}while(occupied.has(name));}
-      occupied.add(name);visible.add(name);
+      occupied.add(name);visible.add(name);facts.set(name,p.type);
       step={kind:'establish',name,type:p.type,application};
     }
-    rows.push({...p,line,status:blocked?'provisional':'translated',step});steps.push(step);
+    rows.push({...p,line,status:blocked?'provisional':'translated',step,candidates});steps.push(step);
    }catch(e){blocked=true;rows.push({raw,line,status:'unresolved',reason:e.message});}
  }
  const complete=lines.length>0&&!blocked&&steps.at(-1)?.kind==='conclude';
  return {rows,steps,complete,term:complete?renderChain(steps):null};
 }
-export function compileNaturalDraft(input,scope){
- const r=draftProof(input,scope);
+export function compileNaturalDraft(input,scope,context){
+ const r=draftProof(input,scope,context);
  if(!r.complete){const unresolved=r.rows.find(x=>x.status==='unresolved');throw Error(unresolved?'Line '+unresolved.line+': '+unresolved.reason:'No complete conclusion.');}
  return r;
 }

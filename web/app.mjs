@@ -9,6 +9,7 @@ import {validateJudgment} from './semantic-ir.mjs';
 import {compileFormula} from './math-formula.mjs';
 import {compileChain,compileFormulaSequence} from './proof-chain.mjs';
 import {draftProof,compileNaturalDraft} from './natural-draft.mjs';
+import {factsFromScope} from './context-grammar.mjs';
 import {languagePacks,registerPack,customPacks,phrase} from './languages.mjs';
 import {positionAt,completionEdit} from './completion.mjs';
 import {interpretations,rankInterpretations,mergeInterpretations} from './interpretations.mjs';
@@ -428,7 +429,7 @@ function drawInterpretations(plan,checked=null){
     const use=element('button','Use candidate');use.onclick=()=>{$('patchTerm').value=c.term;$('patchTerm').dispatchEvent(new Event('input'));};row.append(use);target.append(row);
   }
 }
-function planInterpretation(){const scope=(patchNode?.scope||[]).map(d=>d.name);const primary=interpretations($('interpretText').value,scope);return $('includeAiInterpret').checked?mergeInterpretations(primary,interpretations($('aiInterpretText').value,scope)):primary;}
+function planInterpretation(){const scope=(patchNode?.scope||[]).map(d=>d.name);const facts=factsFromScope(patchNode?.scope);const primary=interpretations($('interpretText').value,scope,facts);return $('includeAiInterpret').checked?mergeInterpretations(primary,interpretations($('aiInterpretText').value,scope,facts)):primary;}
 async function checkInterpretations(){
   if(!patchNode||!clean()||!local||patchNode.kind==='witness'||interpretBusy)return;
   const node=patchNode,revision=rev,version=interpretVersion,raw=$('interpretText').value;
@@ -463,19 +464,19 @@ $('suggestInterpretations').onclick=async()=>{
   }catch(e){if(revision===rev&&node===patchNode&&version===interpretVersion)$('aiInterpretStatus').textContent=e.message;}
   finally{$('suggestInterpretations').disabled=false;}
 };
-function parseChainInput(text,scope){const mode=$('chainFormat').value;return mode==='formula'?compileFormulaSequence(text,scope):mode==='natural'?compileNaturalDraft(text,scope):compileChain(text,scope);}
+function parseChainInput(text,scope){const mode=$('chainFormat').value;return mode==='formula'?compileFormulaSequence(text,scope):mode==='natural'?compileNaturalDraft(text,scope,factsFromScope(patchNode?.scope)):compileChain(text,scope);}
 $('chainFormat').onchange=()=>{$('chainText').placeholder=$('chainFormat').value==='formula'?'$Q$\n$R$':$('chainFormat').value==='natural'?'建立 hq : $Q$，由 f，使用 p\n因此 $R$，由 g，使用 hq':'Establish hq | f using p\nConclude | g using hq';$('chainText').dispatchEvent(new Event('input'));};
 $('chainText').addEventListener('input',()=>{$('chainBindings').replaceChildren();$('patchTerm').value='';$('patchTerm').dispatchEvent(new Event('input'));$('chainStatus').textContent='Narrative changed. Stage the new candidate.';previewDraft();});
 function previewDraft(){
  const target=$('draftTranslation');target.replaceChildren();
  if($('chainFormat').value!=='natural'||!patchNode)return;
  try{
-   const r=draftProof($('chainText').value,(patchNode.scope||[]).map(d=>d.name));
+   const r=draftProof($('chainText').value,(patchNode.scope||[]).map(d=>d.name),factsFromScope(patchNode.scope));
    for(const x of r.rows){
      const d=element('div',undefined,'ruleResult');
      d.append(element('small','Line '+x.line+' · '+x.status),element('span',x.raw));
      if(x.step)d.append(element('code',x.step.kind==='establish'?'have '+x.step.name+' : '+x.step.type+' := '+x.step.application:'show '+x.step.type+'; '+x.step.application));
-     else d.append(element('small',x.reason));
+     else {d.append(element('small',x.reason));for(const c of x.candidates||[])d.append(element('code',c.term+' · '+c.schema));}
      target.append(d);
    }
    if(r.term)target.append(element('pre',r.term));
