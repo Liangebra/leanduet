@@ -1,4 +1,5 @@
 import {compileFormula} from './math-formula.mjs';
+import {buildDraftGraph} from './draft-graph.mjs';
 import {parseRuleIntent} from './rule-intent.mjs';
 import {renderChain} from './proof-chain.mjs';
 import {premiseFrame,contextCandidates,formulaPremiseSentence,citationCandidates,implicitCandidates,structuralRules} from './context-grammar.mjs';
@@ -95,7 +96,7 @@ export function draftProof(input,scope=[],context=new Map()){
    }catch(e){unresolved(p,raw,line,last,{reason:e.message});}
  }
  const complete=lines.length>0&&!blocked&&steps.at(-1)?.kind==='conclude';
- return {rows,steps,complete,openBindings:[...openNames],term:complete?renderChain(steps):null};
+ return {rows,steps,complete,openBindings:[...openNames],graph:buildDraftGraph(scope,context,rows),term:complete?renderChain(steps):null};
 }
 export function compileNaturalDraft(input,scope,context){
  const r=draftProof(input,scope,context);
