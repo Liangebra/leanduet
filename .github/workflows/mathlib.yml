@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
     paths:
+      - 'lean/Extract.lean'
+      - 'semantic.py'
       - 'tests/mathlib_integration.py'
       - '.github/workflows/mathlib.yml'
 permissions:

@@ -20,6 +20,7 @@ def walk(n):
     for c in n["children"]:
         yield from walk(c)
 
+print('Checking semantic adapter under Mathlib syntax extensions',flush=True)
 tree=extract(source,project)["tree"]
 node=next(n for n in walk(tree) if n.get("reference")=="IsCompact.image")
 result=search(source,node["path"],"IsCompact.image",project)
