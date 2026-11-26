@@ -1,6 +1,6 @@
 import {compileFormula} from './math-formula.mjs';
 import {parseRuleIntent} from './rule-intent.mjs';
-import {premiseFrame,contextCandidates} from './context-grammar.mjs';
+import {premiseFrame,contextCandidates,formulaPremiseSentence,citationCandidates} from './context-grammar.mjs';
 // Only these explicitly enumerated discourse markers are separated.
 // Arbitrary qualifiers ("nonzero", "uniformly", etc.) are NOT removed.
 const marker=/^(?:(?:therefore|hence|thus|clearly|obviously|indeed)(?:\s*[,，:：]\s*|\s+)|(?:因此|从而|于是|显然|事实上|故)[，、：:\s]*)/iu;
@@ -17,6 +17,15 @@ export function interpretations(input,scope=[],facts=new Map()){
     let body=raw,modifiers=[];
     for(let i=0;i<4;i++){const m=marker.exec(body);if(!m)break;modifiers.push(m[0].trim());body=body.slice(m[0].length);}
     try{
+      const citation=formulaPremiseSentence(body);
+      if(citation){
+        const r=citationCandidates(citation,scope,facts);
+        if(r.overflow)throw Error('Too many matching formula citations; identify a premise.');
+        if(!r.candidates.length)throw Error('No structural match for cited formulas in scope.');
+        const formula=compileFormula(citation.goal).lean;
+        for(const c of r.candidates)add({raw,modifiers,formula,rule:'',required:[...new Set(c.premises)],term:c.term,origin:'formula citation · '+c.schema,specificity:5});
+        continue;
+      }
       let formula='',rest=body;
       const m=/^(\$[^$]+\$|\\\([\s\S]+?\\\)|\\\[[\s\S]+?\\\])(?:\s*[|,，:：]\s*(.*))?$/.exec(body);
       if(m){formula=compileFormula(m[1]).lean;rest=m[2]||'';}

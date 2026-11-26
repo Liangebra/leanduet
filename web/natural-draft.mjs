@@ -1,13 +1,15 @@
 import {compileFormula} from './math-formula.mjs';
 import {parseRuleIntent} from './rule-intent.mjs';
 import {renderChain} from './proof-chain.mjs';
-import {premiseFrame,contextCandidates} from './context-grammar.mjs';
+import {premiseFrame,contextCandidates,formulaPremiseSentence,citationCandidates} from './context-grammar.mjs';
 const marker=/^(?:(?:therefore|hence|thus|clearly|obviously|indeed|then)(?:\s*[,，:：]\s*|\s+)|(?:因此|从而|于是|显然|事实上|故|则)[，、：:\s]*)/iu;
 const formulaPattern=/\$[^$\n]+\$|\\\([^]*?\\\)|\\\[[^]*?\\\]/g;
 const namePattern=/^[A-Za-z_][A-Za-z0-9_']{0,63}$/;
 function unwrap(s){let body=s.trim(),modifiers=[];for(let i=0;i<4;i++){const m=marker.exec(body);if(!m)break;modifiers.push(m[0].trim());body=body.slice(m[0].length);}return {body,modifiers};}
 function parseLine(raw){
  const {body,modifiers}=unwrap(raw);
+ const citation=formulaPremiseSentence(body);
+ if(citation)return {raw,formula:citation.goal,type:compileFormula(citation.goal).lean,name:null,ruleText:'',conclusion:false,modifiers,citation};
  const occurrences=[...body.matchAll(formulaPattern)];
  if(occurrences.length!==1)throw Error('Write one delimited proposition in each inference.');
  const f=occurrences[0],formula=f[0],before=body.slice(0,f.index).trim(),after=body.slice(f.index+formula.length).trim().replace(/[。.]$/,'').trim();
@@ -42,8 +44,10 @@ export function draftProof(input,scope=[],context=new Map()){
     if(last&&p.name)throw Error('The final inference must conclude the goal, not name a fact.');
     let application='?',candidates=[];
     const frame=premiseFrame(p.ruleText,[...visible]);
-    if(frame){
-      candidates=contextCandidates(p.type,frame.premises,facts);
+    if(p.citation||frame){
+      const resolution=p.citation?citationCandidates(p.citation,[...visible],facts):{candidates:contextCandidates(p.type,frame.premises,facts),overflow:false};
+      candidates=resolution.candidates;
+      if(resolution.overflow){blocked=true;rows.push({...p,line,status:'unresolved',candidates,reason:'Too many matching formula citations; name a specific premise.'});continue;}
       if(candidates.length!==1){blocked=true;rows.push({...p,line,status:'unresolved',frame,candidates,reason:candidates.length?'Multiple structural interpretations; specify the rule and ordered premises.':'No structural match for these premises. Name a rule or provide context types.'});continue;}
       application=candidates[0].term;
     }else if(p.ruleText&&p.ruleText!=='?'){
