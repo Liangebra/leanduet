@@ -182,8 +182,11 @@ elab "#duet_patch " n:ident path:str replacement:str : command => do
       Lean.Meta.check newProof
       unless ← isDefEq (← inferType newProof) v.type do
         throwError "The entire proof no longer has the original type"
-      let (typeText, termText) ← withOptions (fun o => o.setBool `pp.fullNames true) do
-        pure ((← ppExpr v.type).pretty, (← ppExpr newProof).pretty)
+      -- Declaration types must stand alone, without expected-type information.
+      let typeText ← withOptions (fun o => o.setBool `pp.fullNames true |>.setBool `pp.funBinderTypes true |>.setBool `pp.piBinderTypes true |>.setBool `pp.explicit true |>.setBool `pp.notation false) do
+        pure (← ppExpr v.type).pretty
+      let termText ← withOptions (fun o => o.setBool `pp.fullNames true) do
+        pure (← ppExpr newProof).pretty
       let j := Json.mkObj [("schema", toJson (1 : Nat)), ("type", toJson typeText),
         ("term", toJson termText), ("localType", toJson localType), ("oldTerm", toJson oldTerm),
         ("unchanged", toJson (sameShape newProof v.value))]
