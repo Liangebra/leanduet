@@ -66,6 +66,33 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
             page.set_viewport_size({"width":390,"height":844})
             assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1"),"mobile overflow"
             page.screenshot(path=str(ROOT/"browser-smoke.png"),full_page=True)
+            patch_page=browser.new_page(viewport={"width":1440,"height":900})
+            patch_page.on("pageerror",lambda error:errors.append(str(error)))
+            patch_page.goto(url)
+            source="""theorem patch_example (P Q R : Prop) (hpq : P → Q) (hqr : Q → R) (hq : Q) : P → R := by
+  intro hp
+  exact hqr (hpq hp)
+"""
+            patch_page.locator("#lean").fill(source)
+            patch_page.once("dialog",lambda d:d.accept())
+            patch_page.locator("#adopt").click()
+            patch_page.locator('[data-view="typed"]').click()
+            patch_page.locator("#extractTerm").click()
+            expect(patch_page.locator("#typedStatus")).to_contain_text("Extracted from Lean elaboration",timeout=60000)
+            # Open all nested proof nodes to reach the hpq application.
+            patch_page.locator("#typedTree").evaluate("(root) => root.querySelectorAll('details.typedNode').forEach(x=>x.open=true)")
+            patch_page.locator(".typedNode").filter(has=patch_page.locator("summary").filter(has_text=__import__("re").compile("^Apply hpq$"))).last.locator(":scope > .typedEdit").click()
+            expect(patch_page.locator("#patchScope")).to_contain_text("hq")
+            patch_page.locator("#patchTerm").fill("hq")
+            patch_page.locator("#checkPatch").click()
+            expect(patch_page.locator("#applyPatch")).to_be_enabled(timeout=120000)
+            expect(patch_page.locator("#patchPreview")).to_contain_text("hqr hq")
+            patch_page.once("dialog",lambda d:d.accept())
+            patch_page.locator("#applyPatch").click()
+            expect(patch_page.locator("#lean")).to_have_value(__import__("re").compile(r"hqr hq"))
+            patch_page.locator("#check").click()
+            expect(patch_page.locator("#verifyState")).to_have_text("Lean passed",timeout=60000)
+            patch_page.close()
             assert not errors, errors
             browser.close()
         print("Browser smoke test passed")

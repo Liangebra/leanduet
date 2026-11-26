@@ -78,17 +78,22 @@ def patch(source, path, replacement, project=None):
     args = " ".join(json.dumps(x,ensure_ascii=False) for x in (path,replacement))
     result = _run_lean("import Lean\n" + source.rstrip() + "\n\n" + adapter +
                        "\n#duet_patch " + name + " " + args + "\n", project)
-    candidate = _safe_proof(_candidate(name, result["type"], result["term"], prelude))
+    unchanged = result.get("unchanged") is True
+    candidate = source if unchanged else _safe_proof(_candidate(name, result["type"], result["term"], prelude))
     _run_lean(candidate + '\n#eval "LEANDUET_EXPORT_OK"\n', project, "LEANDUET_EXPORT_OK")
+    if unchanged:
+        return {"source":source, "path":path, "localType":result["localType"],
+                "oldTerm":result["oldTerm"], "status":"checked", "statementDefEq":True,
+                "proofShapePreserved":True, "surfaceHeaderChanged":False, "unchanged":True}
     other = "LeanDuetReplacementPreview"
     if name == other or re.search(r"\b" + other + r"\b", source):
         raise ValueError("Reserved preview declaration name.")
     renamed = _candidate(other, result["type"], result["term"], "")
     _run_lean("import Lean\n" + source.rstrip() + "\n\n" + renamed + "\n" + adapter +
-              "\n#duet_compare " + name + " " + other + "\n", project, "LEANDUET_TYPE_MATCH")
+              "\n#duet_compare " + name + " " + other + " " + args + "\n", project, "LEANDUET_TYPE_AND_SHAPE_MATCH")
     return {"source":candidate, "path":path, "localType":result["localType"],
             "oldTerm":result["oldTerm"], "status":"checked",
-            "statementDefEq":True, "surfaceHeaderChanged":True}
+            "statementDefEq":True, "proofShapePreserved":True, "surfaceHeaderChanged":True, "unchanged":False}
 
 
 def informath(source, project=None):

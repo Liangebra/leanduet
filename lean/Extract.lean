@@ -3,31 +3,55 @@
 namespace LeanDuetExtract
 open Lean Meta Elab Command
 
-def node (path : String) (editable : Bool) (kind term type : String) (children : Array Json := #[])
+def node (path : String) (editable : Bool) (scope : Array Json) (kind term type : String) (children : Array Json := #[])
     (extra : List (String × Json) := []) : Json :=
   Json.mkObj ([("kind", toJson kind), ("term", toJson term), ("type", toJson type),
-    ("children", Json.arr children), ("path", toJson path), ("editable", toJson editable)] ++ extra)
+    ("children", Json.arr children), ("path", toJson path), ("editable", toJson editable), ("scope", Json.arr scope)] ++ extra)
+
+-- Preserve variable occurrences and proof constructors: not definitional equality.
+-- Alpha-renaming and source metadata are intentionally ignored.
+partial def shape (e : Expr) : Expr :=
+  match e with
+  | .mdata _ b => shape b
+  | .lam _ t b bi => .lam .anonymous (shape t) (shape b) bi
+  | .forallE _ t b bi => .forallE .anonymous (shape t) (shape b) bi
+  | .letE _ t v b _ => .letE .anonymous (shape t) (shape v) (shape b) false
+  | .app f a => .app (shape f) (shape a)
+  | .proj n i b => .proj n i (shape b)
+  | _ => e
+
+def sameShape (a b : Expr) : Bool := Expr.equal (shape a) (shape b)
+
+def localScope : MetaM (Array Json) := do
+  let mut entries := #[]
+  for d in (← getLCtx) do
+    if !d.isImplementationDetail then
+      entries := entries.push (Json.mkObj [
+        ("name", toJson d.userName.toString),
+        ("type", toJson (← ppExpr d.type).pretty)])
+  return entries
 
 partial def inspect (e : Expr) (fuel : Nat) (path : String := "root") : MetaM Json := do
   let term := (← ppExpr e).pretty
   let ty ← inferType e
   let typ := (← ppExpr ty).pretty
   let editable ← isProp ty
-  if fuel == 0 then return node path editable "opaque" term typ
+  let scope ← localScope
+  if fuel == 0 then return node path editable scope "opaque" term typ
   match e with
   | .lam n t b bi =>
       let binderType := (← ppExpr t).pretty
       let kind := if ← isProp t then "assume" else "introduce"
       withLocalDecl n bi t fun x => do
         let child ← inspect (b.instantiate1 x) (fuel - 1) (path ++ "/body")
-        return node path editable kind term typ #[child]
+        return node path editable scope kind term typ #[child]
           [("binder", toJson n.toString), ("binderType", toJson binderType)]
   | .letE n t v b _ =>
       let binderType := (← ppExpr t).pretty
       let value ← inspect v (fuel - 1) (path ++ "/value")
       withLetDecl n t v fun x => do
         let body ← inspect (b.instantiate1 x) (fuel - 1) (path ++ "/body")
-        return node path editable "let" term typ #[value, body]
+        return node path editable scope "let" term typ #[value, body]
           [("binder", toJson n.toString), ("binderType", toJson binderType)]
   | .app .. =>
       let head := e.getAppFn
@@ -43,12 +67,12 @@ partial def inspect (e : Expr) (fuel : Nat) (path : String := "root") : MetaM Js
       let ref := match head with
         | .const n _ => n.toString
         | _ => headText
-      return node path editable "apply" term typ children
+      return node path editable scope "apply" term typ children
         [("reference", toJson ref), ("referenceType", toJson headType)]
-  | .const n _ => return node path editable "reference" term typ #[] [("reference", toJson n.toString)]
-  | .fvar _ => return node path editable "hypothesis" term typ
+  | .const n _ => return node path editable scope "reference" term typ #[] [("reference", toJson n.toString)]
+  | .fvar _ => return node path editable scope "hypothesis" term typ
   | .mdata _ body => inspect body (fuel - 1) path
-  | _ => return node path editable "opaque" term typ
+  | _ => return node path editable scope "opaque" term typ
 
 elab "#duet_extract " n:ident : command => do
   liftTermElabM do
@@ -124,15 +148,25 @@ elab "#duet_patch " n:ident path:str replacement:str : command => do
       let (typeText, termText) ← withOptions (fun o => o.setBool `pp.fullNames true) do
         pure ((← ppExpr v.type).pretty, (← ppExpr newProof).pretty)
       let j := Json.mkObj [("schema", toJson (1 : Nat)), ("type", toJson typeText),
-        ("term", toJson termText), ("localType", toJson localType), ("oldTerm", toJson oldTerm)]
+        ("term", toJson termText), ("localType", toJson localType), ("oldTerm", toJson oldTerm),
+        ("unchanged", toJson (sameShape newProof v.value))]
       logInfo m!"LEANDUET_JSON:{j.compress}"
     | _ => throwError "Expected a theorem"
 
-elab "#duet_compare " n:ident m:ident : command => do
+elab "#duet_compare " n:ident m:ident path:str replacement:str : command => do
   liftTermElabM do
     let a ← getConstInfo n.getId
     let b ← getConstInfo m.getId
     unless ← isDefEq a.type b.type do throwError "Candidate declaration type changed"
-    logInfo "LEANDUET_TYPE_MATCH"
+    match a, b with
+    | .thmInfo x, .thmInfo y =>
+      let stx ← match Parser.runParserCategory (← getEnv) `term replacement.getString with
+        | .ok stx => pure stx
+        | .error err => throwError "{err}"
+      let (expected, _, _) ← replaceAt x.value ((path.getString.splitOn "/").drop 1) stx
+      unless sameShape expected y.value do
+        throwError "Re-elaborated export does not preserve the requested proof structure"
+      logInfo "LEANDUET_TYPE_AND_SHAPE_MATCH"
+    | _, _ => throwError "Expected two theorems"
 
 end LeanDuetExtract

@@ -116,6 +116,7 @@ function openPatch(node){
   if(!clean()||!typedRoot)return;
   patchNode=node;patchCandidate=null;$('typedPatch').hidden=false;$('applyPatch').disabled=true;
   $('patchTarget').textContent=node.path+' · '+node.type;$('patchTerm').value=node.term||'';
+  $('patchScope').replaceChildren();for(const d of node.scope||[]){const row=element('div',undefined,'scopeRow');row.append(element('strong',d.name),element('code',d.type));$('patchScope').append(row);}
   $('patchPreview').textContent='';$('patchStatus').textContent='Edit the local proof term. Lean will check its type and the entire exported theorem.';
   $('typedPatch').scrollIntoView({block:'nearest'});$('patchTerm').focus();
 }
@@ -127,9 +128,10 @@ $('checkPatch').onclick=async()=>{
   patchCandidate=null;$('applyPatch').disabled=true;$('checkPatch').disabled=true;$('patchStatus').textContent='Checking local term, rebuilt proof and exported declaration…';
   try{const r=await api('patch',{source:lean.value,path:node.path,replacement:term});
     if(snapshotRev!==rev||patchNode!==node||$('patchTerm').value!==term)return;
-    if(r.status!=='checked'||!r.statementDefEq)throw Error('The server did not confirm type preservation.');
+    if(r.status!=='checked'||!r.statementDefEq||!r.proofShapePreserved)throw Error('The server did not confirm type preservation.');
+    if(r.unchanged){$('patchStatus').textContent='No structural change · original source preserved exactly.';return;}
     patchCandidate=parseLean(r.source);$('patchPreview').textContent=r.source;
-    $('patchStatus').textContent='Checked by Lean · statement definitionally equal · review generated source.';
+    $('patchStatus').textContent='Checked by Lean · same statement type · proof structure preserved after re-elaboration.';
     $('applyPatch').disabled=false;
   }catch(e){if(snapshotRev===rev&&patchNode===node)$('patchStatus').textContent=e.message;}
   finally{$('checkPatch').disabled=false;}
@@ -145,7 +147,7 @@ async function typedRequest(mode){
   $('extractTerm').disabled=$('informath').disabled=true;
   $('typedStatus').textContent=mode==='structure'?'Elaborating trusted proof locally…':'Running separately installed Informath…';
   try{const r=await api(mode,{source:lean.value});if(snapshotRev!==rev)return;
-    if(mode==='structure'){$('typedTree').replaceChildren();typedRoot=r.tree;showTypedNarrative();renderTyped(r.tree,$('typedTree'));$('typedStatus').textContent='Extracted from Lean elaboration. Tree is depth-limited; inspect the original proof separately.';}
+    if(mode==='structure'){$('typedTree').replaceChildren();patchNode=null;patchCandidate=null;$('typedPatch').hidden=true;$('applyPatch').disabled=true;typedRoot=r.tree;showTypedNarrative();renderTyped(r.tree,$('typedTree'));$('typedStatus').textContent='Extracted from Lean elaboration. Tree is depth-limited; inspect the original proof separately.';}
     else{$('informathOutput').textContent=r.narrative;$('typedStatus').textContent='Informath output · alignment not certified.';}
   }catch(e){if(snapshotRev===rev)$('typedStatus').textContent=e.message;}
   finally{$('extractTerm').disabled=$('informath').disabled=false;}

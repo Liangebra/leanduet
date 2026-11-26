@@ -29,7 +29,10 @@ tree=extract(source2)["tree"]
 target=next(n for n in walk(tree) if n["kind"]=="apply" and n.get("reference")=="hpq")
 assert target["editable"] and target["path"].startswith("root/"), target
 r=patch(source2,target["path"],"hq")
-assert r["statementDefEq"] and r["status"]=="checked",r
+assert r["statementDefEq"] and r["proofShapePreserved"] and r["status"]=="checked",r
+assert any(d["name"]=="hq" and d["type"]=="Q" for d in target["scope"]), target
+noop=patch(source2,target["path"],"hpq hp")
+assert noop["unchanged"] and noop["source"]==source2,noop
 assert "hqr hq" in r["source"],r
 for invalid in ["hp", "unknownVariable", "by sorry"]:
     try:
@@ -39,3 +42,12 @@ for invalid in ["hp", "unknownVariable", "by sorry"]:
     else:
         raise AssertionError("Invalid replacement accepted: "+invalid)
 print("Typed replacement, standalone recompilation, statement comparison and rejection passed")
+
+same_type = """theorem same_type (P : Prop) (h1 h2 : P) : P := by
+  exact h1
+"""
+target=next(n for n in walk(extract(same_type)["tree"]) if n["kind"]=="hypothesis" and n["term"]=="h1")
+r=patch(same_type,target["path"],"h2")
+assert r["proofShapePreserved"] and not r["unchanged"],r
+assert "h2" in r["source"],r
+print("Same-proposition assumptions retain their distinct proof occurrences; no-op preserves source")
