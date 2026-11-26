@@ -20,3 +20,9 @@ test('canonical scoped view is invariant under alpha-renaming but not capture',(
  const nested=compileFormula(String.raw`\forall x : \mathbb{N}, \exists y : \mathbb{N}, x = y`).scoped;
  assert.equal(nested.body.body.left.index,1);assert.equal(nested.body.body.right.index,0);
 });
+
+test('bounded quantifiers preserve membership and reject capture',()=>{
+ assert.equal(compileFormula('\\forall x \\in S, P(x)').lean,'(∀ x, (x ∈ S) → (P x))');
+ assert.equal(compileFormula('\\exists x \\in S, P(x)').lean,'(∃ x, (x ∈ S) ∧ (P x))');
+ assert.throws(()=>compileFormula('∀ x ∈ f(x), P(x)'));
+});

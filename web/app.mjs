@@ -146,6 +146,23 @@ function newObject(initial={}){
 $('addObject').onclick=()=>newObject();
 $('captureObject').onclick=()=>newObject({expression:notes.value.slice(notes.selectionStart,notes.selectionEnd)});
 drawExploration();
+let offlineTerm=null;
+function refreshOffline(){
+ const out=$('offlineResult');out.replaceChildren();offlineTerm=null;$('saveDraftFragment').disabled=true;
+ try{
+   const scope=$('offlineScope').value.trim().split(/\s+/).filter(Boolean);
+   if(scope.length>128||scope.some(s=>!/^[A-Za-z_][A-Za-z0-9_']{0,63}$/.test(s)))throw Error('Enter up to 128 simple Lean context names.');
+   const r=draftProof($('offlineDraft').value,scope);
+   for(const row of r.rows){
+     const p=element('div',undefined,'ruleResult');p.append(element('small','Line '+row.line+' · '+row.status),element('span',row.raw));
+     if(row.reason)p.append(element('small',row.reason));out.append(p);
+   }
+   if(r.term){offlineTerm=r.term;out.append(element('p','Candidate fragment · not checked','hint'),element('pre',r.term));$('saveDraftFragment').disabled=false;}
+ }catch(e){out.append(element('p',e.message));}
+}
+$('offlineDraft').oninput=refreshOffline;$('offlineScope').oninput=refreshOffline;
+$('copyNotesToDraft').onclick=()=>{const selected=notes.value.slice(notes.selectionStart,notes.selectionEnd);$('offlineDraft').value=(selected||notes.value).slice(0,12000);refreshOffline();};
+$('saveDraftFragment').onclick=()=>{if(offlineTerm)download(offlineTerm+'\n','candidate-fragment.lean','text/plain;charset=utf-8');};
 function refreshStage(){
   $('stageFormula').disabled=!(patchNode&&typedRoot&&clean()&&patchNode.kind!=='witness'&&notes.selectionStart!==notes.selectionEnd);
 }
