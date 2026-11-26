@@ -106,12 +106,29 @@ function renderTyped(node,container,depth=0){
   for(const child of node.children||[])renderTyped(child,block,depth+1);
   container.append(block);
 }
+function findTypedNode(root,path){
+  if(!root)return null;
+  if(root.path===path)return root;
+  for(const child of root.children||[]){const found=findTypedNode(child,path);if(found)return found;}
+  return null;
+}
 function showTypedNarrative(){
   const target=$('typedNarrative');target.replaceChildren();if(!typedRoot)return;
   target.append(element('div','DERIVED READING · TYPE-DRIVEN','eyebrow'));
   for(const row of narrate(typedRoot,$('typedLanguage').value)){
     const line=element('div',undefined,'derivedStep');line.style.marginLeft=Math.min(row.depth,6)*9+'px';
-    line.append(document.createTextNode(row.phrase+' '));formula(line,row.expr);target.append(line);
+    line.append(document.createTextNode(row.phrase+' '));formula(line,row.expr);
+    if(local&&row.editable){
+      const node=findTypedNode(typedRoot,row.path);
+      if(node){
+        const lang=$('typedLanguage').value;
+        const edit=element('button',lang==='zh'?'编辑此推理':lang==='ja'?'この推論を編集':'Edit this inference','narrativeEdit');
+        edit.dataset.proofPath=row.path;
+        edit.onclick=()=>{if(findTypedNode(typedRoot,row.path)===node)openPatch(node);};
+        line.append(edit);
+      }
+    }
+    target.append(line);
   }
 }
 $('typedLanguage').onchange=showTypedNarrative;

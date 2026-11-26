@@ -23,3 +23,5 @@
 .chainEditor{padding:12px;border:1px solid var(--line);border-radius:7px;margin:12px 0}.chainEditor summary{cursor:pointer;font-size:13px;color:var(--accent)}.chainEditor textarea{min-height:140px;white-space:pre-wrap;font:13px/1.6 var(--mono)}
 
 .chainBindings:empty{display:none}.chainBindings{margin-top:10px;border:1px solid var(--line);padding:8px 10px;border-radius:6px;background:var(--paper)}
+
+.derivedStep .narrativeEdit{display:inline-block;margin:3px 0 3px 8px;font:11px system-ui,sans-serif;padding:4px 7px;color:var(--accent);border:1px solid var(--line);background:var(--paper);border-radius:5px;vertical-align:middle}.derivedStep .narrativeEdit:hover{border-color:var(--accent)}

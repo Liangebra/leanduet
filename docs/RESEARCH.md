@@ -78,3 +78,7 @@ The semantic model additionally defines the cut-style `establish` operation as i
 ### Intermediate type inference
 
 The proposition annotation is now optional. A separate local inference endpoint elaborates the same ordered have/exact program with observation-only trace tactics after each intermediate declaration. The trace reads the actual local declaration type, rejects ambiguous names, unresolved metavariables and non-propositions, and returns the ordered types for the editor. The enclosing reconstructed proof is checked too. The plain candidate omits trace instrumentation and must still pass the independent export/shape check. This is forward elaboration of explicit applications, not unrestricted natural language, backward inference of arbitrary missing premises, or a proof of the JS compiler. The patch command also rejects explicit references to the original theorem or sorryAx in the reconstructed term.
+
+### Editable narrative occurrences
+
+The typed narrative is now rendered in English, Chinese or Japanese. Every displayed proof inference carries its exact revision-local Expr path; the reading view can open the same checked replacement panel directly, without navigating the raw tree. Binder rows deliberately do not offer a misleading local edit, because their displayed domain is not the whole lambda/let proof type. This is occurrence alignment to the elaborated tree, not original Lean source-range alignment. The existing patch verification and revision guards still apply.
