@@ -8,6 +8,7 @@ import {conceptLabels,parseRuleIntent} from './rule-intent.mjs';
 import {validateJudgment} from './semantic-ir.mjs';
 import {compileFormula} from './math-formula.mjs';
 import {compileChain,compileFormulaSequence} from './proof-chain.mjs';
+import {draftProof,compileNaturalDraft} from './natural-draft.mjs';
 import {languagePacks,registerPack,customPacks,phrase} from './languages.mjs';
 import {positionAt,completionEdit} from './completion.mjs';
 import {interpretations,rankInterpretations,mergeInterpretations} from './interpretations.mjs';
@@ -289,7 +290,7 @@ function openPatch(node){
   $('irOutput').textContent='';$('irStatus').textContent='';$('irInspector').open=false;
   $('abstractPanel').hidden=node.kind==='witness';$('abstractPanel').open=false;$('abstractOutput').textContent='';$('abstractStatus').textContent='';$('factorProof').disabled=true;
   $('wordingInput').value=wordingFor(typedRoot,node,wording);$('wordingStatus').textContent='Author wording, not a checked assertion.';$('patchTarget').textContent=node.path+' · '+node.type;$('patchTerm').value=node.term||'';
-  $('chainEditor').hidden=node.kind==='witness';$('chainEditor').open=false;$('chainText').value='';$('chainStatus').textContent='';$('chainBindings').replaceChildren();
+  $('chainEditor').hidden=node.kind==='witness';$('chainEditor').open=false;$('chainText').value='';$('draftTranslation').replaceChildren();$('chainStatus').textContent='';$('chainBindings').replaceChildren();
   $('ruleSearch').hidden=node.kind==='witness';$('ruleResults').replaceChildren();$('ruleIntent').value='';$('formulaGoal').value='';$('formulaPreview').textContent='';$('ruleStatus').textContent='Leave blank for goal-type search. You can also specify a rule and required premises.';
   const witness=(node.children||[]).find(x=>x.kind==='witness');
   const evidence=(node.children||[]).find(x=>x.kind!=='witness');
@@ -442,9 +443,24 @@ $('suggestInterpretations').onclick=async()=>{
   }catch(e){if(revision===rev&&node===patchNode&&version===interpretVersion)$('aiInterpretStatus').textContent=e.message;}
   finally{$('suggestInterpretations').disabled=false;}
 };
-function parseChainInput(text,scope){return $('chainFormat').value==='formula'?compileFormulaSequence(text,scope):compileChain(text,scope);}
-$('chainFormat').onchange=()=>{$('chainText').placeholder=$('chainFormat').value==='formula'?'$Q$\n$R$':'Establish hq | f using p\nConclude | g using hq';$('chainText').dispatchEvent(new Event('input'));};
-$('chainText').addEventListener('input',()=>{$('chainBindings').replaceChildren();$('patchTerm').value='';$('patchTerm').dispatchEvent(new Event('input'));$('chainStatus').textContent='Narrative changed. Compile again.';});
+function parseChainInput(text,scope){const mode=$('chainFormat').value;return mode==='formula'?compileFormulaSequence(text,scope):mode==='natural'?compileNaturalDraft(text,scope):compileChain(text,scope);}
+$('chainFormat').onchange=()=>{$('chainText').placeholder=$('chainFormat').value==='formula'?'$Q$\n$R$':$('chainFormat').value==='natural'?'建立 hq : $Q$，由 f，使用 p\n因此 $R$，由 g，使用 hq':'Establish hq | f using p\nConclude | g using hq';$('chainText').dispatchEvent(new Event('input'));};
+$('chainText').addEventListener('input',()=>{$('chainBindings').replaceChildren();$('patchTerm').value='';$('patchTerm').dispatchEvent(new Event('input'));$('chainStatus').textContent='Narrative changed. Stage the new candidate.';previewDraft();});
+function previewDraft(){
+ const target=$('draftTranslation');target.replaceChildren();
+ if($('chainFormat').value!=='natural'||!patchNode)return;
+ try{
+   const r=draftProof($('chainText').value,(patchNode.scope||[]).map(d=>d.name));
+   for(const x of r.rows){
+     const d=element('div',undefined,'ruleResult');
+     d.append(element('small','Line '+x.line+' · '+x.status),element('span',x.raw));
+     if(x.step)d.append(element('code',x.step.kind==='establish'?'have '+x.step.name+' : '+x.step.type+' := '+x.step.application:'show '+x.step.type+'; '+x.step.application));
+     else d.append(element('small',x.reason));
+     target.append(d);
+   }
+   if(r.term)target.append(element('pre',r.term));
+ }catch(e){target.append(element('p',e.message));}
+}
 $('compileChain').onclick=()=>{
   if(!patchNode||!clean()||patchNode.kind==='witness')return;
   try{
