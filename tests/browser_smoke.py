@@ -160,6 +160,7 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
             patch_page.locator("#inspectIR").click()
             expect(patch_page.locator("#irStatus")).to_contain_text("formula matches goal",timeout=60000)
             expect(patch_page.locator("#irOutput")).to_contain_text("leanduet.kernel-judgment")
+            expect(patch_page.locator("#irStatus")).to_contain_text("Lean round trip checked")
             patch_page.locator("#formulaGoal").fill("$P$")
             patch_page.locator("#inspectIR").click()
             expect(patch_page.locator("#irStatus")).to_contain_text("formula does not match goal",timeout=60000)

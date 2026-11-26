@@ -10,6 +10,7 @@ def walk(n):
         yield from walk(c)
 
 def validate(ir):
+    assert ir["judgment"]["roundTrip"]=={"checked":True,"shapePreserved":True,"encodingPreserved":True,"typeDefEq":True,"mode":"same-local-context"},ir
     script="import {validateJudgment} from './web/semantic-ir.mjs'; import fs from 'node:fs'; validateJudgment(JSON.parse(fs.readFileSync(0,'utf8')));"
     subprocess.run(["node","--input-type=module","-e",script],input=json.dumps(ir),text=True,check=True,cwd=Path(__file__).resolve().parents[1])
 
@@ -39,3 +40,18 @@ validate(root)
 assert root["universes"],root
 assert root["judgment"]["term"][0]=="lambda",root
 print("Universe-polymorphic read-only IR preserves level parameters")
+
+# Dependent binder, local let, constant universes, literals and applications.
+source3="""theorem ir_dependent (n : Nat) (x : Fin (n+1)) : ∃ y : Fin (n+1), y = x := by
+  let y := x
+  exact ⟨y, rfl⟩
+"""
+validate(inspect_ir(source3,"root"))
+tree=extract(source3)["tree"]
+for node in walk(tree):
+    if node["kind"]=="witness":
+        validate(inspect_ir(source3,node["path"]))
+        break
+else:
+    raise AssertionError("Expected existential witness")
+print("Dependent expressions and selected witness survive structural decoding")

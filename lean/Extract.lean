@@ -363,28 +363,142 @@ def checkedEncode (e : Expr) : StateT Nat MetaM Json := do
     throwError "Unresolved term or universe metavariable in IR"
   encodeExpr e
 
+
+/-- Decode only the schema's exact constructors. Slots are resolved against
+    the selected local context, never by pretty-printed identifier. -/
+def parseDecimal (j : Json) : Except String Nat := do
+  let s ← j.getStr?
+  let some n := s.toNat? | throw "Invalid decimal natural"
+  unless toString n == s do throw "Noncanonical decimal natural"
+  return n
+
+def decodeName (j : Json) (fuel : Nat := 96) : Except String Name := do
+  if fuel == 0 then throw "Name nesting limit"
+  let a ← j.getArr?
+  if a.isEmpty then return .anonymous
+  unless a.size == 3 do throw "Invalid structural name"
+  let p ← decodeName a[0]! (fuel - 1)
+  match ← a[1]!.getStr? with
+  | "str" => return .str p (← a[2]!.getStr?)
+  | "num" => return .num p (← parseDecimal a[2]!)
+  | _ => throw "Unknown name constructor"
+termination_by fuel
+
+def decodeLevel (j : Json) (fuel : Nat := 96) : Except String Level := do
+  if fuel == 0 then throw "Universe nesting limit"
+  let a ← j.getArr?
+  let tag ← a[0]!.getStr?
+  match tag, a.size with
+  | "zero", 1 => return .zero
+  | "succ", 2 => return .succ (← decodeLevel a[1]! (fuel - 1))
+  | "max", 3 => return .max (← decodeLevel a[1]! (fuel - 1)) (← decodeLevel a[2]! (fuel - 1))
+  | "imax", 3 => return .imax (← decodeLevel a[1]! (fuel - 1)) (← decodeLevel a[2]! (fuel - 1))
+  | "param", 2 => return .param (← decodeName a[1]!)
+  | _, _ => throw "Unknown or unresolved universe constructor"
+termination_by fuel
+
+def decodeBinder (j : Json) : Except String BinderInfo := do
+  match ← j.getStr? with
+  | "explicit" => return .default
+  | "implicit" => return .implicit
+  | "strictImplicit" => return .strictImplicit
+  | "instance" => return .instImplicit
+  | _ => throw "Unknown binder mode"
+
+partial def decodeExpr (slots : Array (Nat × Expr)) (j : Json)
+    (fuel : Nat := 96) (depth : Nat := 0) : StateT Nat (Except String) Expr := do
+  let budget ← get
+  if fuel == 0 || budget == 0 then throw "Semantic IR exceeds decoding limit"
+  set (budget - 1)
+  let a ← j.getArr?
+  if a.isEmpty then throw "Missing expression constructor"
+  let tag ← a[0]!.getStr?
+  let child (i : Nat) (d : Nat := depth) := decodeExpr slots a[i]! (fuel - 1) d
+  match tag, a.size with
+  | "bound", 2 =>
+    let i ← a[1]!.getNat?
+    unless i < depth do throw "Loose bound variable in IR"
+    return .bvar i
+  | "local", 2 =>
+    let i ← a[1]!.getNat?
+    for (k, v) in slots do
+      if k == i then return v
+    throw "Unknown local slot in IR"
+  | "sort", 2 => return .sort (← decodeLevel a[1]!)
+  | "const", 3 =>
+    let us ← a[2]!.getArr?
+    let levels ← us.toList.mapM fun u => decodeLevel u
+    return .const (← decodeName a[1]!) levels
+  | "app", 3 => return .app (← child 1) (← child 2)
+  | "lambda", 5 =>
+    return .lam (← decodeName a[1]!) (← child 3) (← child 4 (depth + 1)) (← decodeBinder a[2]!)
+  | "pi", 5 =>
+    return .forallE (← decodeName a[1]!) (← child 3) (← child 4 (depth + 1)) (← decodeBinder a[2]!)
+  | "let", 6 =>
+    return .letE (← decodeName a[1]!) (← child 2) (← child 3) (← child 4 (depth + 1)) (← a[5]!.getBool?)
+  | "nat", 2 => return .lit (.natVal (← parseDecimal a[1]!))
+  | "string", 2 => return .lit (.strVal (← a[1]!.getStr?))
+  | "projection", 4 => return .proj (← decodeName a[1]!) (← a[2]!.getNat?) (← child 3)
+  | _, _ => throw "Unknown or malformed expression constructor"
+
+def decodeChecked (slots : Array (Nat × Expr)) (j : Json) : MetaM Expr := do
+  let (e, _) ← match (decodeExpr slots j).run 12000 with
+    | .ok r => pure r
+    | .error err => throwError "Semantic IR decode: {err}"
+  Lean.Meta.check e
+  return e
+
+/-- Verify the actual exported syntax, not merely equality of propositions.
+    Re-encoding checks all preserved fields (including names and let flags);
+    shape equality independently checks the original term modulo metadata. -/
+def roundTripExpr (slots : Array (Nat × Expr)) (original : Expr) (j : Json) :
+    StateT Nat MetaM Expr := do
+  let decoded ← decodeChecked slots j
+  unless sameShape original decoded do throwError "IR round trip changed expression shape"
+  let encoded ← checkedEncode decoded
+  unless encoded == j do throwError "IR round trip changed encoded fields"
+  return decoded
+
 def encodeJudgment (e ty : Expr) (proposed : Option Expr) : StateT Nat MetaM Json := do
   let mut context : Array Json := #[]
+  let mut slots : Array (Nat × Expr) := #[]
   for d in (← getLCtx) do
     if context.size >= 128 then throwError "IR context exceeds 128 declarations"
+    let encodedType ← checkedEncode d.type
+    let _ ← roundTripExpr slots d.type encodedType
     let value ← match d.value? with
-      | some v => checkedEncode v
+      | some v => do
+        let j ← checkedEncode v
+        let _ ← roundTripExpr slots v j
+        pure j
       | none => pure Json.null
     context := context.push (Json.mkObj [
       ("slot", toJson d.index), ("name", encodeName d.userName), ("display", toJson d.userName.toString),
       ("binder", toJson (binderTag d.binderInfo)), ("internal", toJson d.isImplementationDetail),
-      ("type", ← checkedEncode d.type), ("value", value)])
+      ("type", encodedType), ("value", value)])
+    slots := slots.push (d.index, mkFVar d.fvarId)
   let formula ← match proposed with
     | none => pure Json.null
     | some p => do
       let equal ← isDefEq p ty
-      pure (Json.mkObj [("term", ← checkedEncode p),
+      let j ← checkedEncode p
+      let _ ← roundTripExpr slots p j
+      pure (Json.mkObj [("term", j),
         ("display", toJson (← ppExpr p).pretty), ("matchesGoal", toJson equal)])
   let proof ← isProp ty
   let proposition ← isProp e
   let kind := if proof then "proof" else if proposition then "proposition" else "expression"
-  return Json.mkObj [("context", Json.arr context), ("term", ← checkedEncode e),
-    ("type", ← checkedEncode ty), ("kind", toJson kind), ("formula", formula),
+  let termIR ← checkedEncode e
+  let typeIR ← checkedEncode ty
+  let decoded ← roundTripExpr slots e termIR
+  let decodedType ← roundTripExpr slots ty typeIR
+  unless ← isDefEq (← inferType decoded) decodedType do
+    throwError "Decoded judgment is not well typed"
+  return Json.mkObj [("context", Json.arr context), ("term", termIR),
+    ("type", typeIR), ("kind", toJson kind), ("formula", formula),
+    ("roundTrip", Json.mkObj [("checked", toJson true), ("shapePreserved", toJson true),
+      ("encodingPreserved", toJson true), ("typeDefEq", toJson true),
+      ("mode", toJson "same-local-context")]),
     ("termDisplay", toJson (← ppExpr e).pretty), ("typeDisplay", toJson (← ppExpr ty).pretty)]
 
 def elaborateProposition (input : String) : TermElabM Expr := do
