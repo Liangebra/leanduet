@@ -79,3 +79,15 @@ u=abstract_preview(source2,"root")
 assert u["closedChecked"] and u["reopenedShape"] and u["universes"],u
 assert u["source"] is None and not u["standaloneChecked"],u
 print("Abstraction preserves distinct premises and reports the polymorphic export limit")
+
+
+from semantic import factor_preview
+source5="""theorem ir_factor (P Q R : Prop) (f : P → Q) (g : Q → R) (p : P) : R := by
+  exact g (f p)
+"""
+inner=next(n for n in walk(extract(source5)["tree"]) if n.get("reference")=="f")
+r=factor_preview(source5,inner["path"])
+assert r["standaloneChecked"] and r["statementDefEq"] and r["proofComplementPreserved"] and r["lemmaShapePreserved"],r
+assert "theorem LeanDuetExtractedLemma" in r["source"] and "theorem ir_factor" in r["source"],r
+assert "g (LeanDuetExtractedLemma" in r["source"],r
+print("Factoring a nested inference produces a standalone checked two-theorem document")

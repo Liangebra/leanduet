@@ -683,6 +683,92 @@ elab "#duet_compare_abstraction " n:ident m:ident path:str : command => do
         logInfo "LEANDUET_ABSTRACTION_MATCH"
     | _, _ => throwError "Expected two theorems"
 
+
+/-- Rebuild a single path using an Expr produced in that exact scope.
+    Unlike textual replacement, this never resolves arguments by names. -/
+partial def replaceExprAt (e : Expr) (path : List String)
+    (k : Expr → MetaM Expr) : MetaM Expr := do
+  match path with
+  | [] =>
+    let new ← k e
+    Lean.Meta.check new
+    unless ← isDefEq (← inferType e) (← inferType new) do
+      throwError "Refactoring changed the local type"
+    return new
+  | p :: rest =>
+    match e with
+    | .mdata md b => return .mdata md (← replaceExprAt b path k)
+    | .lam n t b bi =>
+      unless p == "body" do throwError "Invalid lambda path"
+      withLocalDecl n bi t fun x => do
+        let b' ← replaceExprAt (b.instantiate1 x) rest k
+        return .lam n t (b'.abstract #[x]) bi
+    | .letE n t v b nd =>
+      if p == "value" then
+        return .letE n t (← replaceExprAt v rest k) b nd
+      else if p == "body" then
+        withLetDecl n t v fun x => do
+          let b' ← replaceExprAt (b.instantiate1 x) rest k
+          return .letE n t v (b'.abstract #[x]) nd
+      else throwError "Invalid let path"
+    | .app .. =>
+      unless p.startsWith "arg" do throwError "Invalid application path"
+      let some i := (String.mk (p.toList.drop 3)).toNat? | throwError "Invalid argument index"
+      let args := e.getAppArgs
+      unless i < args.size do throwError "Argument index out of bounds"
+      let v ← replaceExprAt args[i]! rest k
+      return mkAppN e.getAppFn (args.set! i v)
+    | _ => throwError "Invalid expression path"
+
+/-- Build the exact lemma call using local-variable identities. Check its
+    actual definition against the abstraction; theorem proof irrelevance
+    is insufficient for this purpose. -/
+def factorProof (original : Expr) (path : List String) (lemmaName : Name) :
+    MetaM Expr := do
+  let ci ← getConstInfo lemmaName
+  let .thmInfo lemma := ci | throwError "Expected an extracted theorem"
+  unless lemma.levelParams.isEmpty do throwError "Polymorphic factoring is not supported yet"
+  replaceExprAt original path fun e => do
+    let (t, statement, deps) ← abstractProof e
+    unless ← isDefEq lemma.type statement do throwError "Extracted lemma statement mismatch"
+    unless sameShape t lemma.value do throwError "Extracted lemma proof mismatch"
+    -- A local definition is preserved as a let in the extracted theorem,
+    -- so it is not an argument to the lemma.
+    let args := (deps.filter (fun d => d.value?.isNone)).map (fun d => mkFVar d.fvarId)
+    let call := mkAppN (mkConst lemmaName) args
+    Lean.Meta.check call
+    unless ← isDefEq (← inferType call) (← inferType e) do
+      throwError "Extracted lemma application has the wrong dependent type"
+    return call
+
+elab "#duet_factor " n:ident lemma:ident path:str : command => do
+  liftTermElabM do
+    let .thmInfo v ← getConstInfo n.getId | throwError "Expected a theorem"
+    unless v.levelParams.isEmpty do throwError "Polymorphic factoring is not supported yet"
+    let parts := path.getString.splitOn "/"
+    unless parts.head? == some "root" do throwError "Invalid root path"
+    let proof ← factorProof v.value (parts.drop 1) lemma.getId
+    Lean.Meta.check proof
+    unless ← isDefEq (← inferType proof) v.type do throwError "Factored proof changes theorem type"
+    if mentions proof n.getId || mentions proof `sorryAx then throwError "Invalid factored proof"
+    let typeText ← withOptions (fun o => o.setBool `pp.fullNames true |>.setBool `pp.funBinderTypes true |>.setBool `pp.piBinderTypes true |>.setBool `pp.explicit true |>.setBool `pp.notation false) do
+      pure (← ppExpr v.type).pretty
+    let termText ← withOptions (fun o => o.setBool `pp.fullNames true) do
+      pure (← ppExpr proof).pretty
+    logInfo m!"LEANDUET_JSON:{(Json.mkObj [("type", toJson typeText), ("term", toJson termText)]).compress}"
+
+elab "#duet_compare_factor " n:ident m:ident lemma:ident path:str : command => do
+  liftTermElabM do
+    match ← getConstInfo n.getId, ← getConstInfo m.getId with
+    | .thmInfo v, .thmInfo candidate =>
+      let parts := path.getString.splitOn "/"
+      unless parts.head? == some "root" do throwError "Invalid root path"
+      let expected ← factorProof v.value (parts.drop 1) lemma.getId
+      unless ← isDefEq v.type candidate.type do throwError "Factored export changed the statement"
+      unless sameShape expected candidate.value do throwError "Factored export changed the proof complement or call"
+      logInfo "LEANDUET_FACTOR_MATCH"
+    | _, _ => throwError "Expected two theorems"
+
 def finishCandidate (goal : Expr) (expected : Expr) (forbidden : Name)
     (label : String) (required : List FVarId) : MetaM (Option Json) := do
   let p ← instantiateMVars goal

@@ -192,6 +192,30 @@ def abstract_preview(source, path, project=None):
     result["exportNote"]="Standalone theorem compiled and its elaborated proof shape matches the abstraction."
     return result
 
+def factor_preview(source, path, project=None):
+    """Produce a separately compiled two-theorem refactoring preview, never mutate input."""
+    name=_name(source)
+    result=abstract_preview(source,path,project)
+    if not result["exportShapePreserved"] or not result["source"]:
+        raise ValueError("Factoring requires a certified standalone lemma. "+result["exportNote"])
+    lemma="LeanDuetExtractedLemma"
+    other="LeanDuetFactoredPreview"
+    if re.search(r"\b"+other+r"\b",source):
+        raise ValueError("Reserved factored preview name.")
+    prelude=source[:NAME.search(source).start()]
+    lemma_body=_candidate(lemma,result["type"],result["term"],"")
+    adapter=_adapter()
+    args=json.dumps(path,ensure_ascii=False)
+    prefix="import Lean\n"+source.rstrip()+"\n\n"+lemma_body+"\n"
+    factored=_run_lean(prefix+adapter+"\n#duet_factor "+name+" "+lemma+" "+args+"\n",project)
+    candidate=_safe_proof(prelude+lemma_body+"\n"+_candidate(name,factored["type"],factored["term"],""))
+    _run_lean(candidate+'\n#eval "LEANDUET_FACTOR_EXPORT_OK"\n',project,"LEANDUET_FACTOR_EXPORT_OK")
+    compare=_candidate(other,factored["type"],factored["term"],"")
+    _run_lean(prefix+compare+"\n"+adapter+"\n#duet_compare_factor "+name+" "+other+" "+lemma+" "+args+"\n",project,"LEANDUET_FACTOR_MATCH")
+    return {"source":candidate,"lemma":lemma,"path":path,"statementDefEq":True,
+            "proofComplementPreserved":True,"lemmaShapePreserved":True,"standaloneChecked":True,
+            "note":"Both declarations compiled independently; the original proof complement and extracted call match the expected structural edit."}
+
 def inspect_ir(source, path, formula="", project=None):
     """Export a revision-local typed judgment as structural kernel syntax."""
     name = _name(source)
