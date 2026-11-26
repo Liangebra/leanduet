@@ -116,3 +116,12 @@ self and forward local references are rejected; unknown global names are
 left to Lean. Untyped inference, arbitrary set-builder notation and general
 unfolding are not implemented. The structured chain endpoint accepts bounded
 single-expression definitions and traces their elaborated local bindings.
+
+## Goal-directed introductions
+
+Explicitly typed universal and implication introductions consume a matching
+constructor of the selected goal. Each extension records the residual goal
+and emits intro followed by change at the local declaration, so Lean checks
+the annotation. Absent or unsupported goals block translation. This is a
+single nested scope, not case splitting, implicit binder inference or
+arbitrary goal elaboration.

@@ -115,6 +115,20 @@ def infer_chain(source, path, steps, project=None):
     for i,step in enumerate(steps):
         if not isinstance(step,dict):
             raise ValueError("Expected a structured proof step.")
+        if step.get("kind") in ("introduce","assume") and i < len(steps)-1:
+            h, ty = step.get("name"), step.get("type")
+            if not isinstance(h,str) or not re.fullmatch(_SIMPLE,h) or h in names:
+                raise ValueError("Invalid or repeated introduction name.")
+            if (not isinstance(ty,str) or not ty.strip() or len(ty)>2000 or
+                re.search(r"[\r\n;{}]|/-|--|:=|\b(?:by|sorry|admit|sorryAx)\b",ty)):
+                raise ValueError("Expected an introduction type.")
+            names.append(h)
+            line = "  intro " + h
+            # Check the user's annotation by definitional equality in Lean.
+            check = "  change " + ty + " at " + h
+            lines.extend([line,check])
+            traced.extend([line,check,"  duet_trace "+h])
+            continue
         if step.get("kind") == "define" and i < len(steps)-1:
             h, ty, value = step.get("name"), step.get("type"), step.get("value")
             if not isinstance(h,str) or not re.fullmatch(_SIMPLE,h) or h in names:

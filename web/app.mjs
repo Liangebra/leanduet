@@ -478,7 +478,7 @@ $('suggestInterpretations').onclick=async()=>{
   }catch(e){if(revision===rev&&node===patchNode&&version===interpretVersion)$('aiInterpretStatus').textContent=e.message;}
   finally{$('suggestInterpretations').disabled=false;}
 };
-function parseChainInput(text,scope){const mode=$('chainFormat').value;return mode==='formula'?compileFormulaSequence(text,scope):mode==='natural'?draftSession.compile(text,scope,factsFromScope(patchNode?.scope),{choices:draftChoices}):compileChain(text,scope);}
+function parseChainInput(text,scope){const mode=$('chainFormat').value;return mode==='formula'?compileFormulaSequence(text,scope):mode==='natural'?draftSession.compile(text,scope,factsFromScope(patchNode?.scope),{choices:draftChoices,goal:patchNode?.type}):compileChain(text,scope);}
 $('chainFormat').onchange=()=>{$('chainText').placeholder=$('chainFormat').value==='formula'?'$Q$\n$R$':$('chainFormat').value==='natural'?'建立 hq : $Q$，由 f，使用 p\n因此 $R$，由 g，使用 hq':'Establish hq | f using p\nConclude | g using hq';$('chainText').dispatchEvent(new Event('input'));};
 $('chainText').addEventListener('input',()=>{draftChoiceVersion++;if($('chainFormat').value!=='natural')clearDraftChoices();$('chainBindings').replaceChildren();$('patchTerm').value='';$('patchTerm').dispatchEvent(new Event('input'));$('chainStatus').textContent='Narrative changed. Stage the new candidate.';previewDraft({edited:true});});
 function previewDraft({edited=false}={}){
@@ -487,18 +487,18 @@ function previewDraft({edited=false}={}){
  try{
    const input=$('chainText').value,scope=(patchNode.scope||[]).map(d=>d.name),facts=factsFromScope(patchNode.scope);
     if(edited&&draftChoices.size){
-     const unselected=draftSession.evaluate(input,scope,facts);
+     const unselected=draftSession.evaluate(input,scope,facts,{goal:patchNode.type});
      const correspondence=reconcileDraftIdentity(draftIdentity,unselected.graph);
      const migrated=migrateDraftChoices(draftIdentity,correspondence,draftChoices);
      draftChoices.clear();for(const [line,term] of migrated)draftChoices.set(line,term);
     }
-    const r=draftSession.evaluate(input,scope,facts,{choices:draftChoices});
+    const r=draftSession.evaluate(input,scope,facts,{choices:draftChoices,goal:patchNode.type});
     draftIdentity=reconcileDraftIdentity(draftIdentity,r.graph);
    for(const x of r.rows){
      const d=element('div',undefined,'ruleResult');
      d.dataset.objectId=draftIdentity.ids.get('line:'+x.line)||'';
      d.append(element('small','Line '+x.line+' · '+x.status+(x.proofStatus?' · '+x.proofStatus:'')),element('span',x.raw));
-     if(x.step)d.append(element('code',x.step.kind==='define'?'let '+x.step.name+' : '+x.step.type+' := '+x.step.value:x.step.kind==='establish'?'have '+x.step.name+' : '+x.step.type+' := '+x.step.application:'show '+x.step.type+'; '+x.step.application));
+     if(x.step)d.append(element('code',['introduce','assume'].includes(x.step.kind)?'intro '+x.step.name:x.step.kind==='define'?'let '+x.step.name+' : '+x.step.type+' := '+x.step.value:x.step.kind==='establish'?'have '+x.step.name+' : '+x.step.type+' := '+x.step.application:'show '+x.step.type+'; '+x.step.application));
      if(x.reason)d.append(element('small',x.reason));
      if(x.dependencies?.length)d.append(element('small','Depends on open obligations: '+x.dependencies.join(', ')));
      for(const c of x.candidates||[]){
