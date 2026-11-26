@@ -84,3 +84,24 @@ text and checks that subsequent edits invalidate the staged patch.
 latency comparison; results are environment-dependent and do not establish a
 real-world latency guarantee. More realistic mathematical corpora and
 cross-version bidirectional testing are still required.
+
+## Cross-revision draft correspondence (conservative subset)
+
+Session-local persistent IDs are separate from line/slot addresses. With
+unchanged context, uniquely matching raw occurrences whose bound formula
+references agree retain their IDs after insertions/deletions. Duplicate
+occurrences, altered text, changed context, or unresolved formula structure
+are not automatically equated. A selected candidate migrates only if its
+schema, term and mapped premise identities still agree. The browser always
+invalidates staged Lean output on edits. This is deliberately not arbitrary
+alpha-renaming, persistent workspace serialization, or kernel identity.
+
+## Discourse-reference constraints
+
+Explicit anaphora (previous result, earlier result, a numbered source line,
+previous two results) introduces a finite domain of preceding local objects.
+The goal and other premises constrain those domains through inference schemas.
+All compatible referent tuples are retained within a bounded search, with
+explicit overflow. Open referents remain open. This is one local relational
+constraint over a shared draft graph, not general discourse understanding or
+a global parser for unrestricted prose.

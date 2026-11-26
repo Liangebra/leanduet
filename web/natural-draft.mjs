@@ -1,5 +1,6 @@
 import {compileFormula} from './math-formula.mjs';
 import {buildDraftGraph} from './draft-graph.mjs';
+import {discourseFrame,discourseCandidates} from './discourse.mjs';
 import {parseRuleIntent} from './rule-intent.mjs';
 import {renderChain} from './proof-chain.mjs';
 import {premiseFrame,contextCandidates,formulaPremiseSentence,citationCandidates,implicitCandidates,structuralRules} from './context-grammar.mjs';
@@ -102,12 +103,13 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
      return candidate.term;
     }
     const frame=premiseFrame(p.forwardText||p.ruleText,[...visible]);
-    if(p.citation||frame){
-      const resolution=p.citation?citationCandidates(p.citation,[...visible],facts):{candidates:contextCandidates(p.type,frame.premises,facts),overflow:false};
+    const discourse=discourseFrame(p.forwardText||p.ruleText);
+    if(p.citation||frame||discourse){
+      const resolution=p.citation?citationCandidates(p.citation,[...visible],facts):discourse?discourseCandidates(discourse,p.type,rows,[...visible],facts):{candidates:contextCandidates(p.type,frame.premises,facts),overflow:false};
       candidates=resolution.candidates;
       const picked=chosen();
       if(!picked&&resolution.overflow){unresolved(p,raw,line,last,{candidates,reason:'Too many matching formula citations; name a specific premise.'});continue;}
-      if(!picked&&candidates.length!==1){unresolved(p,raw,line,last,{frame,candidates,reason:candidates.length?'Multiple structural interpretations; specify the rule and ordered premises.':'No structural match for these premises. Name a rule or provide context types.'});continue;}
+      if(!picked&&candidates.length!==1){unresolved(p,raw,line,last,{frame:discourse||frame,candidates,reason:candidates.length?'Multiple structural interpretations; specify the rule and ordered premises.':'No structural match for these premises. Name a rule or provide context types.'});continue;}
       application=picked||candidates[0].term;
     }else if(p.ruleText&&p.ruleText!=='?'){
       const words=p.ruleText.split(/\s+/);
