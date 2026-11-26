@@ -89,6 +89,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if self.path=='/api/factor': return self.send_json(200,semantic.factor_preview(source,data.get('path'),self.project))
             if self.path=='/api/abstract': return self.send_json(200,semantic.abstract_preview(source,data.get('path'),self.project))
             if self.path=='/api/ir': return self.send_json(200,semantic.inspect_ir(source,data.get('path'),data.get('formula',''),self.project))
+            if self.path=='/api/interpret': return self.send_json(200,semantic.interpret(source,data.get('path'),data.get('alternatives'),self.project))
             if self.path=='/api/search': return self.send_json(200,semantic.search(source,data.get('path'),data.get('rule',''),self.project,data.get('required'),data.get('formula','')))
             if self.path=='/api/patch': return self.send_json(200,semantic.patch(source,data.get('path'),data.get('replacement'),self.project))
             if self.path=='/api/informath': return self.send_json(200,semantic.informath(source,self.project))

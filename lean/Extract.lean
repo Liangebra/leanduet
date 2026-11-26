@@ -860,4 +860,52 @@ elab "#duet_search " n:ident path:str rule:str required:str formula:str : comman
       logInfo m!"LEANDUET_JSON:{j.compress}"
     | _ => throwError "Expected a theorem"
 
+
+/-- Test several interpretations in the same selected scope, restoring the
+    elaboration state between alternatives. Acceptance is local only. -/
+elab "#duet_interpret " n:ident path:str payload:str : command => do
+  liftTermElabM do
+    let .thmInfo v ← getConstInfo n.getId | throwError "Expected a theorem"
+    let parts := path.getString.splitOn "/"
+    unless parts.head? == some "root" do throwError "Invalid root path"
+    let rows ← fromDecoded ((← fromDecoded (Json.parse payload.getString)).getArr?)
+    unless rows.size > 0 && rows.size ≤ 8 do throwError "Expected 1–8 interpretations"
+    let result ← withNodeAt v.value (parts.drop 1) fun e => do
+      let goal ← inferType e
+      unless ← isProp goal do throwError "Interpretation requires a proof goal"
+      let mut output : Array Json := #[]
+      for i in [:rows.size] do
+        let row := rows[i]!
+        let formula ← fromDecoded (← jsonField row "formula").getStr?
+        let rule ← fromDecoded (← jsonField row "rule").getStr?
+        let required ← fromDecoded (← jsonField row "required").getStr?
+        let term ← fromDecoded (← jsonField row "term").getStr?
+        let saved ← Term.saveState
+        let attempt ← observing? do
+          if !formula.isEmpty then
+            let p ← elaborateProposition formula
+            unless ← isDefEq p goal do throwError "Formula does not match goal"
+          let premises ← resolveRequired required
+          if term.isEmpty then
+            findProofs goal n.getId rule premises
+          else
+            let stx ← fromDecoded (Parser.runParserCategory (← getEnv) `term term)
+            let p ← Term.elabTermEnsuringType stx (some goal)
+            Term.synthesizeSyntheticMVarsNoPostponing
+            let p ← instantiateMVars p
+            if p.hasMVar || p.hasLevelMVar || mentions p n.getId || mentions p `sorryAx then
+              throwError "Unresolved or invalid proof"
+            unless premises.all (fun id => p.containsFVar id) do
+              throwError "Required premise not used"
+            Lean.Meta.check p
+            unless ← isDefEq (← inferType p) goal do throwError "Wrong local type"
+            return #[Json.mkObj [("rule",toJson "explicit term"),("term",toJson term),
+              ("type",toJson (← ppExpr goal).pretty)]]
+        saved.restore true
+        let candidates := attempt.getD #[]
+        let status := if attempt.isNone then "rejected" else if candidates.isEmpty then "not-found" else "locally-checked"
+        output := output.push (Json.mkObj [("index",toJson i),("status",toJson status),("candidates",Json.arr candidates)])
+      return Json.mkObj [("goal",toJson (← ppExpr goal).pretty),("interpretations",Json.arr output)]
+    logInfo m!"LEANDUET_JSON:{result.compress}"
+
 end LeanDuetExtract

@@ -10,11 +10,13 @@ import {compileFormula} from './math-formula.mjs';
 import {compileChain,compileFormulaSequence} from './proof-chain.mjs';
 import {languagePacks,registerPack,customPacks,phrase} from './languages.mjs';
 import {positionAt,completionEdit} from './completion.mjs';
+import {interpretations,rankInterpretations} from './interpretations.mjs';
 import {mountEditor} from './editor.mjs';
 const $=id=>document.getElementById(id),lean=$('lean'),prose=$('prose'),notes=$('prompt');
 const refreshEditor=mountEditor();
 const KEY='leanduet.workspace.v1',THEME='leanduet.theme';
 let typedRoot=null, patchNode=null, patchCandidate=null;
+let liveTimer,interpretTimer,interpretVersion=0,interpretBusy=false,typedBusy=false;
 let exploration=emptyExploration();
 let foldedPaths=new Set();
 let ir,base,rev=0,notesRev=0,candidate=null,narrative=null,timer,selected=null,name='proof',exampleIndex=null,view='reading';
@@ -22,7 +24,7 @@ const clean=()=>lean.value===base.lean&&prose.value===base.prose;
 const state=(id,label,kind='')=>{$(id).textContent=label;$(id).dataset.state=kind;};
 function notice(s,error=false){$('notice').textContent=s;$('notice').classList.toggle('error',error);}
 function persist(){try{localStorage.setItem(KEY,JSON.stringify(snapshot(base,{lean:lean.value,prose:prose.value},notes.value,name,exploration)));state('saveState','Saved locally','pass');}catch{state('saveState','Not saved','dirty');}}
-function invalidate(){rev++;typedRoot=null;foldedPaths.clear();patchNode=null;patchCandidate=null;$('typedPatch').hidden=true;$('applyPatch').disabled=true;$('patchPreview').textContent='';$('typedNarrative').replaceChildren();$('typedTree').replaceChildren();$('informathOutput').textContent='';$('typedStatus').textContent='Proof changed or not inspected. Run extraction for this revision.';candidate=null;narrative=null;$('accept').disabled=true;$('useNarrative').disabled=true;$('proposal').textContent='No proposal yet.';$('output').textContent='Run the local checker to see diagnostics for this revision.';state('verifyState','Not checked');if(location.hostname!=='127.0.0.1'&&location.hostname!=='localhost'){state('verifyState','Local server required');$('output').textContent='Browser-only demo. Run python server.py locally for verification.';}}
+function invalidate(){rev++;clearTimeout(liveTimer);clearTimeout(interpretTimer);interpretVersion++;typedRoot=null;foldedPaths.clear();patchNode=null;patchCandidate=null;$('typedPatch').hidden=true;$('applyPatch').disabled=true;$('patchPreview').textContent='';$('typedNarrative').replaceChildren();$('typedTree').replaceChildren();$('informathOutput').textContent='';$('typedStatus').textContent='Proof changed or not inspected. Run extraction for this revision.';candidate=null;narrative=null;$('accept').disabled=true;$('useNarrative').disabled=true;$('proposal').textContent='No proposal yet.';$('output').textContent='Run the local checker to see diagnostics for this revision.';state('verifyState','Not checked');if(location.hostname!=='127.0.0.1'&&location.hostname!=='localhost'){state('verifyState','Local server required');$('output').textContent='Browser-only demo. Run python server.py locally for verification.';}}
 function dirty(){state('leanDirty',lean.value===base.lean?'Synced':'Edited',lean.value===base.lean?'':'dirty');state('proseDirty',prose.value===base.prose?'Synced':'Edited',prose.value===base.prose?'':'dirty');gutter();}
 function gutter(){refreshEditor();$('gutter').textContent=lean.value.split('\n').map((_,i)=>i+1).join('\n');$('gutter').scrollTop=lean.scrollTop;$('cursor').textContent='Ln '+(lean.value.slice(0,lean.selectionStart).split('\n').length);}
 function element(tag,txt,cls){const e=document.createElement(tag);if(txt!==undefined)e.textContent=txt;if(cls)e.className=cls;return e;}
@@ -68,7 +70,7 @@ function reading(){
     const item=element('button',n.leanLine+'  '+n.lean,'outlineItem');item.dataset.node=n.id;item.style.paddingLeft=(10+Math.min(n.indent-2,8)*4)+'px';item.onclick=()=>{setView('reading');selection(n.id,true);};outline.append(item);}
   selected=null;$('stepEditor').hidden=true;$('editStep').disabled=true;$('inspectName').textContent='No step selected';$('inspectCode').textContent='';$('inspectParent').textContent='—';
 }
-function install(next,{save=true}={}){clearTimeout(timer);ir=next;const l=renderLean(ir),p=renderProse(ir);if(lean.value!==l)lean.value=l;if(prose.value!==p)prose.value=p;base={lean:l,prose:p};invalidate();dirty();reading();notice('Representations synchronized. Lean verification and narrative review are separate.');if(save)persist();}
+function install(next,{save=true}={}){clearTimeout(timer);ir=next;const l=renderLean(ir),p=renderProse(ir);if(lean.value!==l)lean.value=l;if(prose.value!==p)prose.value=p;base={lean:l,prose:p};invalidate();dirty();reading();notice('Representations synchronized. Lean verification and narrative review are separate.');if(save)persist();scheduleTypedReading();}
 function sync(side){clearTimeout(timer);try{install(planSync(base,lean.value,prose.value,side).ir);}catch(e){notice(e.message,true);persist();}}
 for(const [el,side] of [[lean,'lean'],[prose,'prose']])el.addEventListener('input',()=>{clearTimeout(timer);invalidate();$('stepEditor').hidden=true;$('editStep').disabled=true;dirty();notice('Unsynchronized edits · both drafts are retained.');persist();if($('auto').checked)timer=setTimeout(()=>sync(side),450);});
 notes.addEventListener('input',()=>{notesRev++;candidate=null;narrative=null;$('accept').disabled=true;$('useNarrative').disabled=true;$('proposal').textContent='Notes changed. Request a new proposal.';$('exploreStatus').textContent='Exploration edited independently of the proof.';refreshStage();persist();});
@@ -275,7 +277,7 @@ $('collapseProof').onclick=()=>{foldedPaths=outlinePaths(typedRoot);showTypedNar
 $('expandProof').onclick=()=>{foldedPaths.clear();showTypedNarrative();};
 function openPatch(node){
   if(!clean()||!typedRoot)return;
-  patchNode=node;patchCandidate=null;$('typedPatch').hidden=false;$('applyPatch').disabled=true;
+  patchNode=node;patchCandidate=null;interpretVersion++;clearTimeout(interpretTimer);$('interpretPanel').hidden=node.kind==='witness';$('interpretPanel').open=false;$('interpretText').value='';$('interpretResults').replaceChildren();$('interpretStatus').textContent='';$('typedPatch').hidden=false;$('applyPatch').disabled=true;
   $('irOutput').textContent='';$('irStatus').textContent='';$('irInspector').open=false;
   $('abstractPanel').hidden=node.kind==='witness';$('abstractPanel').open=false;$('abstractOutput').textContent='';$('abstractStatus').textContent='';$('factorProof').disabled=true;
   $('patchTarget').textContent=node.path+' · '+node.type;$('patchTerm').value=node.term||'';
@@ -384,6 +386,35 @@ $('findRules').onclick=async()=>{
   }catch(e){if(snapshotRev===rev&&patchNode===node)$('ruleStatus').textContent=e.message;}
   finally{$('findRules').disabled=false;}
 };
+function drawInterpretations(plan,checked=null){
+  const target=$('interpretResults');target.replaceChildren();
+  for(const a of plan.unresolved){const row=element('div',undefined,'ruleResult');row.append(element('strong','Unresolved · retained'),element('code',a.raw),element('small',a.reason));target.append(row);}
+  if(!checked){for(const a of plan.alternatives){const row=element('div',undefined,'ruleResult');row.append(element('strong',a.origin+' · not checked'),element('code',a.term||[a.formula,a.rule,...a.required].filter(Boolean).join(' · ')));target.append(row);}return;}
+  for(const row of checked.interpretations||[]){if(row.status==='locally-checked')continue;const a=plan.alternatives[row.index];const d=element('div',undefined,'ruleResult');d.append(element('strong',row.status+' · retained'),element('code',a.raw));target.append(d);}
+  for(const c of rankInterpretations(plan,checked)){
+    const row=element('div',undefined,'ruleResult');row.append(element('strong',c.rule+' · locally checked'),element('code',c.term),element('small','From: '+c.interpretation.raw));
+    if(c.interpretation.modifiers.length)row.append(element('small','Discourse: '+c.interpretation.modifiers.join(' ')));
+    const use=element('button','Use candidate');use.onclick=()=>{$('patchTerm').value=c.term;$('patchTerm').dispatchEvent(new Event('input'));};row.append(use);target.append(row);
+  }
+}
+function planInterpretation(){return interpretations($('interpretText').value,(patchNode?.scope||[]).map(d=>d.name));}
+async function checkInterpretations(){
+  if(!patchNode||!clean()||!local||patchNode.kind==='witness'||interpretBusy)return;
+  const node=patchNode,revision=rev,version=interpretVersion,raw=$('interpretText').value;
+  const plan=planInterpretation();drawInterpretations(plan);
+  if(!plan.alternatives.length){$('interpretStatus').textContent='No supported interpretation yet. Your text is retained.';return;}
+  interpretBusy=true;$('interpretRun').disabled=true;$('interpretStatus').textContent='Checking bounded alternatives in Lean…';
+  try{
+    const r=await api('interpret',{source:lean.value,path:node.path,alternatives:plan.alternatives});
+    if(revision!==rev||version!==interpretVersion||node!==patchNode)return;
+    drawInterpretations(plan,r);$('interpretStatus').textContent=rankInterpretations(plan,r).length+' locally checked candidate(s). Select, then check the rebuilt proof.';
+  }catch(e){if(revision===rev&&version===interpretVersion&&node===patchNode)$('interpretStatus').textContent=e.message;}
+  finally{interpretBusy=false;$('interpretRun').disabled=false;if(version!==interpretVersion&&patchNode&&clean()&&$('liveInterpret').checked)scheduleInterpretation();}
+}
+function scheduleInterpretation(){clearTimeout(interpretTimer);if($('liveInterpret').checked&&local)interpretTimer=setTimeout(checkInterpretations,750);}
+$('interpretText').oninput=()=>{interpretVersion++;try{drawInterpretations(planInterpretation());$('interpretStatus').textContent='Draft interpretations · not yet checked';scheduleInterpretation();}catch(e){$('interpretStatus').textContent=e.message;}};
+$('liveInterpret').onchange=scheduleInterpretation;
+$('interpretRun').onclick=checkInterpretations;
 function parseChainInput(text,scope){return $('chainFormat').value==='formula'?compileFormulaSequence(text,scope):compileChain(text,scope);}
 $('chainFormat').onchange=()=>{$('chainText').placeholder=$('chainFormat').value==='formula'?'$Q$\n$R$':'Establish hq | f using p\nConclude | g using hq';$('chainText').dispatchEvent(new Event('input'));};
 $('chainText').addEventListener('input',()=>{$('chainBindings').replaceChildren();$('patchTerm').value='';$('patchTerm').dispatchEvent(new Event('input'));$('chainStatus').textContent='Narrative changed. Compile again.';});
@@ -446,16 +477,19 @@ $('applyPatch').onclick=()=>{
   if(!confirm('Replace the current source with the checked term-style theorem? Export the original workspace first if you want to retain the tactic layout.'))return;
   install(patchCandidate);setView('reading');notice('Checked typed export applied. The local checker can recheck this revision.');
 };
+function scheduleTypedReading(){clearTimeout(liveTimer);if($('liveNarrative').checked)liveTimer=setTimeout(()=>{if(local&&clean())typedRequest('structure');},650);}
+$('liveNarrative').onchange=scheduleTypedReading;
 async function typedRequest(mode){
+  if(typedBusy)return;
   if(!clean()){notice('Synchronize first.',true);return;}
-  const snapshotRev=rev;
+  const snapshotRev=rev;typedBusy=true;
   $('extractTerm').disabled=$('informath').disabled=true;
   $('typedStatus').textContent=mode==='structure'?'Elaborating trusted proof locally…':'Running separately installed Informath…';
   try{const r=await api(mode,{source:lean.value});if(snapshotRev!==rev)return;
     if(mode==='structure'){$('typedTree').replaceChildren();patchNode=null;patchCandidate=null;$('typedPatch').hidden=true;$('applyPatch').disabled=true;foldedPaths.clear();typedRoot=r.tree;showTypedNarrative();renderTyped(r.tree,$('typedTree'));$('typedStatus').textContent='Extracted from Lean elaboration. Tree is depth-limited; inspect the original proof separately.';}
     else{$('informathOutput').textContent=r.narrative;$('typedStatus').textContent='Informath output · alignment not certified.';}
   }catch(e){if(snapshotRev===rev)$('typedStatus').textContent=e.message;}
-  finally{$('extractTerm').disabled=$('informath').disabled=false;}
+  finally{typedBusy=false;$('extractTerm').disabled=$('informath').disabled=false;if(snapshotRev!==rev&&$('liveNarrative').checked)scheduleTypedReading();}
 }
 $('extractTerm').onclick=()=>typedRequest('structure');$('informath').onclick=()=>typedRequest('informath');
 async function ai(mode){if(!clean()){notice('Synchronize first.',true);return;}if(mode==='propose'&&!notes.value.trim()){notice('Enter a mathematical argument first.',true);return;}if(!confirm('Send the current Lean proof and notes to your configured AI provider?'))return;const snapshotRev=rev,snapshotNotes=notesRev;candidate=null;narrative=null;$('accept').disabled=$('useNarrative').disabled=true;$('propose').disabled=$('explain').disabled=true;$('proposal').textContent='Requesting unverified output…';try{const r=await api(mode,{source:lean.value,prose:notes.value});if(snapshotRev!==rev||snapshotNotes!==notesRev)return;if(mode==='explain'){narrative=r.narrative;$('proposal').textContent=narrative;$('useNarrative').disabled=false;notice('AI explanation · unverified.');return;}const next=parseLean(r.source);if(!sameStatement(ir,next))throw Error('Theorem header or environment changed.');candidate=next;$('proposal').textContent=r.source;$('accept').disabled=false;notice('Unverified proposal · review before applying and checking.');}catch(e){if(snapshotRev===rev&&snapshotNotes===notesRev){$('proposal').textContent=e.message;notice('AI unavailable or rejected.',true);}}finally{$('propose').disabled=$('explain').disabled=false;}}

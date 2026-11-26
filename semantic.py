@@ -250,6 +250,34 @@ def search(source, path, rule="", project=None, required=None, formula=""):
     return _run_lean("import Lean\n" + source.rstrip() + "\n\n" + _adapter() +
                      "\n#duet_search " + name + " " + args + "\n", project)
 
+def interpret(source,path,alternatives,project=None):
+    """Bounded batch of local candidate checks; no source mutation or AI execution."""
+    name=_name(source)
+    _safe_proof(source)
+    if not isinstance(path,str) or not re.fullmatch(r"root(?:/(?:body|value|arg[0-9]+)){0,16}",path):
+        raise ValueError("Invalid proof node path.")
+    if not isinstance(alternatives,list) or not 1<=len(alternatives)<=8:
+        raise ValueError("Use 1–8 interpretations.")
+    rows=[]
+    for a in alternatives:
+        if not isinstance(a,dict):
+            raise ValueError("Invalid interpretation.")
+        f,r,t=a.get("formula",""),a.get("rule",""),a.get("term","")
+        p=a.get("required",[])
+        if not isinstance(f,str) or len(f)>4000 or re.search(r"[\r\n;{}]|/-|--|:=|\b(?:by|sorry|admit)\b",f):
+            raise ValueError("Invalid formula.")
+        if not isinstance(r,str) or (r and not re.fullmatch(_RULE,r)):
+            raise ValueError("Invalid rule.")
+        if not isinstance(p,list) or len(p)>8 or any(not isinstance(x,str) or not re.fullmatch(_SIMPLE,x) for x in p) or len(set(p))!=len(p):
+            raise ValueError("Invalid premises.")
+        # This endpoint is deliberately limited to simple explicit applications.
+        # Arbitrary Lean fragments remain in the user-initiated patch editor.
+        if not isinstance(t,str) or (t and (not re.fullmatch(_RULE+r"(?: "+_SIMPLE+r"){0,8}",t) or re.search(r"\b(?:sorry|admit|sorryAx|by)\b",t))) or (t and r):
+            raise ValueError("Invalid explicit application.")
+        rows.append({"formula":f,"rule":r,"required":",".join(p),"term":t})
+    args=" ".join(json.dumps(x,ensure_ascii=False) for x in (path,json.dumps(rows,ensure_ascii=False)))
+    return _run_lean("import Lean\n"+source.rstrip()+"\n\n"+_adapter()+"\n#duet_interpret "+name+" "+args+"\n",project)
+
 def informath(source, project=None):
     """Reuse the upstream CLI as an external, separately installed tool."""
     root = os.environ.get("LEANDUET_INFORMATH_ROOT")
