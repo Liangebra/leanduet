@@ -216,6 +216,71 @@ def factor_preview(source, path, project=None):
             "proofComplementPreserved":True,"lemmaShapePreserved":True,"standaloneChecked":True,
             "note":"Both declarations compiled independently; the original proof complement and extracted call match the expected structural edit."}
 
+def _document_declarations(source):
+    """A deliberately restricted flat document boundary, not a Lean parser."""
+    _safe_proof(source)
+    if "\r" in source or "/-" in source or "-/" in source:
+        raise ValueError("Flat document mode currently requires LF and no block comments.")
+    matches=list(NAME.finditer(source))
+    names=[m.group(1) for m in matches]
+    if not 1<=len(names)<=32 or len(set(names))!=len(names):
+        raise ValueError("Use 1–32 distinct ASCII-named top-level theorems or lemmas.")
+    # Reject unsupported top-level commands rather than silently treat them
+    # as part of a theorem's source range.
+    first=matches[0].start()
+    for line in source[:first].splitlines():
+        if line.strip() and not re.fullmatch(r"import\s+\S.*",line):
+            raise ValueError("Only imports may precede a flat document.")
+    for line in source[first:].splitlines():
+        if line and not line[0].isspace() and not NAME.match(line):
+            raise ValueError("Flat document mode requires indented continuations and theorem/lemma declarations only.")
+    return matches
+
+def document_info(source,project=None):
+    matches=_document_declarations(source)
+    names=[m.group(1) for m in matches]
+    arg=json.dumps(json.dumps(names,ensure_ascii=False),ensure_ascii=False)
+    result=_run_lean("import Lean\n"+source.rstrip()+"\n\n"+_adapter()+"\n#duet_document "+arg+"\n",project)
+    for i,(m,row) in enumerate(zip(matches,result["declarations"])):
+        if row["name"]!=m.group(1):
+            raise ValueError("Declaration identity mismatch.")
+        row["line"]=source.count("\n",0,m.start())+1
+        row["editable"]=i==len(matches)-1 and not row["universes"]
+    return result
+
+def document_extract(source,declaration,project=None):
+    matches=_document_declarations(source)
+    if declaration not in [m.group(1) for m in matches]:
+        raise ValueError("Select a declaration in this document.")
+    return _run_lean("import Lean\n"+source.rstrip()+"\n\n"+_adapter()+"\n#duet_extract "+declaration+"\n",project)
+
+def document_patch(source,declaration,path,replacement,project=None):
+    """Edit only the final theorem; preserve the verified preceding text exactly."""
+    matches=_document_declarations(source)
+    m=matches[-1]
+    if declaration!=m.group(1):
+        raise ValueError("Only the final theorem can be edited; earlier declarations are read-only.")
+    if not isinstance(path,str) or not re.fullmatch(r"root(?:/(?:body|value|arg[0-9]+)){0,16}",path):
+        raise ValueError("Invalid proof node path.")
+    if not isinstance(replacement,str) or not replacement.strip() or len(replacement)>16000:
+        raise ValueError("Expected a nonempty replacement of at most 16000 characters.")
+    _safe_proof(replacement)
+    adapter=_adapter()
+    args=" ".join(json.dumps(x,ensure_ascii=False) for x in (path,replacement))
+    original="import Lean\n"+source.rstrip()+"\n\n"
+    r=_run_lean(original+adapter+"\n#duet_patch "+declaration+" "+args+"\n",project)
+    prefix=source[:m.start()]
+    candidate=source if r.get("unchanged") else _safe_proof(prefix+_candidate(declaration,r["type"],r["term"],""))
+    _run_lean(candidate+'\n#eval "LEANDUET_DOCUMENT_OK"\n',project,"LEANDUET_DOCUMENT_OK")
+    if not r.get("unchanged"):
+        other="LeanDuetDocumentPreview"
+        if re.search(r"\b"+other+r"\b",source):
+            raise ValueError("Reserved preview declaration name.")
+        renamed=_candidate(other,r["type"],r["term"],"")
+        _run_lean(original+renamed+"\n"+adapter+"\n#duet_compare "+declaration+" "+other+" "+args+"\n",project,"LEANDUET_TYPE_AND_SHAPE_MATCH")
+    return {"source":candidate,"declaration":declaration,"path":path,"statementDefEq":True,
+            "proofShapePreserved":True,"prefixPreserved":True,"unchanged":bool(r.get("unchanged"))}
+
 def inspect_ir(source, path, formula="", project=None):
     """Export a revision-local typed judgment as structural kernel syntax."""
     name = _name(source)

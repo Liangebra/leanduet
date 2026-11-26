@@ -771,6 +771,39 @@ elab "#duet_compare_factor " n:ident m:ident lemma:ident path:str : command => d
       logInfo "LEANDUET_FACTOR_MATCH"
     | _, _ => throwError "Expected two theorems"
 
+
+/-- Direct references to exact declarations, not prefix or printed-name matches. -/
+partial def referencesExact (e : Expr) (n : Name) : Bool :=
+  match e with
+  | .const k _ => k == n
+  | .app f a => referencesExact f n || referencesExact a n
+  | .lam _ t b _ | .forallE _ t b _ => referencesExact t n || referencesExact b n
+  | .letE _ t v b _ => referencesExact t n || referencesExact v n || referencesExact b n
+  | .mdata _ b | .proj _ _ b => referencesExact b n
+  | _ => false
+
+elab "#duet_document " names:str : command => do
+  liftTermElabM do
+    let raw ← fromDecoded (Json.parse names.getString)
+    let arr ← fromDecoded raw.getArr?
+    if arr.size == 0 || arr.size > 32 then throwError "Expected 1–32 declarations"
+    let mut declared : Array Name := #[]
+    for j in arr do
+      let s ← fromDecoded j.getStr?
+      let n := (s.splitOn ".").foldl Name.str Name.anonymous
+      if declared.contains n then throwError "Duplicate document declaration"
+      declared := declared.push n
+    let mut rows : Array Json := #[]
+    for n in declared do
+      let .thmInfo v ← getConstInfo n | throwError "Expected a theorem or lemma"
+      let deps := (declared.filter fun k => referencesExact v.type k || referencesExact v.value k).map Name.toString
+      let statementDeps := (declared.filter fun k => referencesExact v.type k).map Name.toString
+      let ty ← ppExpr v.type
+      rows := rows.push (Json.mkObj [("name",toJson n.toString),("type",toJson ty.pretty),
+        ("dependencies",toJson deps),("statementDependencies",toJson statementDeps),
+        ("universes",toJson (v.levelParams.map Name.toString))])
+    logInfo m!"LEANDUET_JSON:{(Json.mkObj [("schema",toJson (1 : Nat)),("declarations",Json.arr rows)]).compress}"
+
 def finishCandidate (goal : Expr) (expected : Expr) (forbidden : Name)
     (label : String) (required : List FVarId) : MetaM (Option Json) := do
   let p ← instantiateMVars goal

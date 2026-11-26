@@ -202,7 +202,7 @@ function openPatch(node){
   if(!clean()||!typedRoot)return;
   patchNode=node;patchCandidate=null;$('typedPatch').hidden=false;$('applyPatch').disabled=true;
   $('irOutput').textContent='';$('irStatus').textContent='';$('irInspector').open=false;
-  $('abstractPanel').hidden=node.kind==='witness';$('abstractPanel').open=false;$('abstractOutput').textContent='';$('abstractStatus').textContent='';$('factorProof').disabled=true;
+  $('abstractPanel').hidden=node.kind==='witness';$('abstractPanel').open=false;$('abstractOutput').textContent='';$('abstractStatus').textContent='';$('factorProof').disabled=true;$('openFactored').disabled=true;
   $('patchTarget').textContent=node.path+' · '+node.type;$('patchTerm').value=node.term||'';
   $('chainEditor').hidden=node.kind==='witness';$('chainEditor').open=false;$('chainText').value='';$('chainStatus').textContent='';$('chainBindings').replaceChildren();
   $('ruleSearch').hidden=node.kind==='witness';$('ruleResults').replaceChildren();$('ruleIntent').value='';$('formulaGoal').value='';$('formulaPreview').textContent='';$('ruleStatus').textContent='Leave blank for goal-type search. You can also specify a rule and required premises.';
@@ -258,12 +258,18 @@ $('abstractProof').onclick=async()=>{
 $('factorProof').onclick=async()=>{
   if(!patchNode||!clean()||!local||patchNode.kind==='witness')return;
   const node=patchNode,revision=rev;
-  $('factorProof').disabled=true;$('abstractOutput').textContent='';$('abstractStatus').textContent='Checking the factored two-theorem source…';
+  $('factorProof').disabled=true;$('openFactored').disabled=true;$('abstractOutput').textContent='';$('abstractStatus').textContent='Checking the factored two-theorem source…';
   try{
     const r=await api('factor',{source:lean.value,path:node.path});
     if(revision!==rev||node!==patchNode)return;
     $('abstractStatus').textContent=r.note+' Preview only: copy the source into a separate Lean document.';
     $('abstractOutput').textContent=r.source;
+    $('openFactored').disabled=false;
+    $('openFactored').onclick=()=>{
+      if(revision!==rev||node!==patchNode||!clean())return;
+      try{sessionStorage.setItem('leanduet.document.transfer',r.source);location.href='./document.html';}
+      catch(e){$('abstractStatus').textContent='Cannot transfer draft: '+e.message;}
+    };
   }catch(e){if(revision===rev&&node===patchNode)$('abstractStatus').textContent=e.message;}
   finally{if(revision===rev&&node===patchNode)$('factorProof').disabled=false;}
 };
