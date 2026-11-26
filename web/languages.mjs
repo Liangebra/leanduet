@@ -30,6 +30,7 @@ export function validatePack(p){
 export function registerPack(p){
   const v=validatePack(p);
   if(BUILTIN_PACKS.some(x=>x.id===v.id))throw Error('Built-in language ids are reserved.');
+  if(!packs.has(v.id)&&packs.size>=15)throw Error('At most twelve community language packs can be installed.');
   packs.set(v.id,v);return v;
 }
 export const languagePacks=()=>[...packs.values()];

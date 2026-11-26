@@ -125,6 +125,7 @@ theorem pair_projection {Γ Δ : Type u} {A : Ty Γ} (σ : Δ → Γ)
 theorem pair_eta {Γ Δ : Type u} {A : Ty Γ} (f : Δ → Extend A) :
     pair (fun δ => (f δ).1) (fun δ => (f δ).2) = f := by
   funext δ
+  change (⟨(f δ).1, (f δ).2⟩ : Extend A) = f δ
   cases f δ
   rfl
 

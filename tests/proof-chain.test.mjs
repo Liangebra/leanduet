@@ -40,3 +40,9 @@ test('LaTeX annotation passes through the formula AST and retains rule scope',()
  assert.equal(r.steps[0].type,'Q');
  assert.equal(r.term,'by\n  have hq : Q := f p\n  exact g hq');
 });
+
+test('formula holes emit Lean proof search rather than sorry',()=>{
+ const r=compileChain('Establish hq : $Q$ | ?\nConclude | ?',scope);
+ assert.equal(r.term,'by\n  have hq : Q := by exact?\n  exact?');
+ assert.throws(()=>compileChain('Establish hq | ?\nConclude | ?',scope));
+});

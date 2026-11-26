@@ -116,11 +116,12 @@ def infer_chain(source, path, steps, project=None):
         if not isinstance(step,dict):
             raise ValueError("Expected a structured proof step.")
         app = step.get("application")
-        if not isinstance(app,str) or not re.fullmatch(_RULE + r"(?: " + _SIMPLE + r"){0,8}",app):
+        if not isinstance(app,str) or (app!='?' and not re.fullmatch(_RULE + r"(?: " + _SIMPLE + r"){0,8}",app)):
             raise ValueError("Expected an ordered application of a named rule.")
         if step.get("kind")=="conclude" and i==len(steps)-1:
-            lines.append("  exact "+app)
-            traced.append("  exact "+app)
+            line = "  exact?" if app=="?" else "  exact "+app
+            lines.append(line)
+            traced.append(line)
         elif step.get("kind")=="establish" and i<len(steps)-1:
             h,ty=step.get("name"),step.get("type")
             if not isinstance(h,str) or not re.fullmatch(_SIMPLE,h) or h in names:
@@ -128,8 +129,10 @@ def infer_chain(source, path, steps, project=None):
             if ty is not None and (not isinstance(ty,str) or not ty.strip() or len(ty)>2000 or
                 re.search(r"[\r\n;{}]|/-|--|:=|\b(?:by|sorry|admit)\b",ty)):
                 raise ValueError("Expected a single proposition annotation or an inferred type.")
+            if app=="?" and ty is None:
+                raise ValueError("An intermediate proof hole requires an explicit proposition.")
             names.append(h)
-            line="  have "+h+(" : "+ty if ty is not None else "")+" := "+app
+            line="  have "+h+(" : "+ty if ty is not None else "")+" := "+("by exact?" if app=="?" else app)
             lines.append(line)
             traced.extend([line,"  duet_trace "+h])
         else:

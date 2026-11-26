@@ -88,3 +88,13 @@ except ValueError:
 else:
     raise AssertionError("A different proposition was accepted as the selected goal")
 print("Formula-directed proof completion preserves the selected proposition")
+
+
+# Fill explicit intermediate and final proof obligations without an LLM.
+hole_node=next(n for n in walk(extract(source2)["tree"]) if n.get("reference")=="g")
+hole=infer_chain(source2,hole_node["path"],[
+    {"kind":"establish","name":"hq","type":"Q","application":"?"},
+    {"kind":"conclude","application":"?"}])
+assert hole["bindings"]==[{"name":"hq","type":"Q"}],hole
+assert patch(source2,hole_node["path"],hole["term"])["proofShapePreserved"]
+print("Formula-annotated intermediate and final holes filled by Lean proof search")

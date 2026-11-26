@@ -14,6 +14,7 @@ export function compileChain(text,scope){
   const planned=new Set(lines.map(l=>statementMarker(l.split('|')[0])?.name).filter(Boolean));
   let done=false;
   function application(phrase,line){
+    if(phrase.trim()==='?')return '?';
     const {rule,required}=parseRuleIntent(phrase,{ordered:true});
     if(!rule)throw Error('Line '+line+': name an explicit rule; automatic search is not part of this grammar.');
     for(const arg of required)if(!visible.has(arg))throw Error('Line '+line+': unknown, ambiguous or forward reference '+arg);
@@ -36,10 +37,12 @@ export function compileChain(text,scope){
     if(occupied.has(name))throw Error('Line '+(i+1)+': binding already exists: '+name);
     // Type is an explicit Lean proposition expression, not a translated sentence.
     if(type!==null&&/[;{}]|(?:\/-|--|:=|\b(?:by|sorry|admit)\b)/.test(type))throw Error('Line '+(i+1)+': supply a single Lean proposition expression.');
-    steps.push({kind:'establish',name,type,application:application(right,i+1)});
+    const app=application(right,i+1);
+    if(app==='?'&&type===null)throw Error('Line '+(i+1)+': a proof hole requires an explicit proposition.');
+    steps.push({kind:'establish',name,type,application:app});
     occupied.add(name);visible.add(name);
   }
   if(!done)throw Error('Finish with Conclude | rule using premises.');
-  const term='by\n'+steps.map(s=>s.kind==='establish'?'  have '+s.name+(s.type===null?'':' : '+s.type)+' := '+s.application:'  exact '+s.application).join('\n');
+  const term='by\n'+steps.map(s=>s.kind==='establish'?'  have '+s.name+(s.type===null?'':' : '+s.type)+' := '+(s.application==='?'?'by exact?':s.application):s.application==='?'?'  exact?':'  exact '+s.application).join('\n');
   return {steps,term};
 }

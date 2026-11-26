@@ -106,3 +106,5 @@ The local source editor now offers Ctrl+Space or Complete. A one-shot JSON-RPC c
 ### Scope-indexed syntax and categorical design
 
 See [SEMANTIC_IR.md](SEMANTIC_IR.md) and lean/Scoped.lean. The scope-indexed model and concrete dependent-context equations specify small, testable laws before an eventual unified typed IR. The browser formula AST now carries a canonical de Bruijn view; this is not yet the native Expr serialization, nor a mechanized compiler proof.
+
+The formula-chain grammar now accepts an explicit question mark for Lean proof completion. Intermediate holes require a proposition annotation (which can be parsed LaTeX); a final hole uses the selected target type. The generated candidate uses `exact?` and must fully elaborate and pass the independent checked replacement pipeline. A self-referential solution is rejected rather than accepted as proof.
