@@ -26,19 +26,19 @@ export function resolveIntent(value){
 
 // A small controlled grammar: rule + explicit local evidence.
 // Parsing preserves intent; semantic resolution is performed in the Lean context.
-export function parseRuleIntent(value){
+export function parseRuleIntent(value,{ordered=false}={}){
   if(typeof value!=='string')throw Error('Expected a mathematical rule or declaration name.');
   const text=value.trim().replace(/[。.]$/,'').trim();
   let ruleText=text,premiseText='';
-  const separator=/(?:[,，;；]\s*)?(?:\busing\s+|使用\s*|利用假设\s*)/i;
+  const separator=/(?:[,，;；]\s*)?(?:\busing\s+|使用\s*|利用假设\s*|を用いて\s*|を用い[、，]?\s*)/i;
   const split=separator.exec(text);
   if(split){
     ruleText=text.slice(0,split.index).trim();
     premiseText=text.slice(split.index+split[0].length).trim();
     if(!premiseText)throw Error('Specify the local premise names after using / 使用.');
   }
-  const required=premiseText?premiseText.split(/\s*(?:,|，|、|\band\b|和|与)\s*/).map(x=>x.trim()):[];
-  if(required.length>8||required.some(x=>!/^[A-Za-z_][A-Za-z0-9_']{0,63}$/.test(x))||new Set(required).size!==required.length)
-    throw Error('Use up to eight distinct local premise names separated by commas or and / 和.');
+  const required=premiseText?premiseText.split(/\s*(?:,|，|、|\band\b|和|与|および|及び)\s*/).map(x=>x.trim()):[];
+  if(required.length>8||required.some(x=>!/^[A-Za-z_][A-Za-z0-9_']{0,63}$/.test(x))||(!ordered&&new Set(required).size!==required.length))
+    throw Error('Use up to eight local premise names separated by commas or and / 和 / および; search premises must be distinct.');
   return {rule:resolveIntent(ruleText),required};
 }

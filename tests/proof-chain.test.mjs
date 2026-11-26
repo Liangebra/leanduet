@@ -17,3 +17,13 @@ test('ordered arguments and mathematical concepts are preserved',()=>{
   assert.equal(compileChain('Conclude | 等式传递性 using hab and hbc',['hab','hbc']).term,'by\n  exact Eq.trans hab hbc');
   assert.equal(compileChain('結論 | 等式の対称性 using h',['h']).term,'by\n  exact Eq.symm h');
 });
+
+test('positional applications may reuse a premise; search constraint sets may not',()=>{
+  assert.equal(compileChain('Conclude | conjunction introduction using h and h',['h']).term,'by\n  exact And.intro h h');
+});
+test('Japanese rule phrases support natural evidence separator',()=>{
+  assert.equal(compileChain('結論 | 等式の推移性を用いて hab、hbc',['hab','hbc']).term,'by\n  exact Eq.trans hab hbc');
+});
+test('forward local rules are rejected as well as forward arguments',()=>{
+  assert.throws(()=>compileChain('Establish hq : Q | later using p\nEstablish later : P → Q | f\nConclude | g using hq',scope));
+});

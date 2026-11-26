@@ -58,6 +58,29 @@ def compile {Γ : Type u} {P : Predicate Γ} (d : Narrative Γ P) : (γ : Γ) �
   | @Narrative.transport _ _ B _ _ e p => fun γ =>
       Eq.mp (congrArg (B γ) (compile e γ)) (compile p γ)
 
+/-- Sequential composition: establish a fact and extend the context for
+    the continuation. This is the cut rule in the semantic context model. -/
+def establish {Γ : Type u} {P Q : Predicate Γ}
+    (step : Narrative Γ P)
+    (continuation : Narrative (Assume P) (fun γ => Q γ.val)) :
+    Narrative Γ Q :=
+  .impE (P := P) (.impI continuation) step
+
+theorem establish_sound {Γ : Type u} {P Q : Predicate Γ}
+    (step : Narrative Γ P)
+    (continuation : Narrative (Assume P) (fun γ => Q γ.val)) (γ : Γ) :
+    compile (establish step continuation) γ =
+      compile continuation ⟨γ, compile step γ⟩ := rfl
+
+/-- A context extension has a canonical section once the intermediate
+    proposition is proved. Its projection is the identity. -/
+def extendWithFact {Γ : Type u} {P : Predicate Γ} (d : Narrative Γ P) :
+    Γ → Assume P :=
+  fun γ => ⟨γ, compile d γ⟩
+
+theorem extension_projection {Γ : Type u} {P : Predicate Γ}
+    (d : Narrative Γ P) (γ : Γ) : (extendWithFact d γ).val = γ := rfl
+
 /-- A witness is a section together with its own dependent proof obligation. -/
 structure CertifiedWitness {Γ : Type u} (A : Family Γ) (P : (γ : Γ) → A γ → Prop) where
   witness : Section A

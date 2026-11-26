@@ -10,11 +10,13 @@ export function compileChain(text,scope){
   for(const n of scope)counts.set(n,(counts.get(n)||0)+1);
   const visible=new Set([...counts].filter(([,c])=>c===1).map(([n])=>n));
   const occupied=new Set(scope),steps=[];
+  const planned=new Set(lines.map(l=>/^(?:Establish\s+|建立\s+|示す\s+)([A-Za-z_][A-Za-z0-9_']{0,63})\s*:/i.exec(l)?.[1]).filter(Boolean));
   let done=false;
   function application(phrase,line){
-    const {rule,required}=parseRuleIntent(phrase);
+    const {rule,required}=parseRuleIntent(phrase,{ordered:true});
     if(!rule)throw Error('Line '+line+': name an explicit rule; automatic search is not part of this grammar.');
     for(const arg of required)if(!visible.has(arg))throw Error('Line '+line+': unknown, ambiguous or forward reference '+arg);
+    if(planned.has(rule)&&!visible.has(rule))throw Error('Line '+line+': forward rule reference '+rule);
     if(counts.get(rule)>1)throw Error('Line '+line+': ambiguous local rule '+rule);
     return [rule,...required].join(' ');
   }

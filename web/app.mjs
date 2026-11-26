@@ -171,7 +171,7 @@ $('findRules').onclick=async()=>{
   }catch(e){if(snapshotRev===rev&&patchNode===node)$('ruleStatus').textContent=e.message;}
   finally{$('findRules').disabled=false;}
 };
-$('chainText').addEventListener('input',()=>{$('chainStatus').textContent='Narrative changed. Compile again.';});
+$('chainText').addEventListener('input',()=>{$('patchTerm').value='';$('patchTerm').dispatchEvent(new Event('input'));$('chainStatus').textContent='Narrative changed. Compile again.';});
 $('compileChain').onclick=()=>{
   if(!patchNode||!clean()||patchNode.kind==='witness')return;
   try{
