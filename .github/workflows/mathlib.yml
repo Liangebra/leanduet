@@ -1,0 +1,29 @@
+name: Mathlib topology integration
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'tests/mathlib_integration.py'
+      - '.github/workflows/mathlib.yml'
+permissions:
+  contents: read
+jobs:
+  topology:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Lean
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Prepare compatible Mathlib
+        run: |
+          git clone --depth 1 --branch v4.19.0 https://github.com/leanprover-community/mathlib4.git "$RUNNER_TEMP/mathlib4"
+          cd "$RUNNER_TEMP/mathlib4"
+          lake exe cache get Mathlib/Topology/Compactness/Compact.lean
+      - run: python tests/mathlib_integration.py "$RUNNER_TEMP/mathlib4"
