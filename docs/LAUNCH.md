@@ -10,3 +10,5 @@ Contributors can help without programming by supplying a Lean proof, a handwritt
 
 Draft announcement:
 "I'm building LeanDuet, an open-source workbench exploring bidirectional editing between mathematical narratives and Lean 4. The current prototype preserves controlled proof syntax and links steps to source. The hard problem is semantic alignment: how do we preserve mathematical intent while changing a formal proof? I'm looking for collaborators and counterexamples, especially nested proofs, InfoTree extraction and readable mathematical explanations. https://github.com/Liangebra/leanduet"
+
+The public contribution entry point is now [Community](https://liangebra.github.io/leanduet/community.html). Start from concrete research tasks rather than mass promotion. The open prompts are tracked in [COMMUNITY.md](COMMUNITY.md).

@@ -1,14 +1,26 @@
 # Roadmap
 
-- v0.2: lexical nested IR, reversible conversion, conflict handling, optional AI explanation.
-- v0.3 (current prototype): source-linked mathematical reading workspace, authored examples with exact-source invalidation, portable document format, local draft recovery, theme and static-demo deployment configuration.
-- Next: genuine Lean InfoTree/LSP extraction of goal transitions, hypotheses, references and diagnostics. Support multiline theorem statements, richer mathematical expression rendering and reviewed narrative spans.
-- v0.4: stable node IDs, incremental document patches, free-prose alignment review, project browser and LaTeX export.
-- v0.5: VS Code adapter sharing the core; desktop shell with a safe local checker lifecycle.
-- v1.0: reliable cross-platform installations and research workspace with collaborative proof exposition.
+## Stable prototype
 
-Non-goals: claiming arbitrary natural-language equivalence; hard-theorem solving as the primary product; public unsandboxed Lean execution.
+- Single-theorem workbench, controlled syntax and source-linked reading.
+- Native Lean completion, bounded library search, checked local edits and formula-only proof sequences.
+- Community-importable mathematical language packs.
+- Scope-indexed substitution laws and native judgment encoding/decoding with fresh-context round-trip checks.
 
-## Type-theoretic track
+## Experimental track
 
-See [RESEARCH.md](RESEARCH.md). v0.4-dev introduces indexed derivation data, a compiler, partial lens contracts, a local elaborated proof inspector, and an optional upstream Informath CLI integration. Source alignment and typed local proof replacement remain open.
+- Dependency-closed lemma abstraction and checked factoring previews.
+- Multi-theorem document inventory, direct/transitive references, native declaration ranges and checked single-declaration edits. These are under integration validation and not yet part of the stable workbench.
+
+## Research priorities
+
+- [Faithful proof presentations](https://github.com/Liangebra/leanduet/issues/7): define the right structural invariants.
+- [Refactoring corpus](https://github.com/Liangebra/leanduet/issues/9): dependent types, Mathlib examples and counterexamples.
+- [Typed interpretation and substitution](https://github.com/Liangebra/leanduet/issues/10): connect scope laws to actual IR.
+- [InfoTree and source alignment](https://github.com/Liangebra/leanduet/issues/1): stable semantic source positions and incremental edits.
+- Universe-polymorphic export, project-level LSP and richer mathematical narration.
+- Community language resources, accessibility, packaging and interoperability.
+
+No fixed release dates. Non-goals: claims of arbitrary natural-language equivalence, hard-theorem solving as the primary product, or public unsandboxed Lean execution.
+
+See [community agenda](COMMUNITY.md) and [semantic IR design](SEMANTIC_IR.md).

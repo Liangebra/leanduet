@@ -4,7 +4,7 @@
 <p align="center"><a href="README.md">English</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.ja.md">日本語</a></p>
 
 <p align="center">面向数学证明的开源工作台。</p>
-<p align="center"><a href="https://liangebra.github.io/leanduet/">在线体验</a> · <a href="docs/RESEARCH.md">研究文档</a> · <a href="https://github.com/Liangebra/leanduet/discussions">讨论</a></p>
+<p align="center"><a href="https://liangebra.github.io/leanduet/">在线体验</a> · <a href="docs/RESEARCH.md">研究文档</a> · <a href="https://liangebra.github.io/leanduet/community.html#zh">参与社区</a> · <a href="https://github.com/Liangebra/leanduet/discussions">讨论</a></p>
 
 ---
 
