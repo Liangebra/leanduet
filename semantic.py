@@ -24,7 +24,7 @@ def _run_lean(text, project=None, marker=None, trace=False):
     with tempfile.TemporaryDirectory(prefix="leanduet-structure-") as directory:
         path = Path(directory) / "Inspect.lean"
         path.write_text(text, encoding="utf-8")
-        r = subprocess.run(command + [str(path)], cwd=project or ROOT, capture_output=True,
+        r = subprocess.run(command + (["-DElab.async=false"] if "#duet_document " in text else []) + [str(path)], cwd=project or ROOT, capture_output=True,
                            text=True, encoding="utf-8", errors="replace", timeout=45)
     out = r.stdout + r.stderr
     if r.returncode or re.search(r"\bsorry\b", out):
