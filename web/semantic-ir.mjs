@@ -35,6 +35,6 @@ export function validateJudgment(ir){
  expr(j.term,slots);expr(j.type,slots);
  if(j.formula!==null){if(typeof j.formula?.matchesGoal!=='boolean')fail();expr(j.formula.term,slots);}
  const r=j.roundTrip;
- if(r!==undefined&&(!r||r.mode!=='same-local-context'||!['checked','shapePreserved','encodingPreserved','typeDefEq'].every(k=>r[k]===true)))fail();
+ if(r!==undefined&&(!r||r.mode!=='same-environment-fresh-context'||!['checked','shapePreserved','encodingPreserved','typeDefEq','freshContextChecked'].every(k=>r[k]===true)))fail();
  return ir;
 }

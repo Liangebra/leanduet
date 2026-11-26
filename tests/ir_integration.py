@@ -10,7 +10,7 @@ def walk(n):
         yield from walk(c)
 
 def validate(ir):
-    assert ir["judgment"]["roundTrip"]=={"checked":True,"shapePreserved":True,"encodingPreserved":True,"typeDefEq":True,"mode":"same-local-context"},ir
+    assert ir["judgment"]["roundTrip"]=={"checked":True,"shapePreserved":True,"encodingPreserved":True,"typeDefEq":True,"freshContextChecked":True,"mode":"same-environment-fresh-context"},ir
     script="import {validateJudgment} from './web/semantic-ir.mjs'; import fs from 'node:fs'; validateJudgment(JSON.parse(fs.readFileSync(0,'utf8')));"
     subprocess.run(["node","--input-type=module","-e",script],input=json.dumps(ir),text=True,check=True,cwd=Path(__file__).resolve().parents[1])
 

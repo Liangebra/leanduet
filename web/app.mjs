@@ -252,7 +252,7 @@ $('inspectIR').onclick=async()=>{
     if(revision!==rev||node!==patchNode||input!==$('formulaGoal').value)return;
     $('irOutput').textContent=JSON.stringify(ir,null,2);
     const match=ir.judgment.formula;
-    $('irStatus').textContent=(ir.judgment.roundTrip?.checked?'Lean round trip checked · ':'Scope and structure validated · ')+ir.judgment.context.length+' local declarations'+(match?(match.matchesGoal?' · formula matches goal':' · formula does not match goal'):'');
+    $('irStatus').textContent=(ir.judgment.roundTrip?.checked?'Lean round trip checked · fresh context · ':'Scope and structure validated · ')+ir.judgment.context.length+' local declarations'+(match?(match.matchesGoal?' · formula matches goal':' · formula does not match goal'):'');
   }catch(e){if(revision===rev&&node===patchNode)$('irStatus').textContent=e.message;}
   finally{$('inspectIR').disabled=false;}
 };

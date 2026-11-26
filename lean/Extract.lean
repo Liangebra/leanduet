@@ -464,6 +464,59 @@ def roundTripExpr (slots : Array (Nat × Expr)) (original : Expr) (j : Json) :
   unless encoded == j do throwError "IR round trip changed encoded fields"
   return decoded
 
+
+def jsonField (j : Json) (key : String) : MetaM Json :=
+  match j.getObjVal? key with
+  | .ok v => pure v
+  | .error err => throwError "Invalid IR context field: {err}"
+
+def fromDecoded {α : Type} (r : Except String α) : MetaM α :=
+  match r with
+  | .ok v => pure v
+  | .error err => throwError "IR context decode: {err}"
+
+/-- Rebuild the local telescope with fresh free variables. The original slot
+    numbers identify declarations only within the serialized judgment. -/
+partial def withDecodedContext {α : Type} (entries : List Json)
+    (slots : Array (Nat × Expr)) (k : Array (Nat × Expr) → MetaM α) : MetaM α := do
+  match entries with
+  | [] => k slots
+  | entry :: rest =>
+    let slot ← fromDecoded (← jsonField entry "slot").getNat?
+    if let some (previous, _) := slots.back? then
+      unless previous < slot do throwError "IR context slots are not strictly increasing"
+    let name ← fromDecoded (decodeName (← jsonField entry "name"))
+    let binder ← fromDecoded (decodeBinder (← jsonField entry "binder"))
+    let ty ← decodeChecked slots (← jsonField entry "type")
+    unless (← whnf (← inferType ty)).isSort do
+      throwError "IR declaration is not a type"
+    let value ← jsonField entry "value"
+    let next (x : Expr) := withDecodedContext rest (slots.push (slot, x)) k
+    match value with
+    | .null => withLocalDecl name binder ty next
+    | _ =>
+      let v ← decodeChecked slots value
+      unless ← isDefEq (← inferType v) ty do
+        throwError "IR let value has the wrong type"
+      withLetDecl name ty v next
+
+/-- Check the reconstructed judgment in an empty initial local context.
+    Compare both term and type after abstracting old/new variable identities.
+    The global environment and universe parameter names remain the same. -/
+def checkFreshContext (context : Array Json) (oldSlots : Array (Nat × Expr))
+    (original originalType : Expr) (termIR typeIR : Json) : MetaM Unit :=
+  withLCtx {} #[] do
+    withDecodedContext context.toList #[] fun slots => do
+      let term ← decodeChecked slots termIR
+      let ty ← decodeChecked slots typeIR
+      unless ← isDefEq (← inferType term) ty do
+        throwError "Fresh-context judgment has the wrong type"
+      let oldVars := oldSlots.map Prod.snd
+      let newVars := slots.map Prod.snd
+      unless sameShape (original.abstract oldVars) (term.abstract newVars) &&
+          sameShape (originalType.abstract oldVars) (ty.abstract newVars) do
+        throwError "Fresh-context round trip changed variable binding structure"
+
 def encodeJudgment (e ty : Expr) (proposed : Option Expr) : StateT Nat MetaM Json := do
   let mut context : Array Json := #[]
   let mut slots : Array (Nat × Expr) := #[]
@@ -499,11 +552,13 @@ def encodeJudgment (e ty : Expr) (proposed : Option Expr) : StateT Nat MetaM Jso
   let decodedType ← roundTripExpr slots ty typeIR
   unless ← isDefEq (← inferType decoded) decodedType do
     throwError "Decoded judgment is not well typed"
+  checkFreshContext context slots e ty termIR typeIR
   return Json.mkObj [("context", Json.arr context), ("term", termIR),
     ("type", typeIR), ("kind", toJson kind), ("formula", formula),
     ("roundTrip", Json.mkObj [("checked", toJson true), ("shapePreserved", toJson true),
       ("encodingPreserved", toJson true), ("typeDefEq", toJson true),
-      ("mode", toJson "same-local-context")]),
+      ("freshContextChecked", toJson true),
+      ("mode", toJson "same-environment-fresh-context")]),
     ("termDisplay", toJson (← ppExpr e).pretty), ("typeDisplay", toJson (← ppExpr ty).pretty)]
 
 def elaborateProposition (input : String) : TermElabM Expr := do
