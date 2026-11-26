@@ -15,7 +15,7 @@ const refreshEditor=mountEditor();
 const KEY='leanduet.workspace.v1',THEME='leanduet.theme';
 let typedRoot=null, patchNode=null, patchCandidate=null;
 let foldedPaths=new Set();
-let ir,base,rev=0,candidate=null,narrative=null,timer,selected=null,name='proof',exampleIndex=null,view='reading';
+let ir,base,rev=0,notesRev=0,candidate=null,narrative=null,timer,selected=null,name='proof',exampleIndex=null,view='reading';
 const clean=()=>lean.value===base.lean&&prose.value===base.prose;
 const state=(id,label,kind='')=>{$(id).textContent=label;$(id).dataset.state=kind;};
 function notice(s,error=false){$('notice').textContent=s;$('notice').classList.toggle('error',error);}
@@ -39,7 +39,7 @@ function describe(n){
   const labels={intro:'Introduce',exact:'Conclude using',have:'Establish',apply:'Apply',rw:'Rewrite using',simp:'Simplify',show:'Show',refine:'Refine using',change:'Change the goal to',cases:'Split into cases on',induction:'Proceed by induction on',opaque:'Formal step'};
   return labels[n.kind]||n.label;
 }
-function setView(next){view=next;for(const key of ['reading','prose','typed','notes']){$(key+'View').hidden=key!==view;}document.querySelectorAll('[data-view]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.view===view)));}
+function setView(next){view=next;if(next==='notes')refreshStage();for(const key of ['reading','prose','typed','notes']){$(key+'View').hidden=key!==view;}document.querySelectorAll('[data-view]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.view===view)));}
 function selection(id,locate=false){
   if(!clean()){notice('Synchronize edits before navigating or editing a step.',true);return;}
   const n=ir.nodes.find(x=>x.id===id&&x.kind!=='blank');if(!n)return;
@@ -69,7 +69,7 @@ function reading(){
 function install(next,{save=true}={}){clearTimeout(timer);ir=next;const l=renderLean(ir),p=renderProse(ir);if(lean.value!==l)lean.value=l;if(prose.value!==p)prose.value=p;base={lean:l,prose:p};invalidate();dirty();reading();notice('Representations synchronized. Lean verification and narrative review are separate.');if(save)persist();}
 function sync(side){clearTimeout(timer);try{install(planSync(base,lean.value,prose.value,side).ir);}catch(e){notice(e.message,true);persist();}}
 for(const [el,side] of [[lean,'lean'],[prose,'prose']])el.addEventListener('input',()=>{clearTimeout(timer);invalidate();$('stepEditor').hidden=true;$('editStep').disabled=true;dirty();notice('Unsynchronized edits · both drafts are retained.');persist();if($('auto').checked)timer=setTimeout(()=>sync(side),450);});
-notes.addEventListener('input',()=>{rev++;candidate=null;narrative=null;$('accept').disabled=true;$('useNarrative').disabled=true;$('proposal').textContent='Notes changed. Request a new proposal.';persist();});
+notes.addEventListener('input',()=>{notesRev++;candidate=null;narrative=null;$('accept').disabled=true;$('useNarrative').disabled=true;$('proposal').textContent='Notes changed. Request a new proposal.';$('exploreStatus').textContent='Exploration saved independently of the proof.';refreshStage();persist();});
 for(const evt of ['click','keyup','scroll','select'])lean.addEventListener(evt,gutter);
 function cursorLink(){
   if(!clean()||document.activeElement!==lean)return;
@@ -96,6 +96,37 @@ $('file').onchange=async()=>{try{const f=$('file').files[0];if(!f||!mayReplace()
 function download(content,filename,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([content],{type}));a.download=filename;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
 $('download').onclick=()=>download(lean.value,'proof.lean','text/plain');
 $('saveDoc').onclick=()=>download(JSON.stringify(snapshot(base,{lean:lean.value,prose:prose.value},notes.value,name),null,2),'proof.leanduet.json','application/json');
+$('exportNotes').onclick=()=>download(notes.value,'exploration.md','text/markdown;charset=utf-8');
+function refreshStage(){
+  $('stageFormula').disabled=!(patchNode&&typedRoot&&clean()&&patchNode.kind!=='witness'&&notes.selectionStart!==notes.selectionEnd);
+}
+for(const evt of ['select','keyup','mouseup','focus'])notes.addEventListener(evt,refreshStage);
+function appendNotes(text){
+  const separator=notes.value&&!notes.value.endsWith('\n\n')?(notes.value.endsWith('\n')?'\n':'\n\n'):'';
+  notes.value+=separator+text;
+  notes.dispatchEvent(new Event('input'));
+}
+$('noteGoal').onclick=()=>{
+  if(!patchNode||!typedRoot||!clean())return;
+  const n=patchNode;
+  const context=(n.scope||[]).map(d=>d.name+' : '+d.type).join('\n');
+  appendNotes('### Goal snapshot — unverified notes\n\n'+
+    'Source: '+name+' · '+n.path+'\n\n'+(context?'Context:\n'+context+'\n\n':'')+
+    'Goal:\n'+n.type+'\n\nIdeas:\n');
+  setView('notes');notes.focus();notes.setSelectionRange(notes.value.length,notes.value.length);
+};
+$('stageFormula').onclick=()=>{
+  if(!patchNode||!typedRoot||!clean()||patchNode.kind==='witness')return;
+  const selected=notes.value.slice(notes.selectionStart,notes.selectionEnd).trim();
+  try{
+    if(!((selected.startsWith('$')&&selected.endsWith('$'))||(selected.startsWith('\\(')&&selected.endsWith('\\)'))||(selected.startsWith('\\[')&&selected.endsWith('\\]'))))throw Error('Select one delimited LaTeX formula, not the entire argument.');
+    compileFormula(selected);
+    $('formulaGoal').value=selected;$('formulaGoal').dispatchEvent(new Event('input'));
+    $('ruleStatus').textContent='Staged from exploration. Find typed proofs to check the goal in Lean.';
+    $('exploreStatus').textContent='Formula staged; notes and Lean source are unchanged.';
+    setView('typed');$('formulaGoal').focus();
+  }catch(e){$('exploreStatus').textContent='Not staged: '+e.message+' Your notes are unchanged.';}
+};
 let completionVersion=0;
 function hideCompletion(){completionVersion++;$('completionPanel').hidden=true;}
 $('closeCompletion').onclick=hideCompletion;
@@ -383,9 +414,9 @@ async function typedRequest(mode){
   finally{$('extractTerm').disabled=$('informath').disabled=false;}
 }
 $('extractTerm').onclick=()=>typedRequest('structure');$('informath').onclick=()=>typedRequest('informath');
-async function ai(mode){if(!clean()){notice('Synchronize first.',true);return;}if(mode==='propose'&&!notes.value.trim()){notice('Enter a mathematical argument first.',true);return;}if(!confirm('Send the current Lean proof and notes to your configured AI provider?'))return;const snapshotRev=rev;candidate=null;narrative=null;$('accept').disabled=$('useNarrative').disabled=true;$('propose').disabled=$('explain').disabled=true;$('proposal').textContent='Requesting unverified output…';try{const r=await api(mode,{source:lean.value,prose:notes.value});if(snapshotRev!==rev)return;if(mode==='explain'){narrative=r.narrative;$('proposal').textContent=narrative;$('useNarrative').disabled=false;notice('AI explanation · unverified.');return;}const next=parseLean(r.source);if(!sameStatement(ir,next))throw Error('Theorem header or environment changed.');candidate=next;$('proposal').textContent=r.source;$('accept').disabled=false;notice('Unverified proposal · review before applying and checking.');}catch(e){if(snapshotRev===rev){$('proposal').textContent=e.message;notice('AI unavailable or rejected.',true);}}finally{$('propose').disabled=$('explain').disabled=false;}}
+async function ai(mode){if(!clean()){notice('Synchronize first.',true);return;}if(mode==='propose'&&!notes.value.trim()){notice('Enter a mathematical argument first.',true);return;}if(!confirm('Send the current Lean proof and notes to your configured AI provider?'))return;const snapshotRev=rev,snapshotNotes=notesRev;candidate=null;narrative=null;$('accept').disabled=$('useNarrative').disabled=true;$('propose').disabled=$('explain').disabled=true;$('proposal').textContent='Requesting unverified output…';try{const r=await api(mode,{source:lean.value,prose:notes.value});if(snapshotRev!==rev||snapshotNotes!==notesRev)return;if(mode==='explain'){narrative=r.narrative;$('proposal').textContent=narrative;$('useNarrative').disabled=false;notice('AI explanation · unverified.');return;}const next=parseLean(r.source);if(!sameStatement(ir,next))throw Error('Theorem header or environment changed.');candidate=next;$('proposal').textContent=r.source;$('accept').disabled=false;notice('Unverified proposal · review before applying and checking.');}catch(e){if(snapshotRev===rev&&snapshotNotes===notesRev){$('proposal').textContent=e.message;notice('AI unavailable or rejected.',true);}}finally{$('propose').disabled=$('explain').disabled=false;}}
 $('propose').onclick=()=>ai('propose');$('explain').onclick=()=>ai('explain');$('accept').onclick=()=>{if(candidate&&clean()&&confirm('Apply the proposed Lean source? Review before running Lean.'))install(candidate);};
-$('useNarrative').onclick=()=>{if(narrative&&(!notes.value||confirm('Replace your free-prose notes with this unverified explanation?'))){notes.value=narrative;persist();}};
+$('useNarrative').onclick=()=>{if(narrative)appendNotes('### AI explanation — unverified\n\n'+narrative);};
 function theme(t){document.documentElement.dataset.theme=t;$('theme').textContent=t==='dark'?'Light mode':'Dark mode';try{localStorage.setItem(THEME,t);}catch{}}
 $('theme').onclick=()=>theme(document.documentElement.dataset.theme==='dark'?'light':'dark');
 try{theme(localStorage.getItem(THEME)||'light');}catch{theme('light');}

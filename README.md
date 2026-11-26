@@ -38,6 +38,8 @@ The [online editor](https://liangebra.github.io/leanduet/) is a static demo. Run
 - Preview a dependency-closed lemma and a checked refactoring that replaces the selected proof with its application. Multi-theorem editing remains experimental.
 - Save locally, export Lean or a portable workspace, and read typed narratives in English, Chinese or Japanese, or import [community language packs](docs/LANGUAGE_PACKS.md).
 
+- Explore freely in a locally saved, exportable mathematical notebook. Stage a selected formula only when you choose to formalize it. See [exploration design](docs/EXPLORATION.md).
+
 ### Why LeanDuet?
 
 Lean verifies a proof term rather than its exposition. LeanDuet explores how mathematical exposition can be treated as an editable view of that structure, without discarding the author's choice of inference. Its core uses Lean's elaborator, type-directed library search and explicit structural checks, not an LLM as a verifier.

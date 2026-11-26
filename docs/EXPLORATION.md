@@ -1,0 +1,11 @@
+# Mathematical exploration and formal commitment
+
+Mathematics does not begin with a fully specified calculus. A mathematician may introduce a provisional notation, try an analogy, draw a conjecture, or change the question. LeanDuet should support this activity without forcing every sentence to become a formal command.
+
+The Explore view stores arbitrary text independently of the controlled proof and Lean source. It has no grammar, no compulsory check, no AI requirement. It is exported verbatim as Markdown or included in a workspace export. Editing notes must not invalidate a Lean verification result for unchanged source.
+
+A selected typed goal can be copied to exploration as a historical context snapshot. It is not a live assertion of correctness. The snapshot and subsequent ideas stay unverified. A selected delimited formula can be staged in goal search when a current proof goal is selected; only that selection is parsed. Parsing is not proof, and searching is not applying a proof. Neither action rewrites the surrounding notes or Lean source. Unsupported notation is kept verbatim in exploration.
+
+The optional AI assistance is a separate, user-initiated operation. AI explanations append to notes with an unverified label rather than replacing the author's reasoning. A Lean proposal remains unverified until independently checked.
+
+Our typed intermediate language describes the committed formal part of a document, not the limits of mathematical thought. Future work may include free-standing notebooks, multiple simultaneous conjectures, diagrams and local definitions, but none is implied by the current implementation.

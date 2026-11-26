@@ -19,3 +19,7 @@ A five-line counterexample with a clear explanation can be more valuable than a 
 The stable main branch is a research prototype, not a universal formalizer. The experimental multi-declaration/refactoring branch is not advertised as released. See [semantic IR](SEMANTIC_IR.md), [research notes](RESEARCH.md), and [contributing](../CONTRIBUTING.md).
 
 [Open a discussion](https://github.com/Liangebra/leanduet/discussions) · [Browse open tasks](https://github.com/Liangebra/leanduet/issues)
+
+## Freedom before formal commitment
+
+Mathematical exploration need not follow the controlled grammar. See [exploration design](EXPLORATION.md). We welcome examples where the original problem or notation changes during reasoning, not just fully formalized final proofs.
