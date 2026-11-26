@@ -5,11 +5,11 @@
 - Single-theorem workbench, controlled syntax and source-linked reading.
 - Native Lean completion, bounded library search, checked local edits and formula-only proof sequences.
 - Community-importable mathematical language packs.
+- Checked dependency-closed lemma abstraction and two-theorem factoring previews.
 - Scope-indexed substitution laws and native judgment encoding/decoding with fresh-context round-trip checks.
 
 ## Experimental track
 
-- Dependency-closed lemma abstraction and checked factoring previews.
 - Multi-theorem document inventory, direct/transitive references, native declaration ranges and checked single-declaration edits. These are under integration validation and not yet part of the stable workbench.
 
 ## Research priorities
