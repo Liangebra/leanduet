@@ -73,3 +73,14 @@ automatic wording correspondence. Detached annotations can be explicitly
 reattached to a selected unique current occurrence without overwriting existing
 wording. This is manual author confirmation, not persistent identity or a
 proof of semantic equivalence. It does not rewrite the Lean source.
+
+## Acceptance fixtures
+
+`tests/interpret_integration.py` invokes the JavaScript natural draft compiler
+and independently compiles its generated bounded-quantifier proof with Lean.
+The browser smoke test selects a proof candidate without changing the raw
+text and checks that subsequent edits invalidate the staged patch.
+`node tests/draft-benchmark.mjs` is an opt-in synthetic full-vs-incremental
+latency comparison; results are environment-dependent and do not establish a
+real-world latency guarantee. More realistic mathematical corpora and
+cross-version bidirectional testing are still required.
