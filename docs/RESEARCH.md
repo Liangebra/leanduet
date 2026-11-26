@@ -102,3 +102,7 @@ Research references: Towards Semantic Markup of Mathematical Documents via User 
 ### Native Lean completion
 
 The local source editor now offers Ctrl+Space or Complete. A one-shot JSON-RPC client starts the pinned Lean language server, opens the exact draft (including incomplete Lean syntax), waits for diagnostics and requests textDocument/completion at a UTF-16 position. Candidates use the server's replacement range; complex snippet/additional-edit/command items are not applied. Stale results cannot be applied to changed drafts or cursor positions. No artificial keyword list is substituted. This is an initial completion client, not a persistent LSP session or full VS Code feature parity; Mathlib project-mode completion needs additional integration testing. The server remains trusted-local-code only.
+
+### Scope-indexed syntax and categorical design
+
+See [SEMANTIC_IR.md](SEMANTIC_IR.md) and lean/Scoped.lean. The scope-indexed model and concrete dependent-context equations specify small, testable laws before an eventual unified typed IR. The browser formula AST now carries a canonical de Bruijn view; this is not yet the native Expr serialization, nor a mechanized compiler proof.

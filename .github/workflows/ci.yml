@@ -22,6 +22,7 @@ jobs:
       - run: lean examples/Compose.lean
       - run: lean lean/TMN.lean
       - run: lean lean/Dependent.lean
+      - run: lean lean/Scoped.lean
       - run: python tests/semantic_integration.py
       - run: python tests/search_integration.py
       - run: python tests/lsp_integration.py

@@ -77,4 +77,23 @@ export function renderFormula(ast){
   default:throw Error('Unknown mathematical AST node.');
  }
 }
-export function compileFormula(text){const ast=parseFormula(text);return {ast,lean:renderFormula(ast)};}
+export function compileFormula(text){const ast=parseFormula(text);return {ast,scoped:scopedFormula(ast),lean:renderFormula(ast)};}
+
+
+// Bindings are a separate canonical syntax view. Bound occurrences use
+// de Bruijn indices; free names remain unresolved until Lean elaboration.
+// This does not equate free identifiers with Lean declarations.
+export function scopedFormula(ast,scope=[]){
+ switch(ast.kind){
+  case 'id':{
+   const index=scope.indexOf(ast.value);
+   return index<0?{kind:'free',name:ast.value}:{kind:'bound',index};
+  }
+  case 'number':return {kind:'number',value:ast.value};
+  case 'unary':return {kind:'unary',op:ast.op,body:scopedFormula(ast.body,scope)};
+  case 'binary':return {kind:'binary',op:ast.op,left:scopedFormula(ast.left,scope),right:scopedFormula(ast.right,scope)};
+  case 'call':return {kind:'call',fn:scopedFormula(ast.fn,scope),args:ast.args.map(a=>scopedFormula(a,scope))};
+  case 'binder':return {kind:'binder',op:ast.op,domain:scopedFormula(ast.domain,scope),body:scopedFormula(ast.body,[ast.name,...scope])};
+  default:throw Error('Unknown mathematical AST node.');
+ }
+}

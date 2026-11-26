@@ -11,3 +11,12 @@ test('math expression grammar preserves precedence and binder structure',()=>{
 test('unsupported, ambiguous and malformed formulas fail rather than guess',()=>{
  for(const t of ['2x','a < b < c',String.raw`\unknown{x}`,'a = (b','by exact h','a; b','x_{i}'])assert.throws(()=>compileFormula(t),undefined,t);
 });
+
+test('canonical scoped view is invariant under alpha-renaming but not capture',()=>{
+ const a=compileFormula(String.raw`\forall x : \mathbb{N}, P(x)`).scoped;
+ const b=compileFormula(String.raw`\forall y : \mathbb{N}, P(y)`).scoped;
+ const c=compileFormula(String.raw`\forall y : \mathbb{N}, P(x)`).scoped;
+ assert.deepEqual(a,b);assert.notDeepEqual(a,c);
+ const nested=compileFormula(String.raw`\forall x : \mathbb{N}, \exists y : \mathbb{N}, x = y`).scoped;
+ assert.equal(nested.body.body.left.index,1);assert.equal(nested.body.body.right.index,0);
+});

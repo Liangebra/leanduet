@@ -34,3 +34,9 @@ test('type annotations may be omitted, without dropping scope checks',()=>{
   assert.equal(r.term,'by\n  have hq := f p\n  exact g hq');
   assert.throws(()=>compileChain('Establish hq | later using p\nEstablish later | f\nConclude | g using hq',scope));
 });
+
+test('LaTeX annotation passes through the formula AST and retains rule scope',()=>{
+ const r=compileChain('Establish hq : $Q$ | f using p\nConclude | g using hq',scope);
+ assert.equal(r.steps[0].type,'Q');
+ assert.equal(r.term,'by\n  have hq : Q := f p\n  exact g hq');
+});
