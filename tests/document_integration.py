@@ -39,3 +39,11 @@ r=document_patch(source2,"first",target["path"],"h2")
 assert r["otherDeclarationsPreserved"] and r["checkedOtherDeclarations"]==["second","third"],r
 assert r["source"].endswith(source2[source2.index("theorem second"):]),r
 print("Earlier theorem edit preserves all other declaration structures and transitive dependencies")
+
+assert source2[d["declarations"][0]["start"]:d["declarations"][0]["end"]].startswith("theorem first"),d
+assert source2[d["declarations"][0]["end"]:d["declarations"][1]["start"]].strip()=="",d
+try:
+    document_info(source2.replace("\ntheorem second","\n  def hidden := 1\n\ntheorem second"))
+except ValueError: pass
+else: raise AssertionError("An extra command was incorrectly accepted within a declaration range")
+print("Native Lean ranges validate the restricted source boundaries")

@@ -267,8 +267,29 @@ def document_info(source,project=None):
     result=_run_lean("import Lean\n"+source.rstrip()+"\n\n"+_adapter()+"\n#duet_document "+arg+"\n",project)
     if [r["name"] for r in result["declarations"]]!=names:
         raise ValueError("Declaration identity mismatch.")
-    for m,row in zip(matches,result["declarations"]):
-        row["line"]=source.count("\n",0,m.start())+1
+    # Lean reports source positions in the file with our one-line import
+    # prefix. Validate the scanner against native declaration ranges and
+    # reject any non-whitespace between declarations (including hidden commands).
+    starts=[0]+[m.end() for m in re.finditer("\n",source)]
+    def offset(line,column):
+        index=line-2
+        if not 0<=index<len(starts) or column<0:
+            raise ValueError("Native declaration range is outside the document.")
+        limit=starts[index+1]-1 if index+1<len(starts) else len(source)
+        pos=starts[index]+column
+        if pos>limit:
+            raise ValueError("Invalid native declaration column.")
+        return pos
+    for i,(m,row) in enumerate(zip(matches,result["declarations"])):
+        native=row["sourceRange"]
+        start=offset(native["startLine"],native["startColumn"])
+        end=offset(native["endLine"],native["endColumn"])
+        boundary=matches[i+1].start() if i+1<len(matches) else len(source)
+        if start!=m.start() or not start<end<=boundary or source[end:boundary].strip():
+            raise ValueError("Native declaration range does not match the restricted flat document.")
+        row["line"]=native["startLine"]-1
+        row["start"]=start
+        row["end"]=end
         row["editable"]=not row["universes"]
     _dependency_closure(result["declarations"])
     return result
@@ -292,8 +313,11 @@ def document_patch(source,declaration,path,replacement,project=None):
     if declaration not in names:
         raise ValueError("Select a declaration in this document.")
     i=names.index(declaration)
-    m=matches[i]
-    end=matches[i+1].start() if i+1<len(matches) else len(source)
+    inventory=document_info(source,project)
+    selected=inventory["declarations"][i]
+    if not selected["editable"]:
+        raise ValueError("Universe-polymorphic document editing is not supported yet.")
+    start,end=selected["start"],selected["end"]
     if not isinstance(path,str) or not re.fullmatch(r"root(?:/(?:body|value|arg[0-9]+)){0,16}",path):
         raise ValueError("Invalid proof node path.")
     if not isinstance(replacement,str) or not replacement.strip() or len(replacement)>16000:
@@ -303,8 +327,8 @@ def document_patch(source,declaration,path,replacement,project=None):
     args=" ".join(json.dumps(x,ensure_ascii=False) for x in (path,replacement))
     original="import Lean\n"+source.rstrip()+"\n\n"
     r=_run_lean(original+adapter+"\n#duet_patch "+declaration+" "+args+"\n",project)
-    prefix,suffix=source[:m.start()],source[end:]
-    candidate=source if r.get("unchanged") else _safe_proof(prefix+_candidate(declaration,r["type"],r["term"],"")+("\n" if suffix else "")+suffix)
+    prefix,suffix=source[:start],source[end:]
+    candidate=source if r.get("unchanged") else _safe_proof(prefix+_candidate(declaration,r["type"],r["term"],"").rstrip("\n")+suffix)
     if [m.group(1) for m in _document_declarations(candidate)]!=names:
         raise ValueError("The edit changed the declaration inventory.")
     _run_lean(candidate+'\n#eval "LEANDUET_DOCUMENT_OK"\n',project,"LEANDUET_DOCUMENT_OK")

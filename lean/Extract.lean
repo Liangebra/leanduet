@@ -799,7 +799,12 @@ elab "#duet_document " names:str : command => do
       let deps := (declared.filter fun k => referencesExact v.type k || referencesExact v.value k).map Name.toString
       let statementDeps := (declared.filter fun k => referencesExact v.type k).map Name.toString
       let ty ← ppExpr v.type
-      rows := rows.push (Json.mkObj [("name",toJson n.toString),("type",toJson ty.pretty),
+      let some ranges ← findDeclarationRangesCore? n | throwError "Missing native declaration range"
+      let range := ranges.range
+      let sourceRange := Json.mkObj [
+        ("startLine", toJson range.pos.line), ("startColumn", toJson range.pos.column),
+        ("endLine", toJson range.endPos.line), ("endColumn", toJson range.endPos.column)]
+      rows := rows.push (Json.mkObj [("name",toJson n.toString),("type",toJson ty.pretty),("sourceRange", sourceRange),
         ("dependencies",toJson deps),("statementDependencies",toJson statementDeps),
         ("universes",toJson (v.levelParams.map Name.toString))])
     logInfo m!"LEANDUET_JSON:{(Json.mkObj [("schema",toJson (1 : Nat)),("declarations",Json.arr rows)]).compress}"

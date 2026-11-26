@@ -192,7 +192,7 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
             expect(doc.locator("#docProof")).to_contain_text("intermediate",timeout=60000)
             doc.locator('#docDecls [data-name="intermediate"]').click()
             expect(doc.locator("#docProof")).to_contain_text("f",timeout=60000)
-            expect(doc.locator("#docProof").get_by_role("button",name="Edit inference")).to_have_count(0)
+            expect(doc.locator("#docProof").get_by_role("button",name="Edit inference").first).to_be_visible(timeout=60000)
             doc.close()
             about=browser.new_page(viewport={"width":390,"height":844})
             about.on("pageerror",lambda error:errors.append(str(error)))
