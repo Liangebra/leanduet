@@ -49,7 +49,7 @@ theorem replacement {Γ : List Prop} {Q P : Prop}
 
 /-- Composition of implications, authored as derivation data. -/
 def composition (P Q R : Prop) : Derivation [Q → R, P → Q] (P → R) :=
-  .intro (.apply (.hyp (by simp)) (.apply (.hyp (by simp)) (.hyp (by simp))))
+  .intro (.apply (P := Q) (.hyp (by simp)) (.apply (P := P) (.hyp (by simp)) (.hyp (by simp))))
 
 theorem composition_correct (P Q R : Prop) (hpq : P → Q) (hqr : Q → R) : P → R := by
   apply compile (composition P Q R)
