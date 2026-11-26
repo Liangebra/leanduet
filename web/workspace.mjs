@@ -1,5 +1,6 @@
 import {parseLean,renderProse,sameStatement} from './core.mjs';
 import {validateExploration} from './exploration.mjs';
+import {validateWording} from './wording.mjs';
 function replaceStep(source,id,fragment){
   const ir=parseLean(source),node=ir.nodes.find(n=>n.id===id&&n.kind!=="blank");
   if(!node)throw Error("Select an existing proof step.");
@@ -11,8 +12,8 @@ function replaceStep(source,id,fragment){
   return next;
 }
 
-function snapshot(base,drafts,notes,name,exploration){
-  return {format:"leanduet-workspace",version:1,name,base:{lean:base.lean,prose:base.prose},drafts:{lean:drafts.lean,prose:drafts.prose},notes,...(exploration===undefined?{}:{exploration:validateExploration(exploration)})};
+function snapshot(base,drafts,notes,name,exploration,wording){
+  return {format:"leanduet-workspace",version:1,name,base:{lean:base.lean,prose:base.prose},drafts:{lean:drafts.lean,prose:drafts.prose},notes,...(exploration===undefined?{}:{exploration:validateExploration(exploration)}),...(wording===undefined?{}:{wording:validateWording(wording)})};
 }
 
 function restore(data){
@@ -20,7 +21,7 @@ function restore(data){
   for(const v of [data.name,data.base?.lean,data.base?.prose,data.drafts?.lean,data.drafts?.prose,data.notes])if(typeof v!=="string"||v.length>131072)throw Error("Invalid or oversized workspace field.");
   const ir=parseLean(data.base.lean);
   if(renderProse(ir)!==data.base.prose)throw Error("Workspace base representations do not match.");
-  return {...data,ir,exploration:validateExploration(data.exploration)};
+  return {...data,ir,exploration:validateExploration(data.exploration),wording:validateWording(data.wording)};
 }
 
 function lineRange(source,line){

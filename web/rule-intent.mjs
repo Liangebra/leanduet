@@ -10,11 +10,12 @@ export function resolveIntent(value){
   if(typeof value!=='string')throw Error('Expected a mathematical rule or declaration name.');
   const input=value.trim();
   if(!input||grammarWords('automatic').includes(input))return '';
-  const key=clean(input).replace(new RegExp('^(?:'+group('prefix')+')\\s*','i'),'').toLowerCase();
+  const stripped=clean(input).replace(new RegExp('^(?:'+group('prefix')+')\\s*','i'),'');
+  const key=stripped.toLowerCase();
   const matches=[...new Set(allAliases().filter(x=>x.label.toLowerCase()===key||x.rule.toLowerCase()===key).map(x=>x.rule))];
   if(matches.length>1)throw Error('Ambiguous concept; enter an exact Lean declaration.');
   if(matches.length)return matches[0];
-  if(/^[A-Za-z_][A-Za-z0-9_'.]{0,159}$/.test(input))return input;
+  if(/^[A-Za-z_][A-Za-z0-9_'.]{0,159}$/.test(stripped))return stripped;
   throw Error('Unsupported phrase. Choose a known mathematical concept, enter an exact Lean declaration, or leave blank for type search.');
 }
 export function parseRuleIntent(value,{ordered=false}={}){

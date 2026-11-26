@@ -10,7 +10,9 @@ export function interpretations(input,scope=[]){
   const alternatives=[],unresolved=[],seen=new Set();
   const visible=new Set(scope.filter((x,i)=>scope.indexOf(x)===i&&scope.lastIndexOf(x)===i));
   function add(a){const key=JSON.stringify([a.formula,a.rule,a.required,a.term]);if(!seen.has(key)&&alternatives.length<8){seen.add(key);alternatives.push(a);}}
-  for(const raw of input.split(/\r?\n/).map(s=>s.trim()).filter(Boolean).slice(0,8)){
+  const lines=input.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+  for(const raw of lines.slice(8))unresolved.push({raw,reason:'Outside the eight-line check limit.'});
+  for(const raw of lines.slice(0,8)){
     let body=raw,modifiers=[];
     for(let i=0;i<4;i++){const m=marker.exec(body);if(!m)break;modifiers.push(m[0].trim());body=body.slice(m[0].length);}
     try{
@@ -20,13 +22,14 @@ export function interpretations(input,scope=[]){
       const base={raw,modifiers,formula,rule:'',required:[],term:''};
       if(!rest){if(!formula)throw Error('No interpretation.');add({...base,origin:'formula search',specificity:2});continue;}
       const words=rest.split(/\s+/);
-      if(words.length<=9&&rule.test(words[0])&&words.slice(1).every(x=>simple.test(x)&&visible.has(x))&&visible.has(words[0])){
+      if(words.length<=8&&rule.test(words[0])&&words.slice(1).every(x=>simple.test(x)&&visible.has(x))&&visible.has(words[0])){
         add({...base,term:words.join(' '),required:[...new Set(words)],origin:'local application',specificity:5});continue;
       }
       const intent=parseRuleIntent(rest);
       if(intent.required.some(x=>!visible.has(x)))throw Error('Unknown or ambiguous premise.');
       if(!intent.rule&&!formula&&!intent.required.length)throw Error('Provide mathematical content.');
       if(visible.has(intent.rule)){
+        if(new Set([intent.rule,...intent.required]).size>8)throw Error('Too many local premises.');
         add({...base,term:[intent.rule,...intent.required].join(' '),required:[...new Set([intent.rule,...intent.required])],origin:'ordered local application',specificity:5});
       }else{
         add({...base,...intent,origin:'named rule search',specificity:4+Number(!!formula)});
