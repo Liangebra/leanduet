@@ -80,3 +80,5 @@ html[data-theme=dark] .tok-keyword{color:#569cd6}html[data-theme=dark] .tok-comm
 .completionPanel{padding:8px 12px;max-height:180px;overflow:auto;border-top:1px solid var(--line);background:var(--paper);flex-shrink:0}.completionPanel .completionItem{display:block;text-align:left;width:100%;font:12px var(--mono);white-space:normal;overflow-wrap:anywhere}.completionPanel .completionItem:hover{background:var(--accent-soft)}
 
 #irOutput{max-height:320px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}#irOutput:empty{display:none}
+
+#abstractOutput{max-height:320px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}#abstractOutput:empty{display:none}

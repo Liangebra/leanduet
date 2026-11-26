@@ -202,6 +202,7 @@ function openPatch(node){
   if(!clean()||!typedRoot)return;
   patchNode=node;patchCandidate=null;$('typedPatch').hidden=false;$('applyPatch').disabled=true;
   $('irOutput').textContent='';$('irStatus').textContent='';$('irInspector').open=false;
+  $('abstractPanel').hidden=node.kind==='witness';$('abstractPanel').open=false;$('abstractOutput').textContent='';$('abstractStatus').textContent='';
   $('patchTarget').textContent=node.path+' · '+node.type;$('patchTerm').value=node.term||'';
   $('chainEditor').hidden=node.kind==='witness';$('chainEditor').open=false;$('chainText').value='';$('chainStatus').textContent='';$('chainBindings').replaceChildren();
   $('ruleSearch').hidden=node.kind==='witness';$('ruleResults').replaceChildren();$('ruleIntent').value='';$('formulaGoal').value='';$('formulaPreview').textContent='';$('ruleStatus').textContent='Leave blank for goal-type search. You can also specify a rule and required premises.';
@@ -242,6 +243,18 @@ function openPatch(node){
   $('patchPreview').textContent='';$('patchStatus').textContent=node.kind==='witness'?'Choose a new witness. Lean will recheck all dependent proof obligations; the unchanged evidence may become invalid.':'Edit the local proof term. Lean will check its type and the entire exported theorem.';
   $('typedPatch').scrollIntoView({block:'nearest'});$('patchTerm').focus();
 }
+$('abstractProof').onclick=async()=>{
+  if(!patchNode||!clean()||!local||patchNode.kind==='witness')return;
+  const node=patchNode,revision=rev;
+  $('abstractProof').disabled=true;$('abstractOutput').textContent='';$('abstractStatus').textContent='Abstracting the dependency-closed proof…';
+  try{
+    const r=await api('abstract',{source:lean.value,path:node.path});
+    if(revision!==rev||node!==patchNode)return;
+    $('abstractStatus').textContent=r.exportNote+' · '+r.parameters.length+' context declarations.';
+    $('abstractOutput').textContent=r.source||('Closed judgment (not certified as standalone source):\n'+r.type+'\n\n'+r.term);
+  }catch(e){if(revision===rev&&node===patchNode)$('abstractStatus').textContent=e.message;}
+  finally{$('abstractProof').disabled=false;}
+};
 $('inspectIR').onclick=async()=>{
   if(!patchNode||!clean()||!local)return;
   const node=patchNode,revision=rev,input=$('formulaGoal').value;

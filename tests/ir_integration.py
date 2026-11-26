@@ -55,3 +55,16 @@ for node in walk(tree):
 else:
     raise AssertionError("Expected existential witness")
 print("Dependent expressions and selected witness survive structural decoding")
+
+
+from semantic import abstract_preview
+source4="""theorem ir_abstract (n : Nat) (f : Fin (n+1) → True) (x : Fin (n+1)) (irrelevant : Nat) : True := by
+  exact f x
+"""
+target=next(n for n in walk(extract(source4)["tree"]) if n.get("reference")=="f")
+a=abstract_preview(source4,target["path"])
+assert a["closedChecked"] and a["reopenedShape"],a
+assert [p["name"] for p in a["parameters"]]==["n","f","x"],a
+assert a["standaloneChecked"] and a["exportShapePreserved"] and a["source"],a
+assert "theorem LeanDuetExtractedLemma" in a["source"] and "irrelevant" not in a["source"],a
+print("Dependency-closed abstraction compiles independently and preserves the proof occurrence")

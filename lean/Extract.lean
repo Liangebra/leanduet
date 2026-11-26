@@ -31,7 +31,7 @@ def declDepends (d : LocalDecl) (id : FVarId) : Bool :=
 
 /-- The local context is ordered by introduction. Close the used declarations
     backwards through their dependent types and local definitions. -/
-def localScope (goal : Expr) (editable : Bool) (term : Expr) : MetaM (Array Json) := do
+def referencedContext (goal term : Expr) : MetaM (Array LocalDecl × Array FVarId) := do
   let mut locals : Array LocalDecl := #[]
   for d in (← getLCtx) do
     locals := locals.push d
@@ -44,6 +44,11 @@ def localScope (goal : Expr) (editable : Bool) (term : Expr) : MetaM (Array Json
       for earlier in locals do
         if earlier.index < d.index && declDepends d earlier.fvarId && !needed.contains earlier.fvarId then
           needed := needed.push earlier.fvarId
+  return (locals, needed)
+
+/-- Display the same dependency closure used for proof abstraction. -/
+def localScope (goal : Expr) (editable : Bool) (term : Expr) : MetaM (Array Json) := do
+  let (locals, needed) ← referencedContext goal term
   let mut entries := #[]
   for d in locals do
     if !d.isImplementationDetail then
@@ -589,6 +594,94 @@ elab "#duet_ir " n:ident path:str formula:str : command => do
           ("universes", Json.arr (v.levelParams.toArray.map encodeName)), ("judgment", judgment)])
       logInfo m!"LEANDUET_JSON:{result.compress}"
     | _ => throwError "Expected a theorem"
+
+
+/-- Close a selected proof over its dependency-closed telescope. Local
+    definitions remain lets, not unconstrained parameters. This is an
+    abstraction of an existing proof, not discovery of a stronger theorem. -/
+def abstractProof (e : Expr) : MetaM (Expr × Expr × Array LocalDecl) := do
+  let goal ← inferType e
+  unless ← isProp goal do throwError "Abstraction requires a proof of a proposition"
+  let (locals, needed) ← referencedContext goal e
+  let deps := locals.filter (fun d => needed.contains d.fvarId)
+  if deps.size > 128 then throwError "Abstraction context exceeds 128 declarations"
+  let mut term := e
+  let mut statement := goal
+  for d in deps.reverse do
+    let x := mkFVar d.fvarId
+    let body := term.abstract #[x]
+    let target := statement.abstract #[x]
+    match d.value? with
+    | some v =>
+      term := .letE d.userName d.type v body false
+      statement := .letE d.userName d.type v target false
+    | none =>
+      term := .lam d.userName d.type body d.binderInfo
+      statement := .forallE d.userName d.type target d.binderInfo
+  if term.hasFVar || statement.hasFVar || term.hasLooseBVars || statement.hasLooseBVars ||
+      term.hasMVar || statement.hasMVar || term.hasLevelMVar || statement.hasLevelMVar then
+    throwError "Abstraction did not produce a closed judgment"
+  withLCtx {} #[] do
+    Lean.Meta.check statement
+    Lean.Meta.check term
+    unless ← isProp statement do throwError "Abstracted statement is not a proposition"
+    unless ← isDefEq (← inferType term) statement do
+      throwError "Abstracted proof has the wrong type"
+  -- Reopen the exact binders (including let-bound identities). This is an
+  -- occurrence-level check, stronger than comparing proof types alone.
+  let mut opened := term
+  let mut openedType := statement
+  for d in deps do
+    let x := mkFVar d.fvarId
+    match opened, openedType, d.value? with
+    | .lam _ _ b _, .forallE _ _ q _, none =>
+      opened := b.instantiate1 x
+      openedType := q.instantiate1 x
+    | .letE _ _ _ b _, .letE _ _ _ q _, some _ =>
+      opened := b.instantiate1 x
+      openedType := q.instantiate1 x
+    | _, _, _ => throwError "Abstraction telescope does not reopen"
+  unless sameShape opened e && sameShape openedType goal do
+    throwError "Abstraction changed the selected proof occurrence"
+  return (term, statement, deps)
+
+elab "#duet_abstract " n:ident path:str : command => do
+  liftTermElabM do
+    let ci ← getConstInfo n.getId
+    match ci with
+    | .thmInfo v =>
+      let parts := path.getString.splitOn "/"
+      unless parts.head? == some "root" do throwError "Invalid root path"
+      let result ← withNodeAt v.value (parts.drop 1) fun e => do
+        let (term, statement, deps) ← abstractProof e
+        if mentions term n.getId || mentions statement n.getId || mentions term `sorryAx then
+          throwError "Abstraction relies on the original theorem or an incomplete proof"
+        let typeText ← withOptions (fun o => o.setBool `pp.fullNames true |>.setBool `pp.funBinderTypes true |>.setBool `pp.piBinderTypes true |>.setBool `pp.explicit true |>.setBool `pp.notation false) do
+          pure (← ppExpr statement).pretty
+        let termText ← withOptions (fun o => o.setBool `pp.fullNames true) do
+          pure (← ppExpr term).pretty
+        let ctx := deps.map fun d => Json.mkObj [("slot", toJson d.index),
+          ("name", toJson d.userName.toString), ("isLet", toJson d.value?.isSome),
+          ("internal", toJson d.isImplementationDetail)]
+        return Json.mkObj [("schema", toJson (1 : Nat)), ("type", toJson typeText),
+          ("term", toJson termText), ("parameters", Json.arr ctx),
+          ("universes", toJson (v.levelParams.map Name.toString)),
+          ("closedChecked", toJson true), ("reopenedShape", toJson true)]
+      logInfo m!"LEANDUET_JSON:{result.compress}"
+    | _ => throwError "Expected a theorem"
+
+elab "#duet_compare_abstraction " n:ident m:ident path:str : command => do
+  liftTermElabM do
+    match ← getConstInfo n.getId, ← getConstInfo m.getId with
+    | .thmInfo v, .thmInfo candidate =>
+      let parts := path.getString.splitOn "/"
+      unless parts.head? == some "root" do throwError "Invalid root path"
+      withNodeAt v.value (parts.drop 1) fun e => do
+        let (term, statement, _) ← abstractProof e
+        unless ← isDefEq candidate.type statement do throwError "Abstracted theorem type changed on export"
+        unless sameShape term candidate.value do throwError "Abstracted theorem proof changed on export"
+        logInfo "LEANDUET_ABSTRACTION_MATCH"
+    | _, _ => throwError "Expected two theorems"
 
 def finishCandidate (goal : Expr) (expected : Expr) (forbidden : Name)
     (label : String) (required : List FVarId) : MetaM (Option Json) := do

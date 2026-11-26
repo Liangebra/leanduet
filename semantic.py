@@ -154,6 +154,44 @@ def infer_chain(source, path, steps, project=None):
     return {"term":term,"bindings":bindings,"goal":result["localType"],"status":"inferred",
             "note":"Local elaboration and rebuilt expression checked; export still requires independent validation."}
 
+def abstract_preview(source, path, project=None):
+    """Abstract the selected proof and independently check its standalone export."""
+    name = _name(source)
+    _safe_proof(source)
+    if not isinstance(path,str) or not re.fullmatch(r"root(?:/(?:body|value|arg[0-9]+)){0,16}",path):
+        raise ValueError("Invalid proof node path.")
+    args=json.dumps(path,ensure_ascii=False)
+    adapter=_adapter()
+    result=_run_lean("import Lean\n"+source.rstrip()+"\n\n"+adapter+"\n#duet_abstract "+name+" "+args+"\n",project)
+    result["standaloneChecked"]=False
+    result["exportShapePreserved"]=False
+    result["source"]=None
+    prelude=source[:NAME.search(source).start()]
+    if result.get("universes"):
+        result["exportNote"]="Closed proof checked. Standalone universe-polymorphic export is not supported yet."
+        return result
+    if any(line.strip() and not re.fullmatch(r"import\s+\S.*",line) for line in prelude.splitlines()):
+        result["exportNote"]="Closed proof checked. Standalone export requires an imports-only prelude."
+        return result
+    other="LeanDuetExtractedLemma"
+    if re.search(r"\b"+other+r"\b",source):
+        result["exportNote"]="Closed proof checked. Preview declaration name collides with source."
+        return result
+    candidate=_candidate(other,result["type"],result["term"],prelude)
+    try:
+        _run_lean(candidate+'\n#eval "LEANDUET_EXPORT_OK"\n',project,"LEANDUET_EXPORT_OK")
+        result["standaloneChecked"]=True
+        renamed=_candidate(other,result["type"],result["term"],"")
+        _run_lean("import Lean\n"+source.rstrip()+"\n\n"+renamed+"\n"+adapter+
+                  "\n#duet_compare_abstraction "+name+" "+other+" "+args+"\n",project,"LEANDUET_ABSTRACTION_MATCH")
+    except ValueError as exc:
+        result["exportNote"]="Closed proof checked, but standalone structural export was not certified: "+str(exc)
+        return result
+    result["source"]=candidate
+    result["exportShapePreserved"]=True
+    result["exportNote"]="Standalone theorem compiled and its elaborated proof shape matches the abstraction."
+    return result
+
 def inspect_ir(source, path, formula="", project=None):
     """Export a revision-local typed judgment as structural kernel syntax."""
     name = _name(source)
