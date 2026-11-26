@@ -2,6 +2,7 @@ import {parseLean,renderLean,renderProse,planSync,sameStatement,stepSentence,sen
 import {replaceStep,snapshot,restore,lineRange} from './workspace.mjs';
 import {authoredNarrative} from './narratives.mjs';
 import {narrate} from './typed-narrative.mjs';
+import {witnessTerm} from './dependent-edit.mjs';
 const $=id=>document.getElementById(id),lean=$('lean'),prose=$('prose'),notes=$('prompt');
 const KEY='leanduet.workspace.v1',THEME='leanduet.theme';
 let typedRoot=null, patchNode=null, patchCandidate=null;
@@ -116,6 +117,11 @@ function openPatch(node){
   if(!clean()||!typedRoot)return;
   patchNode=node;patchCandidate=null;$('typedPatch').hidden=false;$('applyPatch').disabled=true;
   $('patchTarget').textContent=node.path+' · '+node.type;$('patchTerm').value=node.term||'';
+  const witness=(node.children||[]).find(x=>x.kind==='witness');
+  const evidence=(node.children||[]).find(x=>x.kind!=='witness');
+  const paired=node.reference==='Exists.intro'&&witness&&evidence;
+  $('witnessPair').hidden=!paired;
+  if(paired){$('witnessValue').value=witness.term||'';$('witnessEvidence').value=evidence.term||'';}
   $('patchScope').replaceChildren();$('patchChoices').replaceChildren();
   const scope=node.scope||[];
   for(const d of scope){
@@ -139,6 +145,18 @@ function openPatch(node){
   $('patchPreview').textContent='';$('patchStatus').textContent=node.kind==='witness'?'Choose a new witness. Lean will recheck all dependent proof obligations; the unchanged evidence may become invalid.':'Edit the local proof term. Lean will check its type and the entire exported theorem.';
   $('typedPatch').scrollIntoView({block:'nearest'});$('patchTerm').focus();
 }
+function stageWitness(){
+  if(!patchNode||$('witnessPair').hidden)return;
+  try{
+    $('patchTerm').value=witnessTerm($('witnessValue').value,$('witnessEvidence').value);
+    $('patchTerm').dispatchEvent(new Event('input'));
+    $('patchStatus').textContent='Witness and evidence staged together. Check the entire replacement.';
+  }catch(e){
+    $('patchTerm').value='';$('patchTerm').dispatchEvent(new Event('input'));$('patchStatus').textContent=e.message;
+  }
+}
+$('buildWitness').onclick=stageWitness;
+for(const id of ['witnessValue','witnessEvidence'])$(id).addEventListener('input',stageWitness);
 $('cancelPatch').onclick=()=>{patchNode=null;patchCandidate=null;$('typedPatch').hidden=true;};
 $('patchTerm').addEventListener('input',()=>{patchCandidate=null;$('applyPatch').disabled=true;$('patchPreview').textContent='';$('patchStatus').textContent='Replacement changed. Check it again.';});
 $('checkPatch').onclick=async()=>{

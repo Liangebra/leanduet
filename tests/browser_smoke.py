@@ -93,6 +93,27 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
             expect(patch_page.locator("#lean")).to_have_value(__import__("re").compile(r"hqr hq"))
             patch_page.locator("#check").click()
             expect(patch_page.locator("#verifyState")).to_have_text("Lean passed",timeout=60000)
+            pair_source="""theorem witness_pair : ∃ n : Nat, n = n := by
+  exact ⟨0, rfl⟩
+"""
+            patch_page.locator("#lean").fill(pair_source)
+            patch_page.once("dialog",lambda d:d.accept())
+            patch_page.locator("#adopt").click()
+            patch_page.locator('[data-view="typed"]').click()
+            patch_page.locator("#extractTerm").click()
+            expect(patch_page.locator("#typedStatus")).to_contain_text("Extracted from Lean elaboration",timeout=60000)
+            patch_page.locator("#typedTree").evaluate("(root) => root.querySelectorAll('details.typedNode').forEach(x=>x.open=true)")
+            patch_page.locator(".typedNode").filter(has=patch_page.locator("summary").filter(has_text=__import__("re").compile("^Apply Exists.intro$"))).last.locator(":scope > .typedEdit").click()
+            expect(patch_page.locator("#witnessPair")).to_be_visible()
+            patch_page.locator("#witnessValue").fill("1")
+            patch_page.locator("#witnessEvidence").fill("rfl")
+            expect(patch_page.locator("#patchTerm")).to_have_value("Exists.intro (1) (rfl)")
+            patch_page.locator("#checkPatch").click()
+            expect(patch_page.locator("#applyPatch")).to_be_enabled(timeout=120000)
+            patch_page.once("dialog",lambda d:d.accept())
+            patch_page.locator("#applyPatch").click()
+            patch_page.locator("#check").click()
+            expect(patch_page.locator("#verifyState")).to_have_text("Lean passed",timeout=60000)
             patch_page.close()
             assert not errors, errors
             browser.close()

@@ -79,3 +79,18 @@ quantified = """theorem quantified (P : Nat → Prop) (h : ∀ n : Nat, P n) (a 
 q=next(n for n in walk(extract(quantified)["tree"]) if n.get("reference")=="h" and n["kind"]=="apply")
 assert any(a["function"]=="h" and a["argument"]=="a" for a in q["applications"]),q
 print("Dependent applications and existential witness replacement/rejection passed")
+
+pair_source = """theorem witness_pair : ∃ n : Nat, n = n := by
+  exact ⟨0, rfl⟩
+"""
+pair_node=next(n for n in walk(extract(pair_source)["tree"]) if n.get("reference")=="Exists.intro")
+single=next(n for n in pair_node["children"] if n["kind"]=="witness")
+try:
+    patch(pair_source,single["path"],"1")
+except ValueError:
+    pass
+else:
+    raise AssertionError("Stale equality evidence accepted after witness change")
+r=patch(pair_source,pair_node["path"],"Exists.intro (1 : Nat) rfl")
+assert r["proofShapePreserved"] and r["statementDefEq"] and not r["unchanged"],r
+print("Atomic dependent witness/evidence replacement passed")
