@@ -1,12 +1,15 @@
-# LeanDuet
+<p align="center"><img src="web/logo.svg" width="92" alt="LeanDuet logo"></p>
+<h1 align="center">LeanDuet</h1>
+<p align="center"><strong>Two languages, one proof.</strong><br>Think in mathematics. Verify in Lean.</p>
+<p align="center"><a href="https://github.com/Liangebra/leanduet/actions/workflows/ci.yml"><img alt="Tests" src="https://github.com/Liangebra/leanduet/actions/workflows/ci.yml/badge.svg"></a> <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-blue"></a> <a href="https://github.com/Liangebra/leanduet/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22"><img alt="Contributions welcome" src="https://img.shields.io/badge/contributions-welcome-5267a8"></a></p>
 
-**Two languages, one proof.** Think in mathematics. Verify in Lean.
+LeanDuet is an experimental mathematical proof workbench. It explores how an informal mathematical argument and a Lean 4 proof can become linked, editable representations rather than unrelated documents.
 
-> Experimental v0.2 — a local Web workbench for linked mathematical narratives and Lean 4 proofs. Not a universal autoformalizer or a verified natural-language translator.
+**v0.3 research prototype** — not a universal autoformalizer, Lean LSP client, or certified natural-language translator.
 
-## Quick start
+## Try it locally
 
-Install Python 3.10+ and optionally [Lean 4 via elan](https://lean-lang.org/install/). No Node.js or database is required for running the editor.
+Install Python 3.10+; install [Lean 4 via elan](https://lean-lang.org/install/) if you want verification. No server subscription, Node.js, database, or AI key is required for the basic editor.
 
 ```sh
 git clone https://github.com/Liangebra/leanduet.git
@@ -14,49 +17,58 @@ cd leanduet
 python server.py
 ```
 
-Open <http://127.0.0.1:8765>. Choose an example, edit either panel and click Sync (or opt into auto-sync). Click a reading-view step to locate it in Lean. Check in Lean invokes the local toolchain. Open and export individual .lean files.
+Open <http://127.0.0.1:8765>. Use `python3` or `py` if needed. On Windows, macOS and Linux, the same interface runs in your browser.
 
-Use an existing trusted Lake project with built dependencies:
+## A proof-oriented workspace
+
+- Mathematical reading view, source-linked steps, outline, line numbers and diagnostics.
+- Four authored examples with mathematical narratives and native MathML for simple expressions. An edited example falls back to explicitly labeled structural text, never stale exposition.
+- Edit a linked formal step, or use the reversible controlled-text tab to synchronize in either direction. Optional auto-sync, conflict protection, explicit statement adoption, and per-side discard.
+- Local autosave of both unsynchronized drafts and free-prose notes. Export a portable JSON workspace or a Lean file. Dark/light themes.
+- Optional AI explanation and Lean proposals from free prose; explicit review before applying. Local Lean CLI verification, separate from narrative fidelity.
+- Browser-only deployment configuration for GitHub Pages. The static site has no Lean execution or AI backend; see [deployment instructions](docs/DEPLOY.md).
+
+## Example
+
+```lean
+theorem compose_imp (P Q R : Prop) (hpq : P → Q) (hqr : Q → R) : P → R := by
+  intro hp
+  have hq : Q := hpq hp
+  exact hqr hq
+```
+
+In the reading view, assume P, obtain Q by the first implication, and conclude R using the second. Select a step to find its corresponding Lean line.
+
+## Using an existing Lean project
+
+After building the project's dependencies, launch:
 
 ```sh
 python server.py --project /absolute/path/to/project
 ```
 
-## Example
+The current parser handles **one theorem or lemma with a single-line header** and space-indented proof. It preserves opaque lines rather than pretending to understand them. No full-project parsing, LSP integration, or logical proof dependency extraction yet.
 
-```lean
-theorem nested (P : Prop) (h : P) : P ∧ P := by
-  have h' : P := by
-    exact h
-  exact ⟨h', h⟩
-```
+Optional AI: set `LEANDUET_AI_URL` (full OpenAI-compatible chat-completions endpoint), `LEANDUET_AI_MODEL`, and optionally `LEANDUET_AI_KEY`. A local Ollama-compatible endpoint may use `http://localhost:11434/v1/chat/completions`. Requests require consent; the proof and notes go to your configured provider.
 
-The left panel uses a reversible controlled grammar: a JSON-quoted Lean fragment, prefixed by a readable label and its indentation. It preserves nested lines and blank lines; opaque tactics stay opaque. The reading view is more readable but not yet a mathematical-paper narrative. Indentation parents are lexical, not elaborated goal dependencies.
+## Trust and privacy
 
-## What is implemented
+Run trusted Lean code only. Tactics, imports and macros can execute arbitrary code; the Python service is local-only and is **not a sandbox**. Lean success is not a proof of the correctness of prose or an axiom audit. Authored examples are source-bound, not formally certified. Free prose does not automatically become Lean unless an optional AI provider proposes a candidate. MathML renders a limited expression vocabulary; arbitrary LaTeX and semantic translation remain open work. Local autosave uses browser storage; export a workspace for backups.
 
-- Single-declaration Lean ↔ controlled prose with exact LF round trips.
-- Nested indentation mapping; linked source navigation; basic KaTeX rendering (CDN, plain-text fallback).
-- Optional auto-sync, explicit conflict rejection and per-side revert; theorem header/import preservation on sync.
-- Local Lean CLI check, .lean import/export, stale-check invalidation.
-- Optional AI proposals in both directions, explicitly unverified and separate from synchronized prose.
+## Help build it
 
-## Optional AI
+We welcome mathematicians, Lean developers, PL researchers and interface designers. You can contribute a proof example **without writing application code**.
 
-Set LEANDUET_AI_URL (full OpenAI-compatible chat-completions URL), LEANDUET_AI_MODEL, and optionally LEANDUET_AI_KEY in your environment. For example, a local Ollama endpoint may use http://localhost:11434/v1/chat/completions. Requests require explicit confirmation in the UI and send the proof to your chosen provider. No AI provider is necessary for the deterministic editor.
-
-## Trust boundary
-
-Run trusted code only: Lean imports, macros and tactics can execute code as your user. The server is not a sandbox; never expose it publicly. A Lean pass is not proof of informal/Lean semantic alignment, and the sorry check is not an axiom audit. Review AI code before running it. Only single-line theorem headers and space-indented proof bodies are supported; no whole-project parsing or block comments. Desktop and VS Code clients are planned, not shipped.
-
-## Contributing
-
-Read [CONTRIBUTING.md](CONTRIBUTING.md), [the IR design](docs/PROOF_IR.md), and [the roadmap](docs/ROADMAP.md). Examples that expose failures are especially welcome.
+- [Good first issues](https://github.com/Liangebra/leanduet/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
+- [Contribution guide](CONTRIBUTING.md) · [Proof IR](docs/PROOF_IR.md) · [Roadmap](docs/ROADMAP.md)
+- [Launch plan](docs/LAUNCH.md) · [Community and deployment checklist](docs/DEPLOY.md)
 
 ```sh
-node --test tests/core.test.mjs
+node --test tests/*.test.mjs
 python -m unittest discover -s tests
 lean examples/Compose.lean
 ```
 
-The release is experimental; real Lean and browser integration must be checked in a suitable environment. See [launch plan](docs/LAUNCH.md). Independent project, not endorsed by Lean or Mathlib. MIT; initial implementation assisted by ChatGPT.
+CI also runs a real Chromium smoke test after installing Lean. Local tests require their respective tools; a configured CI badge is not a claim of successful execution.
+
+MIT · Independent community project, not endorsed by Lean or Mathlib. Initial implementation assisted by ChatGPT.
