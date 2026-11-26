@@ -13,7 +13,7 @@ import {factsFromScope} from './context-grammar.mjs';
 import {languagePacks,registerPack,customPacks,phrase} from './languages.mjs';
 import {positionAt,completionEdit} from './completion.mjs';
 import {interpretations,rankInterpretations,mergeInterpretations} from './interpretations.mjs';
-import {wordingFor,putWording} from './wording.mjs';
+import {wordingFor,putWording,reattachWording} from './wording.mjs';
 import {indexProof} from './proof-index.mjs';
 import {mountEditor} from './editor.mjs';
 const $=id=>document.getElementById(id),lean=$('lean'),prose=$('prose'),notes=$('prompt');
@@ -256,7 +256,17 @@ function showTypedNarrative(){
   const target=$('typedNarrative');target.replaceChildren();if(!typedRoot)return;
   target.append(element('div','DERIVED READING · TYPE-DRIVEN','eyebrow'));
   const wordingByKey=new Map(wording.map(a=>[a.anchor,a.text]));
-  const detached=wording.filter(a=>!proofIndex.unique(a.anchor));if(detached.length){const details=element('details');details.append(element('summary',detached.length+' detached author annotation(s)'));for(const a of detached){const p=element('p',a.path+' · '+a.text);const b=element('button','Copy to exploration');b.onclick=()=>appendNotes('Detached wording: '+a.text);p.append(b);details.append(p);}target.append(details);}
+  const detached=wording.filter(a=>!proofIndex.unique(a.anchor));if(detached.length){const details=element('details');details.append(element('summary',detached.length+' detached author annotation(s)'));for(const a of detached){const p=element('p',a.path+' · '+a.text);const b=element('button','Copy to exploration');b.onclick=()=>appendNotes('Detached wording: '+a.text);const attach=element('button','Reattach to selected step');attach.type='button';
+    attach.onclick=()=>{
+     if(!patchNode||!clean()||proofIndex?.find(patchNode.path)!==patchNode){notice('Select a current proof step before reattaching wording.',true);return;}
+     try{
+      wording=reattachWording(wording,typedRoot,a.anchor,patchNode);
+      $('wordingInput').value=wordingFor(typedRoot,patchNode,wording);
+      $('wordingStatus').textContent='Reattached by author; Lean unchanged.';
+      showTypedNarrative();persist();notice('Author wording reattached without changing Lean.');
+     }catch(e){notice(e.message,true);}
+    };
+    p.append(b,attach);details.append(p);}target.append(details);}
   for(const row of narrate(typedRoot,$('typedLanguage').value,{collapsed:foldedPaths,counts:proofIndex.counts,style:$('narrativeStyle').value})){
     const line=element('div',undefined,'derivedStep');line.style.marginLeft=Math.min(row.depth,6)*9+'px';
     const lang=$('typedLanguage').value;

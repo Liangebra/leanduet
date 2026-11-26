@@ -65,3 +65,11 @@ scope, generated-name counter and open obligations before recomputing the
 remaining suffix. The graph is rebuilt for each evaluation. Regression tests
 compare incremental and full results. This is not arbitrary DAG scheduling,
 cross-revision identity reconciliation or a measured latency guarantee.
+
+## Conservative wording repair
+
+After source edits, exact unique occurrence fingerprints remain the only
+automatic wording correspondence. Detached annotations can be explicitly
+reattached to a selected unique current occurrence without overwriting existing
+wording. This is manual author confirmation, not persistent identity or a
+proof of semantic equivalence. It does not rewrite the Lean source.
