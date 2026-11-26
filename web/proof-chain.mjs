@@ -10,7 +10,7 @@ export function compileChain(text,scope){
   for(const n of scope)counts.set(n,(counts.get(n)||0)+1);
   const visible=new Set([...counts].filter(([,c])=>c===1).map(([n])=>n));
   const occupied=new Set(scope),steps=[];
-  const planned=new Set(lines.map(l=>/^(?:Establish\s+|建立\s+|示す\s+)([A-Za-z_][A-Za-z0-9_']{0,63})(?:\s*:|\s*$)/i.exec(l)?.[1]).filter(Boolean));
+  const planned=new Set(lines.map(l=>/^(?:Establish\s+|建立\s+|示す\s+)([A-Za-z_][A-Za-z0-9_']{0,63})(?:\s*:|\s*$)/i.exec(l.split('|')[0].trim())?.[1]).filter(Boolean));
   let done=false;
   function application(phrase,line){
     const {rule,required}=parseRuleIntent(phrase,{ordered:true});
