@@ -28,3 +28,11 @@ Inspected Informath revision [9a1b6e1](https://github.com/GrammaticalFramework/i
 The optional CLI adapter can set LEANDUET_INFORMATH_TOOLCHAIN independently of our native Lean toolchain. Project-mode Informath is explicitly rejected until its Lake integration is implemented. Mock tests check invocation only; the external executable is not installed in CI.
 
 The typed viewer now also has a deterministic English/Chinese reading: lambda binders establish scope; applications emit proof-argument premises before the conclusion; a small lexicon recognizes exact core declaration names. Unknown terms are left explicit. This is a partial reading, not a certified natural-language view or a general translator.
+
+## Scoped typed replacement (development)
+
+The propositional calculus uses positional Slot values in Type rather than proof-irrelevant list-membership witnesses, and a syntactic one-hole context with explicit hole scope and target. Hole.plug and Hole.sound express a local substitution contract for the supported natural-deduction constructors.
+
+The Lean Expr inspector attaches revision-local paths to proof nodes. The patch command opens local binders, elaborates a replacement against the exact local proposition, reconstructs the original expression along the path, and checks the rebuilt closed term against the original theorem type. It then pretty-prints a complete term-style candidate. The Python driver independently recompiles that candidate with the original imports and compares the new declaration type with the old by definitional equality in Lean. The original source is not modified until the user explicitly applies the preview. This preserves the statement's kernel type, not the original header spelling or tactic layout.
+
+Scope is deliberately limited to one theorem with imports only and no universe parameters. Re-elaboration can fail and must not silently fall back to unverified source. This is an experimental term-level editing bridge, not yet a proof of semantic alignment or a source-preserving patcher. The formal Hole calculus and the Lean Expr reconstruction are not yet formally related.

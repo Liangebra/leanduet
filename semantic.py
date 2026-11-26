@@ -17,17 +17,10 @@ def _name(source):
         raise ValueError("Semantic extraction currently requires one ASCII-named theorem or lemma.")
     return names[0]
 
-def extract(source, project=None):
-    name = _name(source)
-    if re.search(r"\b(?:sorry|admit|sorryAx)\b", source):
-        raise ValueError("Incomplete proofs cannot be inspected as verified derivations.")
+def _run_lean(text, project=None, marker=None):
     command = ["lake", "env", "lean"] if project else ["lean"]
     if not shutil.which(command[0]):
         raise ValueError("Lean toolchain not available.")
-    adapter = (ROOT / "lean" / "Extract.lean").read_text(encoding="utf-8")
-    # This is a separate elaboration with an extra metaprogramming import.
-    # It is not a substitute for checking the original source.
-    text = "import Lean\n" + source.rstrip() + "\n\n" + adapter + "\n#duet_extract " + name + "\n"
     with tempfile.TemporaryDirectory(prefix="leanduet-structure-") as directory:
         path = Path(directory) / "Inspect.lean"
         path.write_text(text, encoding="utf-8")
@@ -35,7 +28,11 @@ def extract(source, project=None):
                            text=True, encoding="utf-8", errors="replace", timeout=45)
     out = r.stdout + r.stderr
     if r.returncode or re.search(r"\bsorry\b", out):
-        raise ValueError("Semantic extraction failed:\n" + out[-3000:])
+        raise ValueError("Lean semantic check failed:\n" + out[-4000:])
+    if marker:
+        if marker not in out:
+            raise ValueError("Lean did not confirm the required check.")
+        return out
     for line in out.splitlines():
         if "LEANDUET_JSON:" in line:
             raw = line.split("LEANDUET_JSON:", 1)[1]
@@ -43,6 +40,56 @@ def extract(source, project=None):
                 raise ValueError("Proof tree exceeds the current inspection limit.")
             return json.loads(raw)
     raise ValueError("No semantic result was produced.")
+
+def _adapter():
+    return (ROOT / "lean" / "Extract.lean").read_text(encoding="utf-8")
+
+def extract(source, project=None):
+    name = _name(source)
+    if re.search(r"\b(?:sorry|admit|sorryAx)\b", source):
+        raise ValueError("Incomplete proofs cannot be inspected as verified derivations.")
+    return _run_lean("import Lean\n" + source.rstrip() + "\n\n" + _adapter() +
+                     "\n#duet_extract " + name + "\n", project)
+
+def _safe_proof(source):
+    if re.search(r"\b(?:sorry|admit|sorryAx)\b", source):
+        raise ValueError("Incomplete proofs cannot be used in a typed replacement.")
+    return source
+
+def _candidate(name, type_text, term_text, prelude):
+    def indent(s):
+        return "\n".join("    " + line if line.strip() else "" for line in s.splitlines())
+    return (prelude + "theorem " + name + " :\n" + indent(type_text) +
+            " := by\n  exact (\n" + indent(term_text) + "\n  )\n")
+
+def patch(source, path, replacement, project=None):
+    """Check a replacement preview, never mutate the original source."""
+    name = _name(source)
+    _safe_proof(source)
+    if not isinstance(path, str) or not re.fullmatch(r"root(?:/(?:body|value|arg[0-9]+)){0,16}", path):
+        raise ValueError("Invalid proof node path.")
+    if not isinstance(replacement, str) or not replacement.strip() or len(replacement) > 16000:
+        raise ValueError("Replacement must be a nonempty Lean term of at most 16000 characters.")
+    _safe_proof(replacement)
+    prelude = source[:NAME.search(source).start()]
+    if any(line.strip() and not re.fullmatch(r"import\s+\S.*", line) for line in prelude.splitlines()):
+        raise ValueError("Typed export currently supports only imports before the theorem.")
+    adapter = _adapter()
+    args = " ".join(json.dumps(x,ensure_ascii=False) for x in (path,replacement))
+    result = _run_lean("import Lean\n" + source.rstrip() + "\n\n" + adapter +
+                       "\n#duet_patch " + name + " " + args + "\n", project)
+    candidate = _safe_proof(_candidate(name, result["type"], result["term"], prelude))
+    _run_lean(candidate + '\n#eval "LEANDUET_EXPORT_OK"\n', project, "LEANDUET_EXPORT_OK")
+    other = "LeanDuetReplacementPreview"
+    if name == other or re.search(r"\b" + other + r"\b", source):
+        raise ValueError("Reserved preview declaration name.")
+    renamed = _candidate(other, result["type"], result["term"], "")
+    _run_lean("import Lean\n" + source.rstrip() + "\n\n" + renamed + "\n" + adapter +
+              "\n#duet_compare " + name + " " + other + "\n", project, "LEANDUET_TYPE_MATCH")
+    return {"source":candidate, "path":path, "localType":result["localType"],
+            "oldTerm":result["oldTerm"], "status":"checked",
+            "statementDefEq":True, "surfaceHeaderChanged":True}
+
 
 def informath(source, project=None):
     """Reuse the upstream CLI as an external, separately installed tool."""

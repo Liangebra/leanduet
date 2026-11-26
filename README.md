@@ -55,6 +55,8 @@ Optional AI: set `LEANDUET_AI_URL` (full OpenAI-compatible chat-completions endp
 
 The Typed proof tab calls a local Lean metaprogram to inspect elaborated theorem terms, inferred types, binders and proof arguments. It is separate from the lexical editor. An optional Informath button invokes the independently installed upstream CLI. Set LEANDUET_INFORMATH_ROOT and optionally LEANDUET_INFORMATH_BIN; upstream needs a compatible Lean toolchain (see its own documentation). This integration has not yet been run against an installed upstream runtime.
 
+The local Typed proof tab also offers a checked term-level replacement preview for monomorphic theorems: local elaboration, whole-proof checking, standalone recompile and definitional statement comparison precede explicit application. This can rewrite the surface header and tactic layout.
+
 See [research references and reuse policy](docs/RESEARCH.md) and the small indexed natural-deduction calculus in [lean/TMN.lean](lean/TMN.lean). The calculus and extractor are included in CI; no claim of full Lean-to-natural-language reversibility.
 
 ## Trust and privacy

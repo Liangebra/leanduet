@@ -4,13 +4,13 @@ import {authoredNarrative} from './narratives.mjs';
 import {narrate} from './typed-narrative.mjs';
 const $=id=>document.getElementById(id),lean=$('lean'),prose=$('prose'),notes=$('prompt');
 const KEY='leanduet.workspace.v1',THEME='leanduet.theme';
-let typedRoot=null;
+let typedRoot=null, patchNode=null, patchCandidate=null;
 let ir,base,rev=0,candidate=null,narrative=null,timer,selected=null,name='proof',exampleIndex=null,view='reading';
 const clean=()=>lean.value===base.lean&&prose.value===base.prose;
 const state=(id,label,kind='')=>{$(id).textContent=label;$(id).dataset.state=kind;};
 function notice(s,error=false){$('notice').textContent=s;$('notice').classList.toggle('error',error);}
 function persist(){try{localStorage.setItem(KEY,JSON.stringify(snapshot(base,{lean:lean.value,prose:prose.value},notes.value,name)));state('saveState','Saved locally','pass');}catch{state('saveState','Not saved','dirty');}}
-function invalidate(){rev++;typedRoot=null;$('typedNarrative').replaceChildren();$('typedTree').replaceChildren();$('informathOutput').textContent='';$('typedStatus').textContent='Proof changed or not inspected. Run extraction for this revision.';candidate=null;narrative=null;$('accept').disabled=true;$('useNarrative').disabled=true;$('proposal').textContent='No proposal yet.';$('output').textContent='Run the local checker to see diagnostics for this revision.';state('verifyState','Not checked');if(location.hostname!=='127.0.0.1'&&location.hostname!=='localhost'){state('verifyState','Local server required');$('output').textContent='Browser-only demo. Run python server.py locally for verification.';}}
+function invalidate(){rev++;typedRoot=null;patchNode=null;patchCandidate=null;$('typedPatch').hidden=true;$('applyPatch').disabled=true;$('patchPreview').textContent='';$('typedNarrative').replaceChildren();$('typedTree').replaceChildren();$('informathOutput').textContent='';$('typedStatus').textContent='Proof changed or not inspected. Run extraction for this revision.';candidate=null;narrative=null;$('accept').disabled=true;$('useNarrative').disabled=true;$('proposal').textContent='No proposal yet.';$('output').textContent='Run the local checker to see diagnostics for this revision.';state('verifyState','Not checked');if(location.hostname!=='127.0.0.1'&&location.hostname!=='localhost'){state('verifyState','Local server required');$('output').textContent='Browser-only demo. Run python server.py locally for verification.';}}
 function dirty(){state('leanDirty',lean.value===base.lean?'Synced':'Edited',lean.value===base.lean?'':'dirty');state('proseDirty',prose.value===base.prose?'Synced':'Edited',prose.value===base.prose?'':'dirty');gutter();}
 function gutter(){$('gutter').textContent=lean.value.split('\n').map((_,i)=>i+1).join('\n');$('gutter').scrollTop=lean.scrollTop;$('cursor').textContent='Ln '+(lean.value.slice(0,lean.selectionStart).split('\n').length);}
 function element(tag,txt,cls){const e=document.createElement(tag);if(txt!==undefined)e.textContent=txt;if(cls)e.className=cls;return e;}
@@ -95,6 +95,7 @@ function renderTyped(node,container,depth=0){
   const label={assume:'Assume',introduce:'Introduce',apply:'Apply',let:'Establish local binding',hypothesis:'Use hypothesis',reference:'Use declaration',opaque:'Opaque term'}[node.kind]||node.kind;
   title.append(element('strong',label+(node.binder?' '+node.binder:node.reference?' '+node.reference:'')));
   block.append(title);
+  if(node.editable&&node.path&&local){const edit=element('button','Replace this proof','typedEdit');edit.onclick=()=>openPatch(node);block.append(edit);}
   const typ=element('div',undefined,'typedType');typ.append(element('span','Type / conclusion','eyebrow'));typ.append(element('code',node.type||''));block.append(typ);
   if(node.binderType)block.append(element('code','Binder: '+node.binderType));
   if(node.referenceType)block.append(element('code','Reference type: '+node.referenceType));
@@ -111,6 +112,33 @@ function showTypedNarrative(){
   }
 }
 $('typedLanguage').onchange=showTypedNarrative;
+function openPatch(node){
+  if(!clean()||!typedRoot)return;
+  patchNode=node;patchCandidate=null;$('typedPatch').hidden=false;$('applyPatch').disabled=true;
+  $('patchTarget').textContent=node.path+' · '+node.type;$('patchTerm').value=node.term||'';
+  $('patchPreview').textContent='';$('patchStatus').textContent='Edit the local proof term. Lean will check its type and the entire exported theorem.';
+  $('typedPatch').scrollIntoView({block:'nearest'});$('patchTerm').focus();
+}
+$('cancelPatch').onclick=()=>{patchNode=null;patchCandidate=null;$('typedPatch').hidden=true;};
+$('patchTerm').addEventListener('input',()=>{patchCandidate=null;$('applyPatch').disabled=true;$('patchPreview').textContent='';$('patchStatus').textContent='Replacement changed. Check it again.';});
+$('checkPatch').onclick=async()=>{
+  if(!patchNode||!clean())return;
+  const snapshotRev=rev,node=patchNode,term=$('patchTerm').value;
+  patchCandidate=null;$('applyPatch').disabled=true;$('checkPatch').disabled=true;$('patchStatus').textContent='Checking local term, rebuilt proof and exported declaration…';
+  try{const r=await api('patch',{source:lean.value,path:node.path,replacement:term});
+    if(snapshotRev!==rev||patchNode!==node||$('patchTerm').value!==term)return;
+    if(r.status!=='checked'||!r.statementDefEq)throw Error('The server did not confirm type preservation.');
+    patchCandidate=parseLean(r.source);$('patchPreview').textContent=r.source;
+    $('patchStatus').textContent='Checked by Lean · statement definitionally equal · review generated source.';
+    $('applyPatch').disabled=false;
+  }catch(e){if(snapshotRev===rev&&patchNode===node)$('patchStatus').textContent=e.message;}
+  finally{$('checkPatch').disabled=false;}
+};
+$('applyPatch').onclick=()=>{
+  if(!patchCandidate||!clean())return;
+  if(!confirm('Replace the current source with the checked term-style theorem? Export the original workspace first if you want to retain the tactic layout.'))return;
+  install(patchCandidate);setView('reading');notice('Checked typed export applied. The local checker can recheck this revision.');
+};
 async function typedRequest(mode){
   if(!clean()){notice('Synchronize first.',true);return;}
   const snapshotRev=rev;
