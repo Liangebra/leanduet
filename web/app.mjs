@@ -3,8 +3,9 @@ import {replaceStep,snapshot,restore,lineRange} from './workspace.mjs';
 import {authoredNarrative} from './narratives.mjs';
 import {narrate,outlinePaths} from './typed-narrative.mjs';
 import {witnessTerm} from './dependent-edit.mjs';
-import {concepts,parseRuleIntent} from './rule-intent.mjs';
+import {conceptLabels,parseRuleIntent} from './rule-intent.mjs';
 import {compileChain} from './proof-chain.mjs';
+import {languagePacks,registerPack,customPacks,phrase} from './languages.mjs';
 import {mountEditor} from './editor.mjs';
 const $=id=>document.getElementById(id),lean=$('lean'),prose=$('prose'),notes=$('prompt');
 const refreshEditor=mountEditor();
@@ -129,13 +130,13 @@ function showTypedNarrative(){
       line.append(toggle);
     }
     line.append(document.createTextNode(row.phrase+' '));formula(line,row.expr);
-    if(row.folded)line.append(element('span',' · '+row.hiddenCount+' '+(lang==='zh'?'个已折叠步骤':lang==='ja'?'件の折りたたまれた推論':'hidden steps'),'foldCount'));
-    if(row.truncated||row.omittedProofArguments)line.append(element('span',lang==='zh'?'（提取未完整展开）':lang==='ja'?'（抽出範囲に制限あり）':' (extraction limited)','foldCount'));
+    if(row.folded)line.append(element('span',' · '+row.hiddenCount+' '+phrase(lang,'hidden'),'foldCount'));
+    if(row.truncated||row.omittedProofArguments)line.append(element('span',phrase(lang,'limited'),'foldCount'));
     if(local&&row.editable){
       const node=findTypedNode(typedRoot,row.path);
       if(node){
         const lang=$('typedLanguage').value;
-        const edit=element('button',lang==='zh'?'编辑此推理':lang==='ja'?'この推論を編集':'Edit this inference','narrativeEdit');
+        const edit=element('button',phrase(lang,'edit'),'narrativeEdit');
         edit.dataset.proofPath=row.path;
         edit.onclick=()=>{if(findTypedNode(typedRoot,row.path)===node)openPatch(node);};
         line.append(edit);
@@ -144,7 +145,26 @@ function showTypedNarrative(){
     target.append(line);
   }
 }
-$('typedLanguage').onchange=showTypedNarrative;
+function refreshLanguageOptions(selected){
+  const select=$('typedLanguage');select.replaceChildren();
+  for(const p of languagePacks()){const o=element('option',p.label);o.value=p.id;select.append(o);}
+  select.value=languagePacks().some(p=>p.id===selected)?selected:'en';
+  $('ruleConcepts').replaceChildren();
+  for(const label of conceptLabels()){const o=element('option');o.value=label;$('ruleConcepts').append(o);}
+}
+try{for(const p of JSON.parse(localStorage.getItem('leanduet.languages.v1')||'[]'))registerPack(p);}catch(e){$('languageStatus').textContent='Stored language pack rejected: '+e.message;}
+refreshLanguageOptions(localStorage.getItem('leanduet.language')||'en');
+$('typedLanguage').onchange=()=>{try{localStorage.setItem('leanduet.language',$('typedLanguage').value);}catch{}showTypedNarrative();};
+$('importLanguage').onclick=()=>$('languageFile').click();
+$('languageFile').onchange=async()=>{
+  const f=$('languageFile').files[0];if(!f)return;
+  try{if(f.size>262144)throw Error('Language pack exceeds 256 KiB.');
+    const p=registerPack(JSON.parse(await f.text()));
+    localStorage.setItem('leanduet.languages.v1',JSON.stringify(customPacks()));
+    refreshLanguageOptions(p.id);$('typedLanguage').onchange();$('languageStatus').textContent='Loaded '+p.label+' · data-only language pack.';
+  }catch(e){$('languageStatus').textContent=e.message;}
+  finally{$('languageFile').value='';}
+};
 $('collapseProof').onclick=()=>{foldedPaths=outlinePaths(typedRoot);showTypedNarrative();};
 $('expandProof').onclick=()=>{foldedPaths.clear();showTypedNarrative();};
 function openPatch(node){
@@ -191,9 +211,6 @@ function openPatch(node){
   $('typedPatch').scrollIntoView({block:'nearest'});$('patchTerm').focus();
 }
 $('usedContextOnly').onchange=()=>{for(const row of $('patchScope').children)row.hidden=$('usedContextOnly').checked&&row.dataset.needed!=='true';};
-for(const c of concepts)for(const label of [c.en,c.zh,c.ja,c.rule]){
-  const option=element('option');option.value=label;$('ruleConcepts').append(option);
-}
 $('ruleIntent').addEventListener('input',()=>{$('ruleResults').replaceChildren();$('ruleStatus').textContent='Query changed. Search again.';});
 $('findRules').onclick=async()=>{
   if(!patchNode||!clean()||patchNode.kind==='witness')return;

@@ -1,44 +1,42 @@
-// Explicit, reviewed aliases. Do not silently guess names from arbitrary prose.
-// The actual availability and applicability of a declaration is checked by Lean.
-export const concepts = [
-  {en:'symmetry of equality',zh:'等式对称性',ja:'等式の対称性',rule:'Eq.symm'},
-  {en:'transitivity of equality',zh:'等式传递性',ja:'等式の推移性',rule:'Eq.trans'},
-  {en:'conjunction introduction',zh:'合取引入',ja:'連言導入',rule:'And.intro'},
-  {en:'first conjunct',zh:'合取左消去',ja:'連言の左消去',rule:'And.left'},
-  {en:'second conjunct',zh:'合取右消去',ja:'連言の右消去',rule:'And.right'},
-  {en:'equality transport',zh:'等式运输',ja:'等式による移送',rule:'Eq.mp'},
-  {en:'continuous image of a compact set',zh:'紧集的连续像',ja:'コンパクト集合の連続像',rule:'IsCompact.image'},
-  {en:'composition of continuous functions',zh:'连续映射的复合',ja:'連続写像の合成',rule:'Continuous.comp'},
-  {en:'transitivity of order',zh:'序关系传递性',ja:'順序の推移性',rule:'le_trans'},
-  {en:'subgroup multiplication closure',zh:'子群乘法封闭性',ja:'部分群の積に関する閉性',rule:'Subgroup.mul_mem'}
-];
+import {allAliases,grammarWords} from './languages.mjs';
+// Regex is generated only from escaped literal tokens. Community packs cannot
+// supply executable patterns. Exact names are resolved by Lean.
+const escape=s=>s.replace(/[.*+?^$(){}|[\]\\]/g,'\\$&');
+function pattern(s){return /^[A-Za-z]/.test(s)?'\\b'+escape(s)+'\\b':escape(s);}
+const group=key=>grammarWords(key).map(pattern).join('|');
+const clean=s=>s.trim().replace(/[。.]$/,'').trim();
+export const conceptLabels=()=>[...new Set(allAliases().flatMap(x=>[x.label,x.rule]))];
 export function resolveIntent(value){
   if(typeof value!=='string')throw Error('Expected a mathematical rule or declaration name.');
   const input=value.trim();
-  if(!input||input==='automatic'||input==='自动检索'||input==='自動検索')return '';
-  const key=input.toLowerCase().replace(/^(?:by |use |apply |由|利用|应用)\s*/i,'').replace(/[。.]$/,'').trim();
-  const match=concepts.find(x=>x.en===key||x.zh===key||x.ja===key||x.rule.toLowerCase()===key);
-  if(match)return match.rule;
+  if(!input||grammarWords('automatic').includes(input))return '';
+  const key=clean(input).replace(new RegExp('^(?:'+group('prefix')+')\\s*','i'),'').toLowerCase();
+  const matches=[...new Set(allAliases().filter(x=>x.label.toLowerCase()===key||x.rule.toLowerCase()===key).map(x=>x.rule))];
+  if(matches.length>1)throw Error('Ambiguous concept; enter an exact Lean declaration.');
+  if(matches.length)return matches[0];
   if(/^[A-Za-z_][A-Za-z0-9_'.]{0,159}$/.test(input))return input;
   throw Error('Unsupported phrase. Choose a known mathematical concept, enter an exact Lean declaration, or leave blank for type search.');
 }
-
-
-// A small controlled grammar: rule + explicit local evidence.
-// Parsing preserves intent; semantic resolution is performed in the Lean context.
 export function parseRuleIntent(value,{ordered=false}={}){
   if(typeof value!=='string')throw Error('Expected a mathematical rule or declaration name.');
-  const text=value.trim().replace(/[。.]$/,'').trim();
-  let ruleText=text,premiseText='';
-  const separator=/(?:[,，;；]\s*)?(?:\busing\s+|使用\s*|利用假设\s*|を用いて\s*|を用い[、，]?\s*)/i;
-  const split=separator.exec(text);
-  if(split){
-    ruleText=text.slice(0,split.index).trim();
-    premiseText=text.slice(split.index+split[0].length).trim();
-    if(!premiseText)throw Error('Specify the local premise names after using / 使用.');
-  }
-  const required=premiseText?premiseText.split(/\s*(?:,|，|、|\band\b|和|与|および|及び)\s*/).map(x=>x.trim()):[];
-  if(required.length>8||required.some(x=>!/^[A-Za-z_][A-Za-z0-9_']{0,63}$/.test(x))||(!ordered&&new Set(required).size!==required.length))
-    throw Error('Use up to eight local premise names separated by commas or and / 和 / および; search premises must be distinct.');
+  const t=clean(value);
+  const sep=new RegExp('(?:[,，;；]\\s*)?(?:'+group('using')+')\\s*','i');
+  const split=sep.exec(t);
+  const ruleText=split?t.slice(0,split.index).trim():t;
+  const premises=split?t.slice(split.index+split[0].length).replace(/^[、，,]\s*/,'').trim():'';
+  if(split&&!premises)throw Error('Specify local premise names.');
+  const required=premises?premises.split(new RegExp('\\s*(?:,|，|、|'+group('join')+')\\s*','i')).map(x=>x.trim()):[];
+  if(required.length>8||required.some(x=>!/^[A-Za-z_][A-Za-z0-9_']{0,63}$/.test(x))||(!ordered&&new Set(required).size!==required.length))throw Error('Use up to eight local premise names; search premises must be distinct.');
   return {rule:resolveIntent(ruleText),required};
+}
+export function statementMarker(text){
+  const s=text.trim();
+  if(grammarWords('conclude').some(k=>s.toLowerCase()===k.toLowerCase()))return {kind:'conclude'};
+  for(const k of grammarWords('establish')){
+    if(s.toLowerCase().startsWith(k.toLowerCase()+' ')){
+      const m=/^([A-Za-z_][A-Za-z0-9_']{0,63})(?:\s*:\s*(.+))?$/.exec(s.slice(k.length).trim());
+      if(m)return {kind:'establish',name:m[1],type:m[2]??null};
+    }
+  }
+  return null;
 }

@@ -1,0 +1,52 @@
+{
+  "id": "fr",
+  "label": "Français",
+  "words": {
+    "assume": "Supposons {name}",
+    "introduce": "Soit {name}",
+    "witness": "Choisissons {name} de type",
+    "let": "Posons {name}",
+    "apply": "Appliquer {name}",
+    "obtain": " pour obtenir",
+    "use": "Utiliser {name}",
+    "opaque": "Conserver le terme non développé",
+    "function": "la fonction affichée",
+    "edit": "Modifier cette inférence",
+    "hidden": "étapes masquées",
+    "limited": " (extraction limitée)"
+  },
+  "grammar": {
+    "prefix": [
+      "par",
+      "appliquer"
+    ],
+    "using": [
+      "avec"
+    ],
+    "join": [
+      "et"
+    ],
+    "establish": [
+      "Établir"
+    ],
+    "conclude": [
+      "Conclure"
+    ],
+    "automatic": [
+      "automatique"
+    ]
+  },
+  "schema": 1,
+  "rules": {
+    "Eq.symm": "Par symétrie de l’égalité",
+    "Eq.trans": "Par transitivité de l’égalité"
+  },
+  "aliases": {
+    "Eq.symm": [
+      "symétrie de l’égalité"
+    ],
+    "Eq.trans": [
+      "transitivité de l’égalité"
+    ]
+  }
+}
