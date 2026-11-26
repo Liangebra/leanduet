@@ -119,6 +119,12 @@ def infer_chain(source, path, steps, project=None):
         if not isinstance(app,str) or (app!='?' and not re.fullmatch(_RULE + r"(?: " + _SIMPLE + r"){0,8}",app)):
             raise ValueError("Expected an ordered application of a named rule.")
         if step.get("kind")=="conclude" and i==len(steps)-1:
+            ty=step.get("type")
+            if ty is not None:
+                if not isinstance(ty,str) or not ty.strip() or len(ty)>2000 or re.search(r"[\r\n;{}]|/-|--|:=|\b(?:by|sorry|admit)\b",ty):
+                    raise ValueError("Expected a single conclusion proposition.")
+                lines.append("  show "+ty)
+                traced.append("  show "+ty)
             line = "  exact?" if app=="?" else "  exact "+app
             lines.append(line)
             traced.append(line)

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {compileChain} from '../web/proof-chain.mjs';
+import {compileChain,compileFormulaSequence} from '../web/proof-chain.mjs';
 const scope=['P','Q','R','f','g','p'];
 test('ordered intermediate conclusions compile in the extended context',()=>{
   const r=compileChain('建立 hq : Q | f using p\n结论 | g using hq',scope);
@@ -45,4 +45,14 @@ test('formula holes emit Lean proof search rather than sorry',()=>{
  const r=compileChain('Establish hq : $Q$ | ?\nConclude | ?',scope);
  assert.equal(r.term,'by\n  have hq : Q := by exact?\n  exact?');
  assert.throws(()=>compileChain('Establish hq | ?\nConclude | ?',scope));
+});
+
+test('formula-only sequences generate fresh bindings and an explicit final goal',()=>{
+ const r=compileFormulaSequence('$Q$\n$R$',[...scope,'duet_h1']);
+ assert.deepEqual(r.steps,[{kind:'establish',name:'duet_h2',type:'Q',application:'?'},{kind:'conclude',type:'R',application:'?'}]);
+ assert.equal(r.term,'by\n  have duet_h2 : Q := by exact?\n  show R\n  exact?');
+ assert.equal(compileFormulaSequence('hq : $Q$\n$R$',scope).steps[0].name,'hq');
+ assert.throws(()=>compileFormulaSequence('Q\nR',scope));
+ assert.throws(()=>compileFormulaSequence('p : $Q$\n$R$',scope));
+ assert.throws(()=>compileFormulaSequence('hr : $R$',scope));
 });

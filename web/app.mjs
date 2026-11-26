@@ -6,7 +6,7 @@ import {witnessTerm} from './dependent-edit.mjs';
 import {conceptLabels,parseRuleIntent} from './rule-intent.mjs';
 import {validateJudgment} from './semantic-ir.mjs';
 import {compileFormula} from './math-formula.mjs';
-import {compileChain} from './proof-chain.mjs';
+import {compileChain,compileFormulaSequence} from './proof-chain.mjs';
 import {languagePacks,registerPack,customPacks,phrase} from './languages.mjs';
 import {positionAt,completionEdit} from './completion.mjs';
 import {mountEditor} from './editor.mjs';
@@ -284,31 +284,33 @@ $('findRules').onclick=async()=>{
   }catch(e){if(snapshotRev===rev&&patchNode===node)$('ruleStatus').textContent=e.message;}
   finally{$('findRules').disabled=false;}
 };
+function parseChainInput(text,scope){return $('chainFormat').value==='formula'?compileFormulaSequence(text,scope):compileChain(text,scope);}
+$('chainFormat').onchange=()=>{$('chainText').placeholder=$('chainFormat').value==='formula'?'$Q$\n$R$':'Establish hq | f using p\nConclude | g using hq';$('chainText').dispatchEvent(new Event('input'));};
 $('chainText').addEventListener('input',()=>{$('chainBindings').replaceChildren();$('patchTerm').value='';$('patchTerm').dispatchEvent(new Event('input'));$('chainStatus').textContent='Narrative changed. Compile again.';});
 $('compileChain').onclick=()=>{
   if(!patchNode||!clean()||patchNode.kind==='witness')return;
   try{
-    const r=compileChain($('chainText').value,(patchNode.scope||[]).map(d=>d.name));
+    const r=parseChainInput($('chainText').value,(patchNode.scope||[]).map(d=>d.name));
     $('patchTerm').value=r.term;$('patchTerm').dispatchEvent(new Event('input'));
     $('chainStatus').textContent=r.steps.length+' steps compiled to a candidate. Check replacement to validate with Lean.';
   }catch(e){$('chainStatus').textContent=e.message;}
 };
 $('inferChain').onclick=async()=>{
   if(!patchNode||!clean()||patchNode.kind==='witness')return;
-  const node=patchNode,revision=rev,query=$('chainText').value;
+  const node=patchNode,revision=rev,query=$('chainText').value,format=$('chainFormat').value;
   $('chainBindings').replaceChildren();$('inferChain').disabled=true;
   $('patchTerm').value='';$('patchTerm').dispatchEvent(new Event('input'));
   $('chainStatus').textContent='Inferring intermediate propositions in Lean…';
   try{
-    const {steps}=compileChain(query,(node.scope||[]).map(d=>d.name));
+    const {steps}=parseChainInput(query,(node.scope||[]).map(d=>d.name));
     const r=await api('chain',{source:lean.value,path:node.path,steps});
-    if(revision!==rev||node!==patchNode||query!==$('chainText').value)return;
+    if(revision!==rev||node!==patchNode||query!==$('chainText').value||format!==$('chainFormat').value)return;
     if(r.status!=='inferred')throw Error('Lean did not confirm inference.');
     $('patchTerm').value=r.term;$('patchTerm').dispatchEvent(new Event('input'));
     for(const b of r.bindings){const row=element('div',undefined,'scopeRow');row.append(element('strong',b.name),element('code',b.type));$('chainBindings').append(row);}
     const goal=element('div',undefined,'scopeRow');goal.append(element('strong','Conclusion'),element('code',r.goal));$('chainBindings').append(goal);
     $('chainStatus').textContent='Intermediate propositions inferred by Lean. Check replacement before applying.';
-  }catch(e){if(revision===rev&&node===patchNode&&query===$('chainText').value)$('chainStatus').textContent=e.message;}
+  }catch(e){if(revision===rev&&node===patchNode&&query===$('chainText').value&&format===$('chainFormat').value)$('chainStatus').textContent=e.message;}
   finally{$('inferChain').disabled=false;}
 };
 function stageWitness(){

@@ -98,3 +98,19 @@ hole=infer_chain(source2,hole_node["path"],[
 assert hole["bindings"]==[{"name":"hq","type":"Q"}],hole
 assert patch(source2,hole_node["path"],hole["term"])["proofShapePreserved"]
 print("Formula-annotated intermediate and final holes filled by Lean proof search")
+
+# No natural-language rule names or manual Lean syntax are required.
+sequence_script="""import {compileFormulaSequence} from './web/proof-chain.mjs';
+console.log(JSON.stringify(compileFormulaSequence('$Q$\\n$R$',['P','Q','R','f','g','p']).steps));"""
+import json
+steps=json.loads(subprocess.check_output(["node","--input-type=module","-e",sequence_script],cwd=root,text=True))
+seq=infer_chain(source2,hole_node["path"],steps)
+assert seq["bindings"]==[{"name":"duet_h1","type":"Q"}],seq
+assert patch(source2,hole_node["path"],seq["term"])["proofShapePreserved"]
+try:
+    infer_chain(source2,hole_node["path"],[{"kind":"conclude","type":"P","application":"?"}])
+except ValueError:
+    pass
+else:
+    raise AssertionError("Mismatched final formula accepted")
+print("Formula-only sequence is elaborated and its final target checked")

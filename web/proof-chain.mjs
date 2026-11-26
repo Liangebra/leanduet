@@ -43,6 +43,41 @@ export function compileChain(text,scope){
     occupied.add(name);visible.add(name);
   }
   if(!done)throw Error('Finish with Conclude | rule using premises.');
-  const term='by\n'+steps.map(s=>s.kind==='establish'?'  have '+s.name+(s.type===null?'':' : '+s.type)+' := '+(s.application==='?'?'by exact?':s.application):s.application==='?'?'  exact?':'  exact '+s.application).join('\n');
-  return {steps,term};
+  return {steps,term:renderChain(steps)};
+}
+
+// One formula per line; no prose or rule name is required.
+export function compileFormulaSequence(text,scope){
+  if(typeof text!=='string'||text.length>12000||!Array.isArray(scope))throw Error('Invalid formula sequence or scope.');
+  const lines=text.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+  if(!lines.length||lines.length>16)throw Error('Use 1–16 formulas, one per line.');
+  const used=new Set(scope),steps=[];
+  let serial=1;
+  for(let i=0;i<lines.length;i++){
+    const line=lines[i],named=/^([A-Za-z_][A-Za-z0-9_']{0,63})\s*:\s*(\$.*|\\\(.*|\\\[.*)$/.exec(line);
+    const input=named?named[2]:line;
+    if(!((input.startsWith('$')&&input.endsWith('$'))||(input.startsWith('\\(')&&input.endsWith('\\)'))||(input.startsWith('\\[')&&input.endsWith('\\]'))))throw Error('Line '+(i+1)+': enclose a formula in LaTeX delimiters.');
+    const formula=compileFormula(input);
+    if(i===lines.length-1){
+      if(named)throw Error('The final formula is the conclusion; do not name it.');
+      steps.push({kind:'conclude',type:formula.lean,application:'?'});
+    }else{
+      let name=named?.[1];
+      if(name&&used.has(name))throw Error('Line '+(i+1)+': binding already exists: '+name);
+      if(!name){do{name='duet_h'+serial++;}while(used.has(name));}
+      used.add(name);steps.push({kind:'establish',name,type:formula.lean,application:'?'});
+    }
+  }
+  return {steps,term:renderChain(steps)};
+}
+export function renderChain(steps){
+  const lines=['by'];
+  for(const s of steps){
+    if(s.kind==='establish')lines.push('  have '+s.name+(s.type===null?'':' : '+s.type)+' := '+(s.application==='?'?'by exact?':s.application));
+    else {
+      if(s.type!=null)lines.push('  show '+s.type);
+      lines.push(s.application==='?'?'  exact?':'  exact '+s.application);
+    }
+  }
+  return lines.join('\n');
 }
