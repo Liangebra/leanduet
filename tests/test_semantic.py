@@ -30,3 +30,10 @@ class SemanticTests(unittest.TestCase):
         self.assertFalse(r["verifiedAlignment"])
         self.assertEqual(run.call_args.args[0][1:3],["-from-formalism=lean","-proof-text"])
         self.assertEqual(run.call_args.kwargs["env"]["ELAN_TOOLCHAIN"],"leanprover/lean4:v4.36.0")
+
+    def test_ordered_application(self):
+        self.assertTrue(semantic._ordered_application("Exists.intro a (And.intro hm hp)"))
+        self.assertTrue(semantic._ordered_application("f (g (h x))"))
+        self.assertTrue(semantic._ordered_application("?"))
+        for bad in ("f (g x", "f g)", "f (by exact h)", "f sorry", "f (g x); sorry", "f (g x)\\n#check Nat", "f " + "x "*9):
+            self.assertFalse(semantic._ordered_application(bad),bad)

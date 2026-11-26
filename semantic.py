@@ -113,7 +113,8 @@ def _ordered_application(app):
     if "".join(tokens) != app:
         return False
     tokens = [t for t in tokens if not t.isspace()]
-    if len(tokens) > 80:
+    forbidden = {"by", "fun", "match", "let", "have", "show", "do", "if", "then", "else", "where", "sorry", "admit", "sorryAx"}
+    if len(tokens) > 80 or any(t in forbidden for t in tokens):
         return False
     pos = 0
     def parse(depth):

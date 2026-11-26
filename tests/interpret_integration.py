@@ -57,10 +57,3 @@ with TemporaryDirectory() as tmp:
     subprocess.run(["lean", str(target)], cwd=root, check=True)
 print("Generated local definitions and context introductions accepted by Lean")
 
-from semantic import _ordered_application
-assert _ordered_application("Exists.intro a (And.intro hm hp)")
-for malformed in ("f (g x", "f g)", "f (by exact h)", "f (g x); sorry", "f (g x)\\n#check Nat"):
-    # A named application parser may recognize by as a name; forbidden Lean
-    # proof placeholders are still rejected by the enclosing safe-proof check.
-    if malformed != "f (by exact h)":
-        assert not _ordered_application(malformed), malformed
