@@ -205,7 +205,7 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
             live_page.locator("#typedNarrative .derivedStep").filter(has_text="Use h1").get_by_role("button",name="Edit this inference").click()
             live_page.locator("#wordingInput").fill("From our original observation,")
             expect(live_page.locator("#typedNarrative")).to_contain_text("From our original observation,")
-            live_page.locator("#interpretPanel summary").click()
+            live_page.locator("#interpretPanel > summary").click()
             live_page.locator("#interpretText").fill("Therefore, $P$ | h2\n$False$ | h1\nunsupported ⊛")
             expect(live_page.locator("#interpretResults")).to_contain_text("Unresolved")
             live_page.locator("#interpretRun").click()

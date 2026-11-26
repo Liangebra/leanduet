@@ -97,7 +97,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if not isinstance(source,str) or not source.strip(): raise ValueError('Source must be nonempty text.')
             if self.path=='/api/completion': return self.send_json(200,lean_lsp.complete(source,data.get('line'),data.get('character'),self.project))
             if self.path=='/api/check': return self.send_json(200,check_source(source,self.project))
-            if self.path=='/api/structure': return self.send_json(200,semantic.extract(source,self.project))
+            if self.path=='/api/structure': return self.send_json(200,semantic.extract(source,self.project,reading_only=data.get('profile')=='reading'))
             if self.path=='/api/chain': return self.send_json(200,semantic.infer_chain(source,data.get('path'),data.get('steps'),self.project))
             if self.path=='/api/factor': return self.send_json(200,semantic.factor_preview(source,data.get('path'),self.project))
             if self.path=='/api/abstract': return self.send_json(200,semantic.abstract_preview(source,data.get('path'),self.project))

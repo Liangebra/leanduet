@@ -90,3 +90,5 @@ html[data-theme=dark] .tok-keyword{color:#569cd6}html[data-theme=dark] .tok-comm
 #interpretText{min-height:96px}#interpretResults .ruleResult{overflow-wrap:anywhere}.workactions{flex-wrap:wrap}
 
 .authorWording{font-style:italic;color:var(--muted);white-space:pre-wrap;overflow-wrap:anywhere}.authorWording::before{content:'〔'}.authorWording::after{content:'〕 '}
+
+.staleReading{opacity:.5;pointer-events:none}.staleReading button{visibility:hidden}

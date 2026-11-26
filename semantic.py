@@ -48,12 +48,12 @@ def _run_lean(text, project=None, marker=None, trace=False):
 def _adapter():
     return (ROOT / "lean" / "Extract.lean").read_text(encoding="utf-8")
 
-def extract(source, project=None):
+def extract(source, project=None, *, reading_only=False):
     name = _name(source)
     if re.search(r"\b(?:sorry|admit|sorryAx)\b", source):
         raise ValueError("Incomplete proofs cannot be inspected as verified derivations.")
     return _run_lean("import Lean\n" + source.rstrip() + "\n\n" + _adapter() +
-                     "\n#duet_extract " + name + "\n", project)
+                     ("\n#duet_extract_fast " if reading_only else "\n#duet_extract ") + name + "\n", project)
 
 def _safe_proof(source):
     if re.search(r"\b(?:sorry|admit|sorryAx)\b", source):

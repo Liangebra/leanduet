@@ -11,12 +11,14 @@ import {compileChain,compileFormulaSequence} from './proof-chain.mjs';
 import {languagePacks,registerPack,customPacks,phrase} from './languages.mjs';
 import {positionAt,completionEdit} from './completion.mjs';
 import {interpretations,rankInterpretations,mergeInterpretations} from './interpretations.mjs';
-import {wordingFor,putWording,uniqueMatch} from './wording.mjs';
+import {wordingFor,putWording} from './wording.mjs';
+import {indexProof} from './proof-index.mjs';
 import {mountEditor} from './editor.mjs';
 const $=id=>document.getElementById(id),lean=$('lean'),prose=$('prose'),notes=$('prompt');
 const refreshEditor=mountEditor();
 const KEY='leanduet.workspace.v1',THEME='leanduet.theme';
-let typedRoot=null, patchNode=null, patchCandidate=null;
+let typedRoot=null, proofIndex=null, patchNode=null, patchCandidate=null;
+let lastTypedSource=null,lastTypedProfile=null,lastTypedTree=null,saveTimer;
 let liveTimer,interpretTimer,interpretVersion=0,interpretBusy=false,typedBusy=false;
 let exploration=emptyExploration(),wording=[];
 let foldedPaths=new Set();
@@ -24,8 +26,10 @@ let ir,base,rev=0,notesRev=0,candidate=null,narrative=null,timer,selected=null,n
 const clean=()=>lean.value===base.lean&&prose.value===base.prose;
 const state=(id,label,kind='')=>{$(id).textContent=label;$(id).dataset.state=kind;};
 function notice(s,error=false){$('notice').textContent=s;$('notice').classList.toggle('error',error);}
-function persist(){try{localStorage.setItem(KEY,JSON.stringify(snapshot(base,{lean:lean.value,prose:prose.value},notes.value,name,exploration,wording)));state('saveState','Saved locally','pass');}catch{state('saveState','Not saved','dirty');}}
-function invalidate(){rev++;clearTimeout(liveTimer);clearTimeout(interpretTimer);interpretVersion++;typedRoot=null;foldedPaths.clear();patchNode=null;patchCandidate=null;$('typedPatch').hidden=true;$('applyPatch').disabled=true;$('patchPreview').textContent='';$('typedNarrative').replaceChildren();$('typedTree').replaceChildren();$('informathOutput').textContent='';$('typedStatus').textContent='Proof changed or not inspected. Run extraction for this revision.';candidate=null;narrative=null;$('accept').disabled=true;$('useNarrative').disabled=true;$('proposal').textContent='No proposal yet.';$('output').textContent='Run the local checker to see diagnostics for this revision.';state('verifyState','Not checked');if(location.hostname!=='127.0.0.1'&&location.hostname!=='localhost'){state('verifyState','Local server required');$('output').textContent='Browser-only demo. Run python server.py locally for verification.';}}
+function persist(){clearTimeout(saveTimer);try{localStorage.setItem(KEY,JSON.stringify(snapshot(base,{lean:lean.value,prose:prose.value},notes.value,name,exploration,wording)));state('saveState','Saved locally','pass');}catch{state('saveState','Not saved','dirty');}}
+function persistSoon(){clearTimeout(saveTimer);saveTimer=setTimeout(persist,160);}
+window.addEventListener('pagehide',()=>{if(base)persist();});
+function invalidate({retainReading=false}={}){rev++;clearTimeout(liveTimer);clearTimeout(interpretTimer);interpretVersion++;typedRoot=null;proofIndex=null;foldedPaths.clear();patchNode=null;patchCandidate=null;$('typedPatch').hidden=true;$('applyPatch').disabled=true;$('patchPreview').textContent='';if(retainReading){$('typedNarrative').classList.add('staleReading');$('typedTree').classList.add('staleReading');}else{$('typedNarrative').replaceChildren();$('typedTree').replaceChildren();$('typedNarrative').classList.remove('staleReading');$('typedTree').classList.remove('staleReading');}$('informathOutput').textContent='';$('typedStatus').textContent='Proof changed or not inspected. Run extraction for this revision.';candidate=null;narrative=null;$('accept').disabled=true;$('useNarrative').disabled=true;$('proposal').textContent='No proposal yet.';$('output').textContent='Run the local checker to see diagnostics for this revision.';state('verifyState','Not checked');if(location.hostname!=='127.0.0.1'&&location.hostname!=='localhost'){state('verifyState','Local server required');$('output').textContent='Browser-only demo. Run python server.py locally for verification.';}}
 function dirty(){state('leanDirty',lean.value===base.lean?'Synced':'Edited',lean.value===base.lean?'':'dirty');state('proseDirty',prose.value===base.prose?'Synced':'Edited',prose.value===base.prose?'':'dirty');gutter();}
 function gutter(){refreshEditor();$('gutter').textContent=lean.value.split('\n').map((_,i)=>i+1).join('\n');$('gutter').scrollTop=lean.scrollTop;$('cursor').textContent='Ln '+(lean.value.slice(0,lean.selectionStart).split('\n').length);}
 function element(tag,txt,cls){const e=document.createElement(tag);if(txt!==undefined)e.textContent=txt;if(cls)e.className=cls;return e;}
@@ -71,9 +75,9 @@ function reading(){
     const item=element('button',n.leanLine+'  '+n.lean,'outlineItem');item.dataset.node=n.id;item.style.paddingLeft=(10+Math.min(n.indent-2,8)*4)+'px';item.onclick=()=>{setView('reading');selection(n.id,true);};outline.append(item);}
   selected=null;$('stepEditor').hidden=true;$('editStep').disabled=true;$('inspectName').textContent='No step selected';$('inspectCode').textContent='';$('inspectParent').textContent='—';
 }
-function install(next,{save=true}={}){clearTimeout(timer);ir=next;const l=renderLean(ir),p=renderProse(ir);if(lean.value!==l)lean.value=l;if(prose.value!==p)prose.value=p;base={lean:l,prose:p};invalidate();dirty();reading();notice('Representations synchronized. Lean verification and narrative review are separate.');if(save)persist();scheduleTypedReading();}
+function install(next,{save=true}={}){clearTimeout(timer);ir=next;const l=renderLean(ir),p=renderProse(ir);if(lean.value!==l)lean.value=l;if(prose.value!==p)prose.value=p;base={lean:l,prose:p};invalidate({retainReading:$('liveNarrative').checked});dirty();reading();notice('Representations synchronized. Lean verification and narrative review are separate.');if(save)persist();scheduleTypedReading();}
 function sync(side){clearTimeout(timer);try{install(planSync(base,lean.value,prose.value,side).ir);}catch(e){notice(e.message,true);persist();}}
-for(const [el,side] of [[lean,'lean'],[prose,'prose']])el.addEventListener('input',()=>{clearTimeout(timer);invalidate();$('stepEditor').hidden=true;$('editStep').disabled=true;dirty();notice('Unsynchronized edits · both drafts are retained.');persist();if($('auto').checked)timer=setTimeout(()=>sync(side),450);});
+for(const [el,side] of [[lean,'lean'],[prose,'prose']])el.addEventListener('input',()=>{clearTimeout(timer);invalidate({retainReading:true});$('stepEditor').hidden=true;$('editStep').disabled=true;dirty();notice('Unsynchronized edits · both drafts are retained.');persistSoon();if($('auto').checked)timer=setTimeout(()=>sync(side),450);});
 notes.addEventListener('input',()=>{notesRev++;candidate=null;narrative=null;$('accept').disabled=true;$('useNarrative').disabled=true;$('proposal').textContent='Notes changed. Request a new proposal.';$('exploreStatus').textContent='Exploration edited independently of the proof.';refreshStage();persist();});
 for(const evt of ['click','keyup','scroll','select'])lean.addEventListener(evt,gutter);
 function cursorLink(){
@@ -221,6 +225,7 @@ function renderTyped(node,container,depth=0){
 }
 function findTypedNode(root,path){
   if(!root)return null;
+  if(root===typedRoot&&proofIndex)return proofIndex.find(path);
   if(root.path===path)return root;
   for(const child of root.children||[]){const found=findTypedNode(child,path);if(found)return found;}
   return null;
@@ -228,8 +233,9 @@ function findTypedNode(root,path){
 function showTypedNarrative(){
   const target=$('typedNarrative');target.replaceChildren();if(!typedRoot)return;
   target.append(element('div','DERIVED READING · TYPE-DRIVEN','eyebrow'));
-  const detached=wording.filter(a=>!uniqueMatch(typedRoot,a.anchor));if(detached.length){const details=element('details');details.append(element('summary',detached.length+' detached author annotation(s)'));for(const a of detached){const p=element('p',a.path+' · '+a.text);const b=element('button','Copy to exploration');b.onclick=()=>appendNotes('Detached wording: '+a.text);p.append(b);details.append(p);}target.append(details);}
-  for(const row of narrate(typedRoot,$('typedLanguage').value,{collapsed:foldedPaths})){
+  const wordingByKey=new Map(wording.map(a=>[a.anchor,a.text]));
+  const detached=wording.filter(a=>!proofIndex.unique(a.anchor));if(detached.length){const details=element('details');details.append(element('summary',detached.length+' detached author annotation(s)'));for(const a of detached){const p=element('p',a.path+' · '+a.text);const b=element('button','Copy to exploration');b.onclick=()=>appendNotes('Detached wording: '+a.text);p.append(b);details.append(p);}target.append(details);}
+  for(const row of narrate(typedRoot,$('typedLanguage').value,{collapsed:foldedPaths,counts:proofIndex.counts})){
     const line=element('div',undefined,'derivedStep');line.style.marginLeft=Math.min(row.depth,6)*9+'px';
     const lang=$('typedLanguage').value;
     if(row.foldable){
@@ -239,7 +245,7 @@ function showTypedNarrative(){
       toggle.onclick=()=>{if(row.folded)foldedPaths.delete(row.path);else foldedPaths.add(row.path);showTypedNarrative();};
       line.append(toggle);
     }
-    const owner=findTypedNode(typedRoot,row.path);const authored=wordingFor(typedRoot,owner,wording);if(authored)line.append(element('span',authored+' ','authorWording'));line.append(document.createTextNode(row.phrase+' '));formula(line,row.expr);
+    const owner=findTypedNode(typedRoot,row.path);const authored=proofIndex.wording(owner,wordingByKey);if(authored)line.append(element('span',authored+' ','authorWording'));line.append(document.createTextNode(row.phrase+' '));formula(line,row.expr);
     if(row.folded)line.append(element('span',' · '+row.hiddenCount+' '+phrase(lang,'hidden'),'foldCount'));
     if(row.truncated||row.omittedProofArguments)line.append(element('span',phrase(lang,'limited'),'foldCount'));
     if(local&&row.editable){
@@ -278,7 +284,7 @@ $('languageFile').onchange=async()=>{
 $('collapseProof').onclick=()=>{foldedPaths=outlinePaths(typedRoot);showTypedNarrative();};
 $('expandProof').onclick=()=>{foldedPaths.clear();showTypedNarrative();};
 function openPatch(node){
-  if(!clean()||!typedRoot)return;
+  if(!clean()||!typedRoot||proofIndex?.find(node.path)!==node)return;
   patchNode=node;patchCandidate=null;interpretVersion++;clearTimeout(interpretTimer);$('interpretPanel').hidden=node.kind==='witness';$('interpretPanel').open=false;$('interpretText').value='';$('aiInterpretText').value='';$('includeAiInterpret').checked=false;$('aiInterpretStatus').textContent='';$('interpretAiPanel').open=false;$('interpretResults').replaceChildren();$('interpretStatus').textContent='';$('typedPatch').hidden=false;$('applyPatch').disabled=true;
   $('irOutput').textContent='';$('irStatus').textContent='';$('irInspector').open=false;
   $('abstractPanel').hidden=node.kind==='witness';$('abstractPanel').open=false;$('abstractOutput').textContent='';$('abstractStatus').textContent='';$('factorProof').disabled=true;
@@ -498,16 +504,18 @@ $('applyPatch').onclick=()=>{
   if(!confirm('Replace the current source with the checked term-style theorem? Export the original workspace first if you want to retain the tactic layout.'))return;
   install(patchCandidate);setView('reading');notice('Checked typed export applied. The local checker can recheck this revision.');
 };
-function scheduleTypedReading(){clearTimeout(liveTimer);if($('liveNarrative').checked)liveTimer=setTimeout(()=>{if(local&&clean())typedRequest('structure');},650);}
+function scheduleTypedReading(){clearTimeout(liveTimer);if($('liveNarrative').checked)liveTimer=setTimeout(()=>{if(local&&clean())typedRequest('structure','reading');},400);}
 $('liveNarrative').onchange=scheduleTypedReading;
-async function typedRequest(mode){
+async function typedRequest(mode,profile='full'){
   if(typedBusy)return;
   if(!clean()){notice('Synchronize first.',true);return;}
   const snapshotRev=rev;typedBusy=true;
   $('extractTerm').disabled=$('informath').disabled=true;
   $('typedStatus').textContent=mode==='structure'?'Elaborating trusted proof locally…':'Running separately installed Informath…';
-  try{const r=await api(mode,{source:lean.value});if(snapshotRev!==rev)return;
-    if(mode==='structure'){$('typedTree').replaceChildren();patchNode=null;patchCandidate=null;$('typedPatch').hidden=true;$('applyPatch').disabled=true;foldedPaths.clear();typedRoot=r.tree;showTypedNarrative();renderTyped(r.tree,$('typedTree'));$('typedStatus').textContent='Extracted from Lean elaboration. Tree is depth-limited; inspect the original proof separately.';}
+  try{const source=lean.value;
+    const reusable=mode==='structure'&&source===lastTypedSource&&lastTypedTree&&(profile==='reading'||lastTypedProfile==='full');
+    const r=reusable?{tree:lastTypedTree}:await api(mode,{source,profile});if(snapshotRev!==rev)return;
+    if(mode==='structure'){$('typedTree').replaceChildren();patchNode=null;patchCandidate=null;$('typedPatch').hidden=true;$('applyPatch').disabled=true;foldedPaths.clear();typedRoot=r.tree;proofIndex=indexProof(typedRoot);if(!reusable){lastTypedSource=source;lastTypedProfile=profile;lastTypedTree=r.tree;}$('typedNarrative').classList.remove('staleReading');$('typedTree').classList.remove('staleReading');showTypedNarrative();renderTyped(r.tree,$('typedTree'));$('typedStatus').textContent='Extracted from Lean elaboration. Tree is depth-limited; inspect the original proof separately.'+(profile==='reading'?' Live reading: alternative search deferred.':'');}
     else{$('informathOutput').textContent=r.narrative;$('typedStatus').textContent='Informath output · alignment not certified.';}
   }catch(e){if(snapshotRev===rev)$('typedStatus').textContent=e.message;}
   finally{typedBusy=false;$('extractTerm').disabled=$('informath').disabled=false;if(snapshotRev!==rev&&$('liveNarrative').checked)scheduleTypedReading();}

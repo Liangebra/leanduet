@@ -1,5 +1,5 @@
 import {phrase,rulePhrase} from './languages.mjs';
-export function narrate(root,lang='en',{collapsed=new Set()}={}){
+export function narrate(root,lang='en',{collapsed=new Set(),counts=null}={}){
   const result=[];
   const say=(key,name)=>phrase(lang,key,name);
   // Collapse is a projection of the original occurrence tree, not a proof rewrite.
@@ -28,7 +28,7 @@ export function narrate(root,lang='en',{collapsed=new Set()}={}){
     }
     const foldable=n.kind==='apply'&&children.length>0&&typeof n.path==='string';
     const folded=foldable&&collapsed.has(n.path);
-    const hiddenCount=folded?children.reduce((a,c)=>a+rowCount(c),0):0;
+    const hiddenCount=folded?children.reduce((a,c)=>a+(counts?.get(c)??rowCount(c)),0):0;
     if(!folded)for(const c of children)walk(c,d);
     if(n.kind==='apply'){
       const lexical=rulePhrase(lang,n.reference);

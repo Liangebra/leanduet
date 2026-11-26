@@ -100,7 +100,7 @@ def isWitnessArg (head : Expr) (i : Nat) : Bool :=
   | .const n _ => n == `Exists.intro && i == 2
   | _ => false
 
-partial def inspect (e : Expr) (fuel : Nat) (path : String := "root") : MetaM Json := do
+partial def inspect (e : Expr) (fuel : Nat) (path : String := "root") (suggestions : Bool := true) : MetaM Json := do
   let term := (← ppExpr e).pretty
   let ty ← inferType e
   let typ := (← ppExpr ty).pretty
@@ -112,18 +112,18 @@ partial def inspect (e : Expr) (fuel : Nat) (path : String := "root") : MetaM Js
       let binderType := (← ppExpr t).pretty
       let kind := if ← isProp t then "assume" else "introduce"
       withLocalDecl n bi t fun x => do
-        let child ← inspect (b.instantiate1 x) (fuel - 1) (path ++ "/body")
+        let child ← inspect (b.instantiate1 x) (fuel - 1) (path ++ "/body") suggestions
         return node path editable scope kind term typ #[child]
           [("binder", toJson n.toString), ("binderType", toJson binderType)]
   | .letE n t v b _ =>
       let binderType := (← ppExpr t).pretty
-      let value ← inspect v (fuel - 1) (path ++ "/value")
+      let value ← inspect v (fuel - 1) (path ++ "/value") suggestions
       withLetDecl n t v fun x => do
-        let body ← inspect (b.instantiate1 x) (fuel - 1) (path ++ "/body")
+        let body ← inspect (b.instantiate1 x) (fuel - 1) (path ++ "/body") suggestions
         return node path editable scope "let" term typ #[value, body]
           [("binder", toJson n.toString), ("binderType", toJson binderType)]
   | .app .. =>
-      let alternatives ← if editable then localApplications ty else pure #[]
+      let alternatives ← if editable && suggestions then localApplications ty else pure #[]
       let head := e.getAppFn
       let headText := (← ppExpr head).pretty
       let headType := (← ppExpr (← inferType head)).pretty
@@ -140,7 +140,7 @@ partial def inspect (e : Expr) (fuel : Nat) (path : String := "root") : MetaM Js
             (← ppExpr a).pretty (← ppExpr aType).pretty)
         else if ← isProp (← inferType a) then
           if children.size < 8 then
-            children := children.push (← inspect a (fuel - 1) argPath)
+            children := children.push (← inspect a (fuel - 1) argPath suggestions)
           else
             omittedProofArguments := omittedProofArguments + 1
       let ref := match head with
@@ -151,7 +151,7 @@ partial def inspect (e : Expr) (fuel : Nat) (path : String := "root") : MetaM Js
           ("omittedProofArguments", toJson omittedProofArguments)]
   | .const n _ => return node path editable scope "reference" term typ #[] [("reference", toJson n.toString)]
   | .fvar _ => return node path editable scope "hypothesis" term typ
-  | .mdata _ body => inspect body (fuel - 1) path
+  | .mdata _ body => inspect body (fuel - 1) path suggestions
   | _ => return node path editable scope "opaque" term typ
 
 elab "#duet_extract " n:ident : command => do
@@ -164,6 +164,15 @@ elab "#duet_extract " n:ident : command => do
         ("tree", result)]
       logInfo m!"LEANDUET_JSON:{j.compress}"
     | _ => throwError "Expected a theorem"
+
+/-- Reading-only profile: do not search alternative local applications at every occurrence. -/
+elab "#duet_extract_fast " n:ident : command => do
+  liftTermElabM do
+    let .thmInfo v ← getConstInfo n.getId | throwError "Expected a theorem"
+    let result ← inspect v.value 10 "root" false
+    let j := Json.mkObj [("schema", toJson (1 : Nat)), ("declaration", toJson n.getId.toString),
+      ("profile", toJson "reading"), ("tree", result)]
+    logInfo m!"LEANDUET_JSON:{j.compress}"
 
 /-- Rebuild exactly one expression path, elaborating the replacement in its actual scope. -/
 partial def replaceAt (e : Expr) (path : List String) (stx : Syntax)
