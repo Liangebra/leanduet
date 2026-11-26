@@ -337,7 +337,7 @@ partial def encodeExpr (e : Expr) (fuel : Nat := 96) (depth : Nat := 0) :
     unless i < depth do throwError "Loose bound variable in IR"
     return tag "bound" #[toJson i]
   | .fvar id =>
-    let d ← getLocalDecl id
+    let some d := (← getLCtx).findDecl? id | throwError "Unknown free variable in IR"
     return tag "local" #[toJson d.index]
   | .mvar _ => throwError "Unresolved metavariable in IR"
   | .sort u => return tag "sort" #[encodeLevel u]
@@ -379,7 +379,9 @@ def encodeJudgment (e ty : Expr) (proposed : Option Expr) : StateT Nat MetaM Jso
       let equal ← isDefEq p ty
       pure (Json.mkObj [("term", ← checkedEncode p),
         ("display", toJson (← ppExpr p).pretty), ("matchesGoal", toJson equal)])
-  let kind := if ← isProp ty then "proof" else if ← isProp e then "proposition" else "expression"
+  let proof ← isProp ty
+  let proposition ← isProp e
+  let kind := if proof then "proof" else if proposition then "proposition" else "expression"
   return Json.mkObj [("context", Json.arr context), ("term", ← checkedEncode e),
     ("type", ← checkedEncode ty), ("kind", toJson kind), ("formula", formula),
     ("termDisplay", toJson (← ppExpr e).pretty), ("typeDisplay", toJson (← ppExpr ty).pretty)]
