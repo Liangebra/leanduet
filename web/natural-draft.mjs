@@ -98,7 +98,8 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map()}=
       // even when a limited schema finds just one possible proof.
     }
     if(choices.has(line)&&!candidates.some(c=>c.term===choices.get(line)))throw Error('Selected candidate is no longer available.');
-    const dependencies=[...new Set(application.split(/\s+/).filter(name=>openNames.has(name)))];
+    const applicationPremises=candidates.find(c=>c.term===application)?.premises||application.split(/\s+/);
+    const dependencies=[...new Set(applicationPremises.filter(name=>openNames.has(name)))];
     const proofStatus=application==='?'?'open':dependencies.length?'depends-on-open':'candidate';
     const step=makeStep(p,last,application);
     if(step.kind==='establish'&&proofStatus!=='candidate')openNames.add(step.name);

@@ -47,3 +47,11 @@ no choice is inferred from ordering. The original text remains unchanged.
 The browser resets choices on text or target change and invalidates staged
 patches and in-flight inference when choices change. Choices are not verified
 proofs, persisted cross-revision identities, or an automatic CSP solver.
+
+## Quantifier inference subset
+
+The candidate index supports typed existential introduction, bounded universal
+elimination, and bounded existential introduction using actual local witness
+and membership/evidence references. Indexed joins and a 4096-probe budget
+bound search; overflow is not uniqueness. For untyped binders the domain is
+not inferred by the browser: Lean elaboration remains necessary.
