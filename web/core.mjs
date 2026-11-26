@@ -59,7 +59,7 @@ function parseProse(text){
       const label=rule?.[1]??"Lean step";
       if(!expr.startsWith(label+" "))throw Error(`Prose line ${i+3}: unsupported sentence.`);
       const arg=JSON.parse(expr.slice(label.length+1));
-      if(typeof arg!=="string"||!arg||/[\r\n]/.test(arg))throw Error("Expected one Lean fragment.");
+      if(typeof arg!=="string"||!arg||/[\r\n]/.test(arg)||/^\s/.test(arg))throw Error("Expected one Lean fragment.");
       lean=rule?rule[0]+" "+arg:arg;
     }
     return " ".repeat(+m[1])+lean;
@@ -72,6 +72,7 @@ function sameStatement(a,b){return a.header===b.header&&JSON.stringify(a.prelude
 function planSync(base,lean,prose,side){
   if(!["lean","prose"].includes(side))throw Error("Unknown sync direction.");
   if(lean!==base.lean&&prose!==base.prose)throw Error("Both sides changed. Save or explicitly revert one side before synchronizing.");
+  if(side==="lean"&&prose!==base.prose||side==="prose"&&lean!==base.lean)throw Error("The other side contains unsynchronized edits. Synchronize from that side instead.");
   const ir=side==="lean"?parseLean(lean):parseProse(prose);
   if(!sameStatement(parseLean(base.lean),ir))throw Error("Statement or imports changed. Start a new document explicitly.");
   return {ir,lean:renderLean(ir),prose:renderProse(ir)};
