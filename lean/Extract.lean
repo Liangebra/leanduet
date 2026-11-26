@@ -804,6 +804,27 @@ elab "#duet_document " names:str : command => do
         ("universes",toJson (v.levelParams.map Name.toString))])
     logInfo m!"LEANDUET_JSON:{(Json.mkObj [("schema",toJson (1 : Nat)),("declarations",Json.arr rows)]).compress}"
 
+
+/-- Compare the actual closed statements and proof values of declarations
+    not selected for an edit. Names, universe parameters and all expression
+    constructors are retained; source metadata is erased as in IR export. -/
+elab "#duet_document_snapshot " names:str : command => do
+  liftTermElabM do
+    let raw ← fromDecoded (Json.parse names.getString)
+    let arr ← fromDecoded raw.getArr?
+    if arr.size > 32 then throwError "Too many declarations to compare"
+    let mut rows : Array Json := #[]
+    for j in arr do
+      let s ← fromDecoded j.getStr?
+      let n := (s.splitOn ".").foldl Name.str Name.anonymous
+      let .thmInfo v ← getConstInfo n | throwError "Expected a theorem"
+      let (ty, budget) ← (checkedEncode v.type).run 12000
+      let (proof, _) ← (checkedEncode v.value).run budget
+      rows := rows.push (Json.mkObj [
+        ("name", toJson s), ("universes", Json.arr (v.levelParams.toArray.map encodeName)),
+        ("type", ty), ("term", proof)])
+    logInfo m!"LEANDUET_JSON:{(Json.mkObj [("declarations", Json.arr rows)]).compress}"
+
 def finishCandidate (goal : Expr) (expected : Expr) (forbidden : Name)
     (label : String) (required : List FVarId) : MetaM (Option Json) := do
   let p ← instantiateMVars goal

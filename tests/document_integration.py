@@ -12,7 +12,8 @@ theorem second (P : Prop) (h1 h2 : P) : P := by
 d=document_info(source)
 assert [r["name"] for r in d["declarations"]]==["first","second"],d
 assert d["declarations"][1]["dependencies"]==["first"],d
-assert not d["declarations"][0]["editable"] and d["declarations"][1]["editable"],d
+assert all(r["editable"] for r in d["declarations"]),d
+assert d["declarations"][0]["transitiveDependents"]==["second"],d
 def walk(n):
     yield n
     for c in n["children"]: yield from walk(c)
@@ -21,8 +22,20 @@ r=document_patch(source,"second",node["path"],"h2")
 assert r["source"].startswith(source[:source.index("theorem second")]),r
 assert r["proofShapePreserved"] and r["statementDefEq"] and r["prefixPreserved"],r
 assert document_info(r["source"])["declarations"][1]["dependencies"]==[],r
-try:
-    document_patch(source,"first","root","by assumption")
-except ValueError: pass
-else: raise AssertionError("Earlier declaration unexpectedly editable")
-print("Verified document graph and final theorem edit")
+source2="""theorem first (P : Prop) (h1 h2 : P) : P := by
+  exact h1
+
+theorem second (P : Prop) (h1 h2 : P) : P := by
+  exact first P h1 h2
+
+theorem third (P : Prop) (h1 h2 : P) : P := by
+  exact second P h1 h2
+"""
+d=document_info(source2)
+assert d["declarations"][2]["transitiveDependencies"]==["first","second"],d
+assert d["declarations"][0]["transitiveDependents"]==["second","third"],d
+target=next(n for n in walk(document_extract(source2,"first")["tree"]) if n.get("term")=="h1" and n.get("kind")=="hypothesis")
+r=document_patch(source2,"first",target["path"],"h2")
+assert r["otherDeclarationsPreserved"] and r["checkedOtherDeclarations"]==["second","third"],r
+assert r["source"].endswith(source2[source2.index("theorem second"):]),r
+print("Earlier theorem edit preserves all other declaration structures and transitive dependencies")

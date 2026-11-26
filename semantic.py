@@ -236,16 +236,41 @@ def _document_declarations(source):
             raise ValueError("Flat document mode requires indented continuations and theorem/lemma declarations only.")
     return matches
 
+def _dependency_closure(rows):
+    names=[r["name"] for r in rows]
+    graph={r["name"]:set(r["dependencies"]) for r in rows}
+    if len(graph)!=len(names) or any(not deps.issubset(graph) for deps in graph.values()):
+        raise ValueError("Invalid document dependency graph.")
+    def reachable(n):
+        found=set()
+        pending=list(graph[n])
+        while pending:
+            v=pending.pop()
+            if v==n:
+                raise ValueError("Cyclic document reference.")
+            if v not in found:
+                found.add(v)
+                pending.extend(graph[v])
+        return found
+    closure={n:reachable(n) for n in names}
+    for r in rows:
+        n=r["name"]
+        r["transitiveDependencies"]=[k for k in names if k in closure[n]]
+        r["dependents"]=[k for k in names if n in graph[k]]
+        r["transitiveDependents"]=[k for k in names if n in closure[k]]
+    return rows
+
 def document_info(source,project=None):
     matches=_document_declarations(source)
     names=[m.group(1) for m in matches]
     arg=json.dumps(json.dumps(names,ensure_ascii=False),ensure_ascii=False)
     result=_run_lean("import Lean\n"+source.rstrip()+"\n\n"+_adapter()+"\n#duet_document "+arg+"\n",project)
-    for i,(m,row) in enumerate(zip(matches,result["declarations"])):
-        if row["name"]!=m.group(1):
-            raise ValueError("Declaration identity mismatch.")
+    if [r["name"] for r in result["declarations"]]!=names:
+        raise ValueError("Declaration identity mismatch.")
+    for m,row in zip(matches,result["declarations"]):
         row["line"]=source.count("\n",0,m.start())+1
-        row["editable"]=i==len(matches)-1 and not row["universes"]
+        row["editable"]=not row["universes"]
+    _dependency_closure(result["declarations"])
     return result
 
 def document_extract(source,declaration,project=None):
@@ -254,12 +279,21 @@ def document_extract(source,declaration,project=None):
         raise ValueError("Select a declaration in this document.")
     return _run_lean("import Lean\n"+source.rstrip()+"\n\n"+_adapter()+"\n#duet_extract "+declaration+"\n",project)
 
+def _document_snapshot(source,names,project=None):
+    if not names:
+        return {"declarations":[]}
+    arg=json.dumps(json.dumps(names,ensure_ascii=False),ensure_ascii=False)
+    return _run_lean("import Lean\n"+source.rstrip()+"\n\n"+_adapter()+"\n#duet_document_snapshot "+arg+"\n",project)
+
 def document_patch(source,declaration,path,replacement,project=None):
-    """Edit only the final theorem; preserve the verified preceding text exactly."""
+    """Edit one theorem, recompile, and compare all other declaration structures."""
     matches=_document_declarations(source)
-    m=matches[-1]
-    if declaration!=m.group(1):
-        raise ValueError("Only the final theorem can be edited; earlier declarations are read-only.")
+    names=[m.group(1) for m in matches]
+    if declaration not in names:
+        raise ValueError("Select a declaration in this document.")
+    i=names.index(declaration)
+    m=matches[i]
+    end=matches[i+1].start() if i+1<len(matches) else len(source)
     if not isinstance(path,str) or not re.fullmatch(r"root(?:/(?:body|value|arg[0-9]+)){0,16}",path):
         raise ValueError("Invalid proof node path.")
     if not isinstance(replacement,str) or not replacement.strip() or len(replacement)>16000:
@@ -269,17 +303,28 @@ def document_patch(source,declaration,path,replacement,project=None):
     args=" ".join(json.dumps(x,ensure_ascii=False) for x in (path,replacement))
     original="import Lean\n"+source.rstrip()+"\n\n"
     r=_run_lean(original+adapter+"\n#duet_patch "+declaration+" "+args+"\n",project)
-    prefix=source[:m.start()]
-    candidate=source if r.get("unchanged") else _safe_proof(prefix+_candidate(declaration,r["type"],r["term"],""))
+    prefix,suffix=source[:m.start()],source[end:]
+    candidate=source if r.get("unchanged") else _safe_proof(prefix+_candidate(declaration,r["type"],r["term"],"")+("\n" if suffix else "")+suffix)
+    if [m.group(1) for m in _document_declarations(candidate)]!=names:
+        raise ValueError("The edit changed the declaration inventory.")
     _run_lean(candidate+'\n#eval "LEANDUET_DOCUMENT_OK"\n',project,"LEANDUET_DOCUMENT_OK")
+    others=[n for n in names if n!=declaration]
     if not r.get("unchanged"):
         other="LeanDuetDocumentPreview"
         if re.search(r"\b"+other+r"\b",source):
             raise ValueError("Reserved preview declaration name.")
         renamed=_candidate(other,r["type"],r["term"],"")
         _run_lean(original+renamed+"\n"+adapter+"\n#duet_compare "+declaration+" "+other+" "+args+"\n",project,"LEANDUET_TYPE_AND_SHAPE_MATCH")
+        before=_document_snapshot(source,others,project)
+        after=_document_snapshot(candidate,others,project)
+        if before!=after:
+            old={x["name"]:x for x in before["declarations"]}
+            changed=[x["name"] for x in after["declarations"] if old.get(x["name"])!=x]
+            raise ValueError("Other declarations changed structure: "+", ".join(changed))
     return {"source":candidate,"declaration":declaration,"path":path,"statementDefEq":True,
-            "proofShapePreserved":True,"prefixPreserved":True,"unchanged":bool(r.get("unchanged"))}
+            "proofShapePreserved":True,"prefixPreserved":True,"suffixPreserved":True,
+            "otherDeclarationsPreserved":True,"checkedOtherDeclarations":others,
+            "unchanged":bool(r.get("unchanged"))}
 
 def inspect_ir(source, path, formula="", project=None):
     """Export a revision-local typed judgment as structural kernel syntax."""
