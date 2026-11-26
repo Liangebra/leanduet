@@ -71,7 +71,7 @@ function reading(){
 function install(next,{save=true}={}){clearTimeout(timer);ir=next;const l=renderLean(ir),p=renderProse(ir);if(lean.value!==l)lean.value=l;if(prose.value!==p)prose.value=p;base={lean:l,prose:p};invalidate();dirty();reading();notice('Representations synchronized. Lean verification and narrative review are separate.');if(save)persist();}
 function sync(side){clearTimeout(timer);try{install(planSync(base,lean.value,prose.value,side).ir);}catch(e){notice(e.message,true);persist();}}
 for(const [el,side] of [[lean,'lean'],[prose,'prose']])el.addEventListener('input',()=>{clearTimeout(timer);invalidate();$('stepEditor').hidden=true;$('editStep').disabled=true;dirty();notice('Unsynchronized edits · both drafts are retained.');persist();if($('auto').checked)timer=setTimeout(()=>sync(side),450);});
-notes.addEventListener('input',()=>{notesRev++;candidate=null;narrative=null;$('accept').disabled=true;$('useNarrative').disabled=true;$('proposal').textContent='Notes changed. Request a new proposal.';$('exploreStatus').textContent='Exploration saved independently of the proof.';refreshStage();persist();});
+notes.addEventListener('input',()=>{notesRev++;candidate=null;narrative=null;$('accept').disabled=true;$('useNarrative').disabled=true;$('proposal').textContent='Notes changed. Request a new proposal.';$('exploreStatus').textContent='Exploration edited independently of the proof.';refreshStage();persist();});
 for(const evt of ['click','keyup','scroll','select'])lean.addEventListener(evt,gutter);
 function cursorLink(){
   if(!clean()||document.activeElement!==lean)return;
@@ -124,11 +124,15 @@ function drawExploration(){
     const row=element('div',undefined,'panelactions exploreActions');
     const copy=element('button','Append to notes');copy.onclick=()=>{const current=exploration.items.find(x=>x.id===item.id);appendNotes(explorationMarkdown({schema:1,next:exploration.next,items:[current]}));};
     const alternative=element('button','Try an alternative');alternative.onclick=()=>{const current=exploration.items.find(x=>x.id===item.id);newObject({label:current.label,expression:current.expression,links:'#'+item.id,comment:'Alternative to #'+item.id});};
-    row.append(copy,alternative);detail.append(row);target.append(detail);
+    const stage=element('button','Try as goal');stage.onclick=()=>{
+      const current=exploration.items.find(x=>x.id===item.id);
+      stageExplorationFormula(current.expression,'objectStatus');
+    };
+    row.append(copy,alternative,stage);detail.append(row);target.append(detail);
   }
 }
 function newObject(initial={}){
-  try{exploration=addObject(exploration,initial);drawExploration();const last=$('exploreObjects').lastElementChild;if(last){last.open=true;last.querySelector('input').focus();}persist();$('objectStatus').textContent='Working object saved. No mathematical validity is implied.';}
+  try{exploration=addObject(exploration,initial);drawExploration();const last=$('exploreObjects').lastElementChild;if(last){last.open=true;last.querySelector('input').focus();}persist();$('objectStatus').textContent='Working object recorded. No mathematical validity is implied.';}
   catch(e){$('objectStatus').textContent=e.message;}
 }
 $('addObject').onclick=()=>newObject();
@@ -152,18 +156,21 @@ $('noteGoal').onclick=()=>{
     'Goal:\n'+n.type+'\n\nIdeas:\n');
   setView('notes');notes.focus();notes.setSelectionRange(notes.value.length,notes.value.length);
 };
-$('stageFormula').onclick=()=>{
-  if(!patchNode||!typedRoot||!clean()||patchNode.kind==='witness')return;
-  const selected=notes.value.slice(notes.selectionStart,notes.selectionEnd).trim();
+$('stageFormula').onclick=()=>stageExplorationFormula(notes.value.slice(notes.selectionStart,notes.selectionEnd),'exploreStatus');
+function stageExplorationFormula(raw,statusId){
+  if(!patchNode||!typedRoot||!clean()||patchNode.kind==='witness'){
+    $(statusId).textContent='Select a typed proof goal first. Your working expression is retained.';return;
+  }
+  const selected=raw.trim();
   try{
     if(!((selected.startsWith('$')&&selected.endsWith('$'))||(selected.startsWith('\\(')&&selected.endsWith('\\)'))||(selected.startsWith('\\[')&&selected.endsWith('\\]'))))throw Error('Select one delimited LaTeX formula, not the entire argument.');
     compileFormula(selected);
     $('formulaGoal').value=selected;$('formulaGoal').dispatchEvent(new Event('input'));
     $('ruleStatus').textContent='Staged from exploration. Find typed proofs to check the goal in Lean.';
-    $('exploreStatus').textContent='Formula staged; notes and Lean source are unchanged.';
+    $(statusId).textContent='Formula staged; working objects, notes and Lean source are unchanged.';
     setView('typed');$('formulaGoal').focus();
-  }catch(e){$('exploreStatus').textContent='Not staged: '+e.message+' Your notes are unchanged.';}
-};
+  }catch(e){$(statusId).textContent='Not staged: '+e.message+' Your exploration is unchanged.';}
+}
 let completionVersion=0;
 function hideCompletion(){completionVersion++;$('completionPanel').hidden=true;}
 $('closeCompletion').onclick=hideCompletion;
