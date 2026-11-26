@@ -8,7 +8,11 @@ const parsedTypes=new Map();
 const parse=s=>{
  if(typeof s!=='string'||s.length>3000)return null;
  if(parsedTypes.has(s))return parsedTypes.get(s);
- let result=null;try{result=compileFormula(s).scoped;}catch{}
+ let result=null;try{
+  // Delimited math and Lean context are distinct concrete syntaxes.
+  const syntax=/^\s*(?:\$|\\)/.test(s)||s.includes('\\')?'math':'lean';
+  result=compileFormula(s,{syntax}).scoped;
+ }catch{}
  if(parsedTypes.size>=256)parsedTypes.delete(parsedTypes.keys().next().value);
  parsedTypes.set(s,result);return result;
 };
@@ -18,6 +22,18 @@ export function premiseFrame(text,scope){
  const names=m[1].trim().replace(/[，,。.]$/,'').split(/\s*(?:[,，、]|与|和|\band\b)\s*/iu);
  if(!names.length||names.length>4||names.some(n=>!simple.test(n)||scope.filter(x=>x===n).length!==1))return null;
  return {kind:'premise-frame',premises:names};
+}
+// Capture-safe removal of the outer binder for a free local witness.
+function specialize(tree,witness,depth=0){
+ if(tree.kind==='bound'){
+  if(tree.index===depth)return {kind:'free',name:witness};
+  return tree.index>depth?{kind:'bound',index:tree.index-1}:tree;
+ }
+ if(tree.kind==='binder')return {...tree,domain:tree.domain?specialize(tree.domain,witness,depth):null,body:specialize(tree.body,witness,depth+1)};
+ if(tree.kind==='binary')return {...tree,left:specialize(tree.left,witness,depth),right:specialize(tree.right,witness,depth)};
+ if(tree.kind==='unary')return {...tree,body:specialize(tree.body,witness,depth)};
+ if(tree.kind==='call')return {...tree,fn:specialize(tree.fn,witness,depth),args:tree.args.map(a=>specialize(a,witness,depth))};
+ return tree;
 }
 export function contextCandidates(goal,names,facts){
  const target=parse(goal),out=[],seen=new Set();
@@ -41,6 +57,8 @@ export function contextCandidates(goal,names,facts){
  if(entries.length===2){
   for(const [a,b] of [entries,[entries[1],entries[0]]]){
    if(binary(a.type,'→')&&equal(a.type.left,b.type)&&equal(a.type.right,target))add('implication elimination',a.name,[b.name]);
+   if(target.kind==='binder'&&target.op==='∃'&&equal(target.domain,a.type)&&equal(specialize(target.body,a.name),b.type))add('existential introduction','Exists.intro',[a.name,b.name]);
+   if(a.type.kind==='binder'&&a.type.op==='∀'&&equal(a.type.domain,b.type)&&equal(specialize(a.type.body,b.name),target))add('universal specialization',a.name,[b.name]);
    if(binary(a.type,'↔')){
     if(equal(a.type.left,b.type)&&equal(a.type.right,target))add('equivalence forward','Iff.mp',[''+a.name,b.name]);
     if(equal(a.type.right,b.type)&&equal(a.type.left,target))add('equivalence backward','Iff.mpr',[a.name,b.name]);
@@ -48,6 +66,22 @@ export function contextCandidates(goal,names,facts){
    if(binary(target,'∧')&&equal(a.type,target.left)&&equal(b.type,target.right))add('conjunction introduction','And.intro',[a.name,b.name]);
    for(const [op,rule] of [['=','Eq.trans'],['≤','le_trans'],['<','lt_trans']]){
     if(binary(a.type,op)&&binary(b.type,op)&&binary(target,op)&&equal(a.type.right,b.type.left)&&equal(a.type.left,target.left)&&equal(b.type.right,target.right))add('transitivity '+op,rule,[a.name,b.name]);
+   }
+  }
+ }
+ if(entries.length===3){
+  for(let i=0;i<3;i++)for(let j=0;j<3;j++){
+   if(i===j)continue;
+   const a=entries[i],b=entries[j],e=entries[3-i-j];
+   // For an inferred domain, membership and the specialized formula constrain
+   // the witness; Lean must still elaborate its actual type.
+   if(a.type.kind==='binder'&&a.type.op==='∀'&&(!a.type.domain||equal(a.type.domain,b.type))){
+    const body=specialize(a.type.body,b.name);
+    if(binary(body,'→')&&equal(body.left,e.type)&&equal(body.right,target)&&(a.type.domain||binary(body.left,'∈')))add('bounded universal elimination',a.name,[b.name,e.name]);
+   }
+   if(target.kind==='binder'&&target.op==='∃'&&!target.domain){
+    const body=specialize(target.body,a.name);
+    if(binary(body,'∧')&&binary(body.left,'∈')&&equal(body.left,b.type)&&equal(body.right,e.type))add('bounded existential introduction','Exists.intro',[a.name,'(And.intro '+b.name+' '+e.name+')']);
    }
   }
  }
@@ -117,7 +151,7 @@ export function citationCandidates(frame,scope,facts,{limit=8}={}){
 
 
 // Retrieve premises by formula structure, not by the author's chosen names.
-// Only the supported one-/two-premise schemas are searched; no Lean call.
+// Only the supported small-arity schemas are searched; no Lean call.
 // Index matching uses canonical surface trees, not definitional equality.
 export function implicitCandidates(goal,scope,facts,{rule='',limit=8}={}){
  const target=parse(goal);
@@ -133,8 +167,10 @@ export function implicitCandidates(goal,scope,facts,{rule='',limit=8}={}){
   const e={name,t};entries.push(e);insert(types,key(t),e);
   if(t.kind==='binary'&&['=','≤','<'].includes(t.op))insert(relations,key([t.op,t.left,t.right]),e);
  }
- const out=[],seen=new Set();let overflow=false;
+ const out=[],seen=new Set();let overflow=false,probes=0;
  function probe(names){
+  if(overflow)return;
+  if(++probes>4096){overflow=true;return;}
   for(const c of contextCandidates(goal,names,facts)){
    if(rule&&rule!==c.rule||seen.has(c.term))continue;
    seen.add(c.term);
@@ -148,6 +184,8 @@ export function implicitCandidates(goal,scope,facts,{rule='',limit=8}={}){
   const t=e.t;
   let partners=[];
   if(binary(t,'→')&&equal(t.right,target))partners.push(...lookup(t.left));
+  if(t.kind==='binder'&&t.op==='∀'&&t.domain)partners.push(...lookup(t.domain));
+  if(target.kind==='binder'&&target.op==='∃'&&equal(target.domain,t))partners.push(...lookup(specialize(target.body,e.name)));
   if(binary(t,'↔')){
    if(equal(t.right,target))partners.push(...lookup(t.left));
    if(equal(t.left,target))partners.push(...lookup(t.right));
@@ -159,6 +197,27 @@ export function implicitCandidates(goal,scope,facts,{rule='',limit=8}={}){
   for(const p of partners){probe([e.name,p.name]);if(overflow)break;}
   if(overflow)break;
  }
+ // Search indexed antecedents/evidence rather than a cubic Cartesian product.
+ if(!overflow)for(const h of entries){
+  if(h.t.kind!=='binder'||h.t.op!=='∀'||!binary(h.t.body,'→'))continue;
+  for(const w of h.t.domain?lookup(h.t.domain):entries){
+   const body=specialize(h.t.body,w.name);
+   if(!equal(body.right,target)||(!h.t.domain&&!binary(body.left,'∈')))continue;
+   for(const evidence of lookup(body.left)){probe([h.name,w.name,evidence.name]);if(overflow)break;}
+   if(overflow)break;
+  }
+  if(overflow)break;
+ }
+ if(!overflow&&target.kind==='binder'&&target.op==='∃'&&!target.domain&&binary(target.body,'∧')&&binary(target.body.left,'∈')){
+  for(const w of entries){
+   const body=specialize(target.body,w.name);
+   for(const membership of lookup(body.left)){
+    for(const evidence of lookup(body.right)){probe([w.name,membership.name,evidence.name]);if(overflow)break;}
+    if(overflow)break;
+   }
+   if(overflow)break;
+  }
+ }
  return {candidates:out,overflow};
 }
-export const structuralRules=new Set(['And.left','And.right','And.intro','Eq.symm','Eq.trans','Iff.mp','Iff.mpr','le_trans','lt_trans']);
+export const structuralRules=new Set(['And.left','And.right','And.intro','Eq.symm','Eq.trans','Iff.mp','Iff.mpr','le_trans','lt_trans','Exists.intro']);

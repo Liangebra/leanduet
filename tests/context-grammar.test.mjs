@@ -72,3 +72,44 @@ test('indexed retrieval keeps ambiguity and excludes irrelevant premises',()=>{
  assert.equal(r.candidates.length,1);
  assert.equal(draftProof('由等式传递性得到 $a=c$',[...facts.keys()],facts).term,null);
 });
+
+test('Lean application syntax participates in citations and contextual inference',()=>{
+ const facts=new Map([['h','P x'],['f','P x → Q x']]);
+ assert.deepEqual(contextCandidates('(Q x)',['h','f'],facts).map(c=>c.term),['f h']);
+ assert.equal(draftProof('由 $P(x)$ 与 f 得到 $Q(x)$',['h','f'],facts).rows[0].step.application,'f h');
+});
+test('universal specialization uses typed local witnesses and preserves nested binders',()=>{
+ const facts=new Map([['h','∀ x : Nat, ∃ y : Nat, R x y'],['a','Nat'],['b','Int']]);
+ const r=implicitCandidates('(∃ z : Nat, R a z)',[...facts.keys()],facts);
+ assert.deepEqual(r.candidates.map(c=>c.term),['h a']);
+ assert.equal(contextCandidates('(∃ z : Nat, R b z)',['h','b'],facts).length,0);
+ assert.equal(contextCandidates('(∃ z : Nat, R z z)',['h','a'],facts).length,0);
+});
+test('bounded math citations match the generated Lean binder representation',()=>{
+ const facts=new Map([['h','∀ x, x ∈ S → P x']]);
+ const frame=formulaPremiseSentence('由 $∀ y ∈ S, P(y)$ 可得 $∀ z ∈ S, P(z)$');
+ assert.equal(citationCandidates(frame,['h'],facts).candidates[0].term,'h');
+});
+
+test('typed existential introduction retrieves witness and evidence without inventing a witness',()=>{
+ const facts=new Map([['a','Nat'],['b','Int'],['ha','P a'],['hb','P b']]);
+ const r=implicitCandidates('(∃ x : Nat, P x)',[...facts.keys()],facts,{rule:'Exists.intro'});
+ assert.deepEqual(r.candidates.map(c=>c.term),['Exists.intro a ha']);
+ assert.equal(contextCandidates('(∃ x : Nat, P x)',['b','hb'],facts).length,0);
+});
+test('bounded universal elimination and existential introduction preserve membership evidence',()=>{
+ const facts=new Map([['h','∀ x, x ∈ S → P x'],['a','Nat'],['ha','a ∈ S'],['hp','P a'],['bad','a ∈ T']]);
+ assert.ok(implicitCandidates('P a',[...facts.keys()],facts).candidates.some(c=>c.term==='h a ha'));
+ assert.equal(contextCandidates('P a',['h','a','bad'],facts).length,0);
+ const r=implicitCandidates('(∃ x, x ∈ S ∧ P x)',[...facts.keys()],facts,{rule:'Exists.intro'});
+ assert.deepEqual(r.candidates.map(c=>c.term),['Exists.intro a (And.intro ha hp)']);
+ assert.equal(contextCandidates('(∃ x, x ∈ S ∧ P x)',['a','bad','hp'],facts).length,0);
+});
+test('nested applications propagate open proof dependencies by structured premise references',()=>{
+ const facts=new Map([['a','Nat'],['hm','a ∈ S']]);
+ const r=draftProof('establish hp : $P(a)$\n由 a、hm、hp 得到 $∃ x ∈ S, P(x)$',[...facts.keys()],facts);
+ assert.equal(r.complete,true);
+ assert.equal(r.rows[1].step.application,'Exists.intro a (And.intro hm hp)');
+ assert.equal(r.rows[1].proofStatus,'depends-on-open');
+ assert.deepEqual(r.rows[1].dependencies,['hp']);
+});

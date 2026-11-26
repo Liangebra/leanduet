@@ -16,3 +16,55 @@ test('unknown assumptions do not vanish and block executable export',()=>{
  assert.equal(d.complete,false);assert.equal(d.term,null);
  assert.equal(d.rows[0].raw,'uniformly $Q$');assert.equal(d.rows[1].status,'provisional');
 });
+
+test('future intermediate names cannot masquerade as global declarations',()=>{
+ const d=draftProof('$P$ | later\nestablish later : $Q$ | f\n$R$ | g',['f','g']);
+ assert.equal(d.complete,false);
+ assert.match(d.rows[0].reason,/forward/);
+});
+test('automatic naming does not collide with a later explicit binding',()=>{
+ const d=draftProof('$P$ | f\nestablish duet_h1 : $Q$ | g\n$R$ | h',['f','g','h']);
+ assert.equal(d.complete,true);
+ assert.equal(d.steps[0].name,'duet_h2');
+});
+
+test('ambiguous proofs retain typed intermediate objects without exporting a proof',()=>{
+ const facts=new Map([['h','P ∧ P'],['f','P → Q'],['g','Q → R']]);
+ const r=draftProof('establish hp : $P$ | from h\nestablish hq : $Q$ | from hp and f\n$R$ | from hq and g',[...facts.keys()],facts);
+ assert.equal(r.complete,false);assert.equal(r.term,null);
+ assert.equal(r.rows[0].status,'unresolved');
+ assert.equal(r.rows[0].step.name,'hp');
+ assert.equal(r.rows[0].candidates.length,2);
+ assert.equal(r.rows[1].step.application,'f hp');
+ assert.equal(r.rows[1].proofStatus,'depends-on-open');
+ assert.deepEqual(r.rows[1].dependencies,['hp']);
+ assert.equal(r.rows[2].step.application,'g hq');
+ assert.deepEqual(r.openBindings,['hp','hq']);
+});
+test('formula-only obligations are distinct from verified proofs',()=>{
+ const r=draftProof('establish hp : $P$\n$Q$ | f hp',['f']);
+ assert.equal(r.complete,true); // structurally exportable for Lean search
+ assert.equal(r.rows[0].proofStatus,'open');
+ assert.equal(r.rows[1].proofStatus,'depends-on-open');
+ assert.match(r.term,/by exact\?/);
+});
+
+test('explicit candidate choice resolves an ambiguity without rewriting the original prose',()=>{
+ const input='establish hp : $P$ | from h\n$Q$ | from f and hp';
+ const facts=new Map([['h','P ∧ P'],['f','P → Q']]);
+ const r=draftProof(input,['h','f'],facts,{choices:new Map([[1,'And.right h']])});
+ assert.equal(r.complete,true);assert.match(r.term,/have hp : P := And.right h/);
+ assert.equal(r.rows[0].raw,input.split('\n')[0]);
+ assert.equal(r.rows[1].proofStatus,'candidate');
+ assert.equal(r.graph.nodes.at(-2).selectedCandidate,'line:1:candidate:1');
+ const stale=draftProof(input,['h','f'],facts,{choices:new Map([[1,'And.right nonexistent']])});
+ assert.equal(stale.complete,false);assert.match(stale.rows[0].reason,/no longer available/);
+});
+test('bare conclusion remains an open search unless the user chooses a candidate',()=>{
+ const facts=new Map([['h','P']]);
+ const plain=draftProof('$P$',['h'],facts);
+ const chosen=draftProof('$P$',['h'],facts,{choices:new Map([[1,'h']])});
+ assert.equal(plain.rows[0].proofStatus,'open');
+ assert.equal(chosen.rows[0].step.application,'h');
+ assert.equal(chosen.rows[0].proofStatus,'candidate');
+});

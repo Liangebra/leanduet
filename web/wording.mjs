@@ -29,3 +29,14 @@ export function putWording(items,root,node,text){
   const rest=items.filter(a=>a.anchor!==anchor);
   return validateWording(text?[...rest,{anchor,path:node.path,text}]:rest);
 }
+
+ // A detached annotation has no reliable cross-revision identity. A manual
+ // reattachment is a new author assertion, never an inferred equivalence.
+export function reattachWording(items,root,oldAnchor,target){
+ const matches=items.filter(a=>a.anchor===oldAnchor);
+ if(matches.length!==1||uniqueMatch(root,oldAnchor))throw Error('Select exactly one detached annotation.');
+ const anchor=anchorFor(target);
+ if(!anchor||typeof target.path!=='string'||uniqueMatch(root,anchor)!==target)throw Error('Select a uniquely identifiable current occurrence.');
+ if(items.some(a=>a.anchor===anchor))throw Error('The selected occurrence already has author wording; preserve both annotations.');
+ return validateWording(items.map(a=>a.anchor===oldAnchor?{anchor,path:target.path,text:a.text}:a));
+}

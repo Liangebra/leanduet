@@ -1,4 +1,5 @@
 import {compileFormula} from './math-formula.mjs';
+import {buildDraftGraph} from './draft-graph.mjs';
 import {parseRuleIntent} from './rule-intent.mjs';
 import {renderChain} from './proof-chain.mjs';
 import {premiseFrame,contextCandidates,formulaPremiseSentence,citationCandidates,implicitCandidates,structuralRules} from './context-grammar.mjs';
@@ -28,62 +29,130 @@ function parseLine(raw){
  }
  return {raw,formula,type:compileFormula(formula).lean,name,ruleText,conclusion,modifiers,forwardText};
 }
-export function draftProof(input,scope=[],context=new Map()){
+export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),cache=null}={}){
  const facts=new Map(context);
  if(typeof input!=='string'||input.length>12000)throw Error('Draft exceeds 12000 characters.');
  const lines=input.split(/\r?\n/).map((raw,i)=>({raw,line:i+1})).filter(x=>x.raw.trim());
  if(lines.length>16)throw Error('Use at most sixteen inference lines.');
  const occupied=new Set(scope),visible=new Set(scope.filter((x,i)=>scope.indexOf(x)===i&&scope.lastIndexOf(x)===i));
- let serial=1;const rows=[],steps=[];let blocked=false;
- for(let i=0;i<lines.length;i++){
-   const {raw,line}=lines[i];
+ // Cache syntax by exact text, independently of context. Cached errors are
+ // deterministic syntax diagnostics, not semantic failures.
+ const syntax=cache?(cache.syntax??=new Map()):new Map();
+ const parsed=lines.map(({raw})=>{
+  if(syntax.has(raw))return syntax.get(raw);
+  let entry;try{entry={value:parseLine(raw)};}catch(e){entry={error:e.message};}
+  if(syntax.size>=128)syntax.delete(syntax.keys().next().value);
+  syntax.set(raw,entry);return entry;
+ });
+ const planned=new Set(parsed.map(p=>p.value?.name).filter(Boolean));
+ const key=JSON.stringify([scope,[...context],[...planned].sort()]);
+ const signatures=lines.map(({raw,line},i)=>JSON.stringify([raw,line,i===lines.length-1,choices.has(line),choices.get(line)]));
+ let serial=1;const rows=[],steps=[],openNames=new Set(),serials=[];let blocked=false,reusedRows=0;
+ // The context and all planned names affect the entire draft. Under the
+ // same context, reuse only an identical prefix, including choice and
+ // conclusion-vs-intermediate role. Reconstruct its local scope exactly.
+ const previous=cache?.previous;
+ if(previous?.key===key){
+  while(reusedRows<signatures.length&&signatures[reusedRows]===previous.signatures[reusedRows]){
+   const row=previous.rows[reusedRows];if(!row)break;
+   rows.push(row);serials.push(previous.serials[reusedRows]);
+   if(row.status==='unresolved')blocked=true;
+   if(row.step){
+    steps.push(row.step);
+    if(row.step.kind==='establish'){
+     const {name,type}=row.step;occupied.add(name);visible.add(name);facts.set(name,type);
+     if(row.proofStatus!=='candidate')openNames.add(name);
+    }
+   }
+   reusedRows++;
+  }
+  if(reusedRows)serial=serials.at(-1);
+ }
+ function makeStep(p,last,application){
+  if(last)return {kind:'conclude',type:p.type,application};
+  let name=p.name;
+  if(name&&occupied.has(name))throw Error('This intermediate name already exists.');
+  if(!name){do{name='duet_h'+serial++;}while(occupied.has(name)||planned.has(name));}
+  occupied.add(name);visible.add(name);facts.set(name,p.type);
+  return {kind:'establish',name,type:p.type,application};
+ }
+ function unresolved(p,raw,line,last,details){
+  blocked=true;
+  const row={...p,raw,line,status:'unresolved',proofStatus:'open',...details};
+  // Keep a recognized proposition as a tentative local object. It is not
+  // an established theorem and no incomplete draft is exported.
+  if(p&&!last&&!p.conclusion&&(!p.name||!occupied.has(p.name))){
+   const step=makeStep(p,false,'?');
+   openNames.add(step.name);steps.push(step);row.step=step;
+  }
+  rows.push(row);
+ }
+ for(let i=reusedRows;i<lines.length;i++){
+   const {raw,line}=lines[i],last=i===lines.length-1;let p=null;
    try{
-    const p=parseLine(raw),last=i===lines.length-1;
+    if(parsed[i].error)throw Error(parsed[i].error);
+    p=parsed[i].value;
     if(p.conclusion&&!last)throw Error('A conclusion must be the last inference.');
     if(last&&p.name)throw Error('The final inference must conclude the goal, not name a fact.');
     let application='?',candidates=[];
+    function chosen(){
+     if(!choices.has(line))return null;
+     const candidate=candidates.find(c=>c.term===choices.get(line));
+     if(!candidate)throw Error('Selected candidate is no longer available.');
+     return candidate.term;
+    }
     const frame=premiseFrame(p.forwardText||p.ruleText,[...visible]);
     if(p.citation||frame){
       const resolution=p.citation?citationCandidates(p.citation,[...visible],facts):{candidates:contextCandidates(p.type,frame.premises,facts),overflow:false};
       candidates=resolution.candidates;
-      if(resolution.overflow){blocked=true;rows.push({...p,line,status:'unresolved',candidates,reason:'Too many matching formula citations; name a specific premise.'});continue;}
-      if(candidates.length!==1){blocked=true;rows.push({...p,line,status:'unresolved',frame,candidates,reason:candidates.length?'Multiple structural interpretations; specify the rule and ordered premises.':'No structural match for these premises. Name a rule or provide context types.'});continue;}
-      application=candidates[0].term;
+      const picked=chosen();
+      if(!picked&&resolution.overflow){unresolved(p,raw,line,last,{candidates,reason:'Too many matching formula citations; name a specific premise.'});continue;}
+      if(!picked&&candidates.length!==1){unresolved(p,raw,line,last,{frame,candidates,reason:candidates.length?'Multiple structural interpretations; specify the rule and ordered premises.':'No structural match for these premises. Name a rule or provide context types.'});continue;}
+      application=picked||candidates[0].term;
     }else if(p.ruleText&&p.ruleText!=='?'){
       const words=p.ruleText.split(/\s+/);
       if(words.length<=9&&words.every(w=>namePattern.test(w)&&visible.has(w)))application=words.join(' ');
       else {
        const r=parseRuleIntent(p.ruleText,{ordered:true});
        if(!r.rule||r.required.some(x=>!visible.has(x)))throw Error('Unknown or ambiguous premise; check scope and wording.');
-       if(occupied.has(r.rule)&&!visible.has(r.rule))throw Error('Ambiguous local rule.');
+       if((occupied.has(r.rule)||planned.has(r.rule))&&!visible.has(r.rule))throw Error('Ambiguous or forward local rule reference.');
        if(!r.required.length&&(structuralRules.has(r.rule)||visible.has(r.rule))){
          const resolution=implicitCandidates(p.type,[...visible],facts,{rule:r.rule});candidates=resolution.candidates;
-         if(resolution.overflow||candidates.length!==1){blocked=true;rows.push({...p,line,status:'unresolved',candidates,reason:'The named rule needs a unique premise correspondence; choose or specify its premises.'});continue;}
-         application=candidates[0].term;
+         const picked=chosen();
+         if(!picked&&(resolution.overflow||candidates.length!==1)){unresolved(p,raw,line,last,{candidates,reason:'The named rule needs a unique premise correspondence; choose or specify its premises.'});continue;}
+         application=picked||candidates[0].term;
        }else application=[r.rule,...r.required].join(' ');
       }
     }else if(!p.ruleText){
       const resolution=implicitCandidates(p.type,[...visible],facts);candidates=resolution.candidates;
+      application=chosen()||'?';
       // Bare conclusions specify no reasoning. Keep the proof obligation,
       // even when a limited schema finds just one possible proof.
     }
-    let step;
-    if(last)step={kind:'conclude',type:p.type,application};
-    else{
-      let name=p.name;
-      if(name&&occupied.has(name))throw Error('This intermediate name already exists.');
-      if(!name){do{name='duet_h'+serial++;}while(occupied.has(name));}
-      occupied.add(name);visible.add(name);facts.set(name,p.type);
-      step={kind:'establish',name,type:p.type,application};
-    }
-    rows.push({...p,line,status:blocked?'provisional':'translated',step,candidates});steps.push(step);
-   }catch(e){blocked=true;rows.push({raw,line,status:'unresolved',reason:e.message});}
+    if(choices.has(line)&&!candidates.some(c=>c.term===choices.get(line)))throw Error('Selected candidate is no longer available.');
+    const applicationPremises=candidates.find(c=>c.term===application)?.premises||application.split(/\s+/);
+    const dependencies=[...new Set(applicationPremises.filter(name=>openNames.has(name)))];
+    const proofStatus=application==='?'?'open':dependencies.length?'depends-on-open':'candidate';
+    const step=makeStep(p,last,application);
+    if(step.kind==='establish'&&proofStatus!=='candidate')openNames.add(step.name);
+    rows.push({...p,line,status:blocked?'provisional':'translated',proofStatus,dependencies,step,candidates});steps.push(step);
+   }catch(e){unresolved(p,raw,line,last,{reason:e.message});}
+   finally{serials.push(serial);}
  }
+ if(cache)cache.previous={key,signatures,rows,serials};
  const complete=lines.length>0&&!blocked&&steps.at(-1)?.kind==='conclude';
- return {rows,steps,complete,term:complete?renderChain(steps):null};
+ return {rows,steps,complete,reusedRows,openBindings:[...openNames],graph:buildDraftGraph(scope,context,rows),term:complete?renderChain(steps):null};
 }
-export function compileNaturalDraft(input,scope,context){
- const r=draftProof(input,scope,context);
+export function createDraftSession(){
+ const cache={};
+ return {
+  evaluate:(input,scope,context,options)=>draftProof(input,scope,context,{...options,cache}),
+  compile:(input,scope,context,options)=>compileNaturalDraft(input,scope,context,{...options,cache}),
+  reset:()=>{delete cache.previous;cache.syntax?.clear();}
+ };
+}
+export function compileNaturalDraft(input,scope,context,options){
+ const r=draftProof(input,scope,context,options);
  if(!r.complete){const unresolved=r.rows.find(x=>x.status==='unresolved');throw Error(unresolved?'Line '+unresolved.line+': '+unresolved.reason:'No complete conclusion.');}
  return r;
 }
