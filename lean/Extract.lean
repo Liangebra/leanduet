@@ -656,9 +656,9 @@ elab "#duet_abstract " n:ident path:str : command => do
         let (term, statement, deps) ← abstractProof e
         if mentions term n.getId || mentions statement n.getId || mentions term `sorryAx then
           throwError "Abstraction relies on the original theorem or an incomplete proof"
-        let typeText ← withOptions (fun o => o.setBool `pp.fullNames true |>.setBool `pp.funBinderTypes true |>.setBool `pp.piBinderTypes true |>.setBool `pp.explicit true |>.setBool `pp.notation false |>.setBool `pp.universes true |>.setBool `pp.coercions true |>.setBool `pp.proofs true |>.setBool `pp.numericTypes true) do
+        let typeText ← withOptions (fun o => o.setBool `pp.fullNames true |>.setBool `pp.funBinderTypes true |>.setBool `pp.piBinderTypes true |>.setBool `pp.explicit true |>.setBool `pp.notation false |>.setBool `pp.universes true |>.setBool `pp.coercions true |>.setBool `pp.proofs true |>.setBool `pp.numericTypes true |>.setBool `pp.natLit true |>.setBool `pp.beta false |>.setBool `pp.structureInstances false) do
           pure (← ppExpr statement).pretty
-        let termText ← withOptions (fun o => o.setBool `pp.fullNames true |>.setBool `pp.funBinderTypes true |>.setBool `pp.piBinderTypes true |>.setBool `pp.explicit true |>.setBool `pp.notation false |>.setBool `pp.universes true |>.setBool `pp.coercions true |>.setBool `pp.proofs true |>.setBool `pp.numericTypes true) do
+        let termText ← withOptions (fun o => o.setBool `pp.fullNames true |>.setBool `pp.funBinderTypes true |>.setBool `pp.piBinderTypes true |>.setBool `pp.explicit true |>.setBool `pp.notation false |>.setBool `pp.universes true |>.setBool `pp.coercions true |>.setBool `pp.proofs true |>.setBool `pp.numericTypes true |>.setBool `pp.natLit true |>.setBool `pp.beta false |>.setBool `pp.structureInstances false) do
           pure (← ppExpr term).pretty
         let ctx := deps.map fun d => Json.mkObj [("slot", toJson d.index),
           ("name", toJson d.userName.toString), ("isLet", toJson d.value?.isSome),
@@ -752,9 +752,9 @@ elab "#duet_factor " n:ident lemma:ident path:str : command => do
     Lean.Meta.check proof
     unless ← isDefEq (← inferType proof) v.type do throwError "Factored proof changes theorem type"
     if mentions proof n.getId || mentions proof `sorryAx then throwError "Invalid factored proof"
-    let typeText ← withOptions (fun o => o.setBool `pp.fullNames true |>.setBool `pp.funBinderTypes true |>.setBool `pp.piBinderTypes true |>.setBool `pp.explicit true |>.setBool `pp.notation false |>.setBool `pp.universes true |>.setBool `pp.coercions true |>.setBool `pp.proofs true |>.setBool `pp.numericTypes true) do
+    let typeText ← withOptions (fun o => o.setBool `pp.fullNames true |>.setBool `pp.funBinderTypes true |>.setBool `pp.piBinderTypes true |>.setBool `pp.explicit true |>.setBool `pp.notation false |>.setBool `pp.universes true |>.setBool `pp.coercions true |>.setBool `pp.proofs true |>.setBool `pp.numericTypes true |>.setBool `pp.natLit true |>.setBool `pp.beta false |>.setBool `pp.structureInstances false) do
       pure (← ppExpr v.type).pretty
-    let termText ← withOptions (fun o => o.setBool `pp.fullNames true |>.setBool `pp.funBinderTypes true |>.setBool `pp.piBinderTypes true |>.setBool `pp.explicit true |>.setBool `pp.notation false |>.setBool `pp.universes true |>.setBool `pp.coercions true |>.setBool `pp.proofs true |>.setBool `pp.numericTypes true) do
+    let termText ← withOptions (fun o => o.setBool `pp.fullNames true |>.setBool `pp.funBinderTypes true |>.setBool `pp.piBinderTypes true |>.setBool `pp.explicit true |>.setBool `pp.notation false |>.setBool `pp.universes true |>.setBool `pp.coercions true |>.setBool `pp.proofs true |>.setBool `pp.numericTypes true |>.setBool `pp.natLit true |>.setBool `pp.beta false |>.setBool `pp.structureInstances false) do
       pure (← ppExpr proof).pretty
     logInfo m!"LEANDUET_JSON:{(Json.mkObj [("type", toJson typeText), ("term", toJson termText)]).compress}"
 
