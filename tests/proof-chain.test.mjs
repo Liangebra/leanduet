@@ -1,0 +1,19 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {compileChain} from '../web/proof-chain.mjs';
+const scope=['P','Q','R','f','g','p'];
+test('ordered intermediate conclusions compile in the extended context',()=>{
+  const r=compileChain('建立 hq : Q | f using p\n结论 | g using hq',scope);
+  assert.equal(r.term,'by\n  have hq : Q := f p\n  exact g hq');
+  assert.equal(r.steps.length,2);
+});
+test('reject forward references, duplicates, missing conclusion',()=>{
+  assert.throws(()=>compileChain('Establish hq : Q | f using later\nConclude | g using hq',scope));
+  assert.throws(()=>compileChain('Establish p : Q | f using p\nConclude | g using p',scope));
+  assert.throws(()=>compileChain('Establish hq : Q | f using p',scope));
+  assert.throws(()=>compileChain('Conclude | f using p\nConclude | g using p',scope));
+});
+test('ordered arguments and mathematical concepts are preserved',()=>{
+  assert.equal(compileChain('Conclude | 等式传递性 using hab and hbc',['hab','hbc']).term,'by\n  exact Eq.trans hab hbc');
+  assert.equal(compileChain('結論 | 等式の対称性 using h',['h']).term,'by\n  exact Eq.symm h');
+});

@@ -45,3 +45,15 @@ except ValueError:
 else:
     raise AssertionError("An unresolved named premise was accepted")
 print("Controlled rule intent preserves the named local premises")
+
+
+# Composition creates explicit intermediate declarations and checks them in the actual scope.
+import subprocess
+root=Path(__file__).resolve().parents[1]
+script="""import {compileChain} from './web/proof-chain.mjs';
+console.log(compileChain('Establish hq : Q | f using p\\nConclude | g using hq',['P','Q','R','f','g','p']).term);"""
+term=subprocess.check_output(["node","--input-type=module","-e",script],cwd=root,text=True).strip()
+node=next(n for n in walk(extract(source2)["tree"]) if n.get("reference")=="g")
+r=patch(source2,node["path"],term)
+assert r["statementDefEq"] and r["proofShapePreserved"],r
+print("Controlled multi-step narrative compiled and verified")

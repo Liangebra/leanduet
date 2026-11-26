@@ -4,6 +4,7 @@ import {authoredNarrative} from './narratives.mjs';
 import {narrate} from './typed-narrative.mjs';
 import {witnessTerm} from './dependent-edit.mjs';
 import {concepts,parseRuleIntent} from './rule-intent.mjs';
+import {compileChain} from './proof-chain.mjs';
 const $=id=>document.getElementById(id),lean=$('lean'),prose=$('prose'),notes=$('prompt');
 const KEY='leanduet.workspace.v1',THEME='leanduet.theme';
 let typedRoot=null, patchNode=null, patchCandidate=null;
@@ -118,6 +119,7 @@ function openPatch(node){
   if(!clean()||!typedRoot)return;
   patchNode=node;patchCandidate=null;$('typedPatch').hidden=false;$('applyPatch').disabled=true;
   $('patchTarget').textContent=node.path+' · '+node.type;$('patchTerm').value=node.term||'';
+  $('chainEditor').hidden=node.kind==='witness';$('chainEditor').open=false;$('chainText').value='';$('chainStatus').textContent='';
   $('ruleSearch').hidden=node.kind==='witness';$('ruleResults').replaceChildren();$('ruleIntent').value='';$('ruleStatus').textContent='Leave blank for goal-type search. You can also specify a rule and required premises.';
   const witness=(node.children||[]).find(x=>x.kind==='witness');
   const evidence=(node.children||[]).find(x=>x.kind!=='witness');
@@ -147,7 +149,7 @@ function openPatch(node){
   $('patchPreview').textContent='';$('patchStatus').textContent=node.kind==='witness'?'Choose a new witness. Lean will recheck all dependent proof obligations; the unchanged evidence may become invalid.':'Edit the local proof term. Lean will check its type and the entire exported theorem.';
   $('typedPatch').scrollIntoView({block:'nearest'});$('patchTerm').focus();
 }
-for(const c of concepts)for(const label of [c.en,c.zh,c.rule]){
+for(const c of concepts)for(const label of [c.en,c.zh,c.ja,c.rule]){
   const option=element('option');option.value=label;$('ruleConcepts').append(option);
 }
 $('ruleIntent').addEventListener('input',()=>{$('ruleResults').replaceChildren();$('ruleStatus').textContent='Query changed. Search again.';});
@@ -168,6 +170,15 @@ $('findRules').onclick=async()=>{
     }
   }catch(e){if(snapshotRev===rev&&patchNode===node)$('ruleStatus').textContent=e.message;}
   finally{$('findRules').disabled=false;}
+};
+$('chainText').addEventListener('input',()=>{$('chainStatus').textContent='Narrative changed. Compile again.';});
+$('compileChain').onclick=()=>{
+  if(!patchNode||!clean()||patchNode.kind==='witness')return;
+  try{
+    const r=compileChain($('chainText').value,(patchNode.scope||[]).map(d=>d.name));
+    $('patchTerm').value=r.term;$('patchTerm').dispatchEvent(new Event('input'));
+    $('chainStatus').textContent=r.steps.length+' steps compiled to a candidate. Check replacement to validate with Lean.';
+  }catch(e){$('chainStatus').textContent=e.message;}
 };
 function stageWitness(){
   if(!patchNode||$('witnessPair').hidden)return;

@@ -3,6 +3,8 @@
 <p align="center"><strong>Two languages, one proof.</strong><br>Think in mathematics. Verify in Lean.</p>
 <p align="center"><a href="https://github.com/Liangebra/leanduet/actions/workflows/ci.yml"><img alt="Tests" src="https://github.com/Liangebra/leanduet/actions/workflows/ci.yml/badge.svg"></a> <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-blue"></a> <a href="https://github.com/Liangebra/leanduet/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22"><img alt="Contributions welcome" src="https://img.shields.io/badge/contributions-welcome-5267a8"></a></p>
 
+**English** · [简体中文](README.zh-CN.md) · [日本語](README.ja.md) · [Project introduction](https://liangebra.github.io/leanduet/about.html)
+
 LeanDuet is an experimental mathematical proof workbench. It explores how an informal mathematical argument and a Lean 4 proof can become linked, editable representations rather than unrelated documents.
 
 **v0.4 development prototype** — not a universal autoformalizer, Lean LSP client, or certified natural-language translator.
@@ -47,7 +49,7 @@ After building the project's dependencies, launch:
 python server.py --project /absolute/path/to/project
 ```
 
-The current parser handles **one theorem or lemma with a single-line or space-indented multiline header** and space-indented proof. It preserves opaque lines rather than pretending to understand them. No full-project parsing, LSP integration, or logical proof dependency extraction yet.
+The current parser handles **one theorem or lemma with a single-line or space-indented multiline header** and space-indented proof. It preserves opaque lines rather than pretending to understand them. No full-project parsing or LSP integration yet. The lexical outline is not a logical dependency graph; the separate typed inspector extracts a bounded elaborated proof tree.
 
 Optional AI: set `LEANDUET_AI_URL` (full OpenAI-compatible chat-completions endpoint), `LEANDUET_AI_MODEL`, and optionally `LEANDUET_AI_KEY`. A local Ollama-compatible endpoint may use `http://localhost:11434/v1/chat/completions`. Requests require consent; the proof and notes go to your configured provider.
 
