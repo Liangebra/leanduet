@@ -4,6 +4,7 @@ import {authoredNarrative} from './narratives.mjs';
 import {narrate,outlinePaths} from './typed-narrative.mjs';
 import {witnessTerm} from './dependent-edit.mjs';
 import {conceptLabels,parseRuleIntent} from './rule-intent.mjs';
+import {compileFormula} from './math-formula.mjs';
 import {compileChain} from './proof-chain.mjs';
 import {languagePacks,registerPack,customPacks,phrase} from './languages.mjs';
 import {mountEditor} from './editor.mjs';
@@ -172,7 +173,7 @@ function openPatch(node){
   patchNode=node;patchCandidate=null;$('typedPatch').hidden=false;$('applyPatch').disabled=true;
   $('patchTarget').textContent=node.path+' · '+node.type;$('patchTerm').value=node.term||'';
   $('chainEditor').hidden=node.kind==='witness';$('chainEditor').open=false;$('chainText').value='';$('chainStatus').textContent='';$('chainBindings').replaceChildren();
-  $('ruleSearch').hidden=node.kind==='witness';$('ruleResults').replaceChildren();$('ruleIntent').value='';$('ruleStatus').textContent='Leave blank for goal-type search. You can also specify a rule and required premises.';
+  $('ruleSearch').hidden=node.kind==='witness';$('ruleResults').replaceChildren();$('ruleIntent').value='';$('formulaGoal').value='';$('formulaPreview').textContent='';$('ruleStatus').textContent='Leave blank for goal-type search. You can also specify a rule and required premises.';
   const witness=(node.children||[]).find(x=>x.kind==='witness');
   const evidence=(node.children||[]).find(x=>x.kind!=='witness');
   const paired=node.reference==='Exists.intro'&&witness&&evidence;
@@ -212,15 +213,22 @@ function openPatch(node){
 }
 $('usedContextOnly').onchange=()=>{for(const row of $('patchScope').children)row.hidden=$('usedContextOnly').checked&&row.dataset.needed!=='true';};
 $('ruleIntent').addEventListener('input',()=>{$('ruleResults').replaceChildren();$('ruleStatus').textContent='Query changed. Search again.';});
+$('formulaGoal').addEventListener('input',()=>{
+  $('ruleResults').replaceChildren();$('ruleStatus').textContent='Formula changed. Search again.';
+  const s=$('formulaGoal').value.trim();
+  try{$('formulaPreview').textContent=s?'Lean candidate: '+compileFormula(s).lean:'';}
+  catch(e){$('formulaPreview').textContent=e.message;}
+});
 $('findRules').onclick=async()=>{
   if(!patchNode||!clean()||patchNode.kind==='witness')return;
-  const node=patchNode,snapshotRev=rev,query=$('ruleIntent').value;
+  const node=patchNode,snapshotRev=rev,query=$('ruleIntent').value,formulaInput=$('formulaGoal').value;
   const target=$('ruleResults');target.replaceChildren();
   $('findRules').disabled=true;$('ruleStatus').textContent='Searching in the selected Lean context…';
   try{
     const intent=parseRuleIntent(query);
-    const r=await api('search',{source:lean.value,path:node.path,...intent});
-    if(snapshotRev!==rev||patchNode!==node||$('ruleIntent').value!==query)return;
+    const formula=formulaInput.trim()?compileFormula(formulaInput).lean:'';
+    const r=await api('search',{source:lean.value,path:node.path,...intent,formula});
+    if(snapshotRev!==rev||patchNode!==node||$('ruleIntent').value!==query||$('formulaGoal').value!==formulaInput)return;
     const candidates=r.candidates||[];
     $('ruleStatus').textContent=candidates.length?candidates.length+' locally closed candidate(s) · select one, then check replacement.':'No closed candidate found in the bounded search. This is not a proof of impossibility.';
     for(const c of candidates){

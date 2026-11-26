@@ -1,3 +1,4 @@
+import {compileFormula} from './math-formula.mjs';
 import {parseRuleIntent,statementMarker} from './rule-intent.mjs';
 // Ordered application grammar. This is not free prose or search.
 // A rule is a declaration or a local function; named arguments are positional.
@@ -30,7 +31,19 @@ export function compileChain(text,scope){
       steps.push({kind:'conclude',application:application(right,i+1)});done=true;continue;
     }
     if(marker?.kind!=='establish')throw Error('Line '+(i+1)+': expected an intermediate name, optionally with : proposition.');
-    const {name,type}=marker;
+    const {name}=marker;
+    const type=marker.type?.startsWith('
+    if(occupied.has(name))throw Error('Line '+(i+1)+': binding already exists: '+name);
+    // Type is an explicit Lean proposition expression, not a translated sentence.
+    if(type!==null&&/[;{}]|(?:\/-|--|:=|\b(?:by|sorry|admit)\b)/.test(type))throw Error('Line '+(i+1)+': supply a single Lean proposition expression.');
+    steps.push({kind:'establish',name,type,application:application(right,i+1)});
+    occupied.add(name);visible.add(name);
+  }
+  if(!done)throw Error('Finish with Conclude | rule using premises.');
+  const term='by\n'+steps.map(s=>s.kind==='establish'?'  have '+s.name+(s.type===null?'':' : '+s.type)+' := '+s.application:'  exact '+s.application).join('\n');
+  return {steps,term};
+}
+)||marker.type?.startsWith('\\(')?compileFormula(marker.type).lean:marker.type;
     if(occupied.has(name))throw Error('Line '+(i+1)+': binding already exists: '+name);
     // Type is an explicit Lean proposition expression, not a translated sentence.
     if(type!==null&&/[;{}]|(?:\/-|--|:=|\b(?:by|sorry|admit)\b)/.test(type))throw Error('Line '+(i+1)+': supply a single Lean proposition expression.');

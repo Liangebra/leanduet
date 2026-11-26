@@ -277,7 +277,7 @@ elab "#duet_compare " n:ident m:ident path:str replacement:str : command => do
 
 /-- Traverse a selected occurrence under exactly its original binders. -/
 partial def withNodeAt {α : Type} (e : Expr) (path : List String)
-    (k : Expr → MetaM α) : MetaM α := do
+    (k : Expr → TermElabM α) : TermElabM α := do
   match path with
   | [] => k e
   | p :: rest =>
@@ -367,7 +367,7 @@ def resolveRequired (names : String) : MetaM (List FVarId) := do
     resolved := ids[0]! :: resolved
   return resolved.reverse
 
-elab "#duet_search " n:ident path:str rule:str required:str : command => do
+elab "#duet_search " n:ident path:str rule:str required:str formula:str : command => do
   liftTermElabM do
     let ci ← getConstInfo n.getId
     match ci with
@@ -377,6 +377,17 @@ elab "#duet_search " n:ident path:str rule:str required:str : command => do
       let j ← withNodeAt v.value (parts.drop 1) fun e => do
         let goal ← inferType e
         unless ← isProp goal do throwError "Search requires a proposition"
+        if !formula.getString.isEmpty then
+          let stx ← match Parser.runParserCategory (← getEnv) `term formula.getString with
+            | .ok stx => pure stx
+            | .error err => throwError "{err}"
+          let proposed ← Term.elabTermEnsuringType stx (some (mkSort Level.zero))
+          Term.synthesizeSyntheticMVarsNoPostponing
+          let proposed ← instantiateMVars proposed
+          if proposed.hasMVar || proposed.hasLevelMVar then
+            throwError "Formula contains unresolved type information"
+          unless ← isDefEq proposed goal do
+            throwError "Formula does not match the selected proposition"
         let premises ← resolveRequired required.getString
         let candidates ← findProofs goal n.getId rule.getString premises
         pure (Json.mkObj [("schema", toJson (1 : Nat)),

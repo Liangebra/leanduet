@@ -145,7 +145,7 @@ def infer_chain(source, path, steps, project=None):
     return {"term":term,"bindings":bindings,"goal":result["localType"],"status":"inferred",
             "note":"Local elaboration and rebuilt expression checked; export still requires independent validation."}
 
-def search(source, path, rule="", project=None, required=None):
+def search(source, path, rule="", project=None, required=None, formula=""):
     """Discover locally closed proof candidates from Lean's loaded environment."""
     name = _name(source)
     _safe_proof(source)
@@ -159,7 +159,9 @@ def search(source, path, rule="", project=None, required=None):
         for n in required
     ) or len(set(required))!=len(required):
         raise ValueError("Specify at most eight distinct, simple local premise names.")
-    args = " ".join(json.dumps(x,ensure_ascii=False) for x in (path,rule,",".join(required)))
+    if not isinstance(formula,str) or len(formula)>4000 or re.search(r"[\r\n;{}]|/-|--|:=|\b(?:by|sorry|admit)\b",formula):
+        raise ValueError("Expected a single formula expression.")
+    args = " ".join(json.dumps(x,ensure_ascii=False) for x in (path,rule,",".join(required),formula))
     return _run_lean("import Lean\n" + source.rstrip() + "\n\n" + _adapter() +
                      "\n#duet_search " + name + " " + args + "\n", project)
 

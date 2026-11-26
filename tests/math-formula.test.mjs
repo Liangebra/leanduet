@@ -1,0 +1,13 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {compileFormula} from '../web/math-formula.mjs';
+test('math expression grammar preserves precedence and binder structure',()=>{
+ assert.equal(compileFormula(String.raw`$b = a$`).lean,'(b = a)');
+ assert.equal(compileFormula(String.raw`P \land Q \to R`).lean,'((P ∧ Q) → R)');
+ assert.equal(compileFormula(String.raw`\forall n : \mathbb{N}, P(n)`).lean,'(∀ n : Nat, (P n))');
+ assert.equal(compileFormula(String.raw`\frac{a+b}{c} = d`).lean,'(((a + b) / c) = d)');
+ assert.equal(compileFormula('f(g(x), y) = z').lean,'((f (g x) y) = z)');
+});
+test('unsupported, ambiguous and malformed formulas fail rather than guess',()=>{
+ for(const t of ['2x','a < b < c',String.raw`\unknown{x}`,'a = (b','by exact h','a; b','x_{i}'])assert.throws(()=>compileFormula(t),undefined,t);
+});

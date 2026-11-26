@@ -75,3 +75,16 @@ except ValueError:
 else:
     raise AssertionError("Non-proposition or missing premise accepted")
 print("Lean inferred and returned the intermediate proposition Q")
+
+
+# Formula input is elaborated in the actual local context, not compared as text.
+formula_node=next(n for n in walk(extract(source)["tree"]) if n.get("reference")=="Eq.symm")
+r=search(source,formula_node["path"],"Eq.symm",formula="(b = a)")
+assert r["candidates"],r
+try:
+    search(source,formula_node["path"],"Eq.symm",formula="(a = b)")
+except ValueError:
+    pass
+else:
+    raise AssertionError("A different proposition was accepted as the selected goal")
+print("Formula-directed proof completion preserves the selected proposition")

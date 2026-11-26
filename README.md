@@ -33,7 +33,7 @@ The [online editor](https://liangebra.github.io/leanduet/) is a static demo. Run
 - Read a mathematical proof next to its Lean source, or switch to a notebook layout.
 - Inspect elaborated proof terms, local hypotheses and their types.
 - Select a proof occurrence, search applicable rules, and review a checked replacement.
-- Compose controlled mathematical sentences with intermediate propositions inferred by Lean.
+- Enter a supported LaTeX formula for typed proof completion, or compose controlled mathematical sentences with intermediate propositions inferred by Lean.
 - Edit existential witnesses together with their dependent evidence.
 - Save locally, export Lean or a portable workspace, and read typed narratives in English, Chinese or Japanese, or import [community language packs](docs/LANGUAGE_PACKS.md).
 
