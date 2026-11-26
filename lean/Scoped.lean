@@ -82,6 +82,93 @@ theorem subst_var {n : Nat} (t : Term n) : subst Term.var t = t := by
   | app f a hf ha => simp [subst, hf, ha]
   | bind op a b ia ib => simp [subst, liftSub_var, ia, ib]
 
+
+/-- Substitution after renaming is substitution along the composite map. -/
+theorem liftSub_liftRen {n m k : Nat} (r : Fin n → Fin m) (s : Fin m → Term k) :
+    liftSub s ∘ liftRen r = liftSub (s ∘ r) := by
+  funext i
+  refine Fin.cases ?_ (fun j => ?_) i
+  · simp [liftSub, liftRen, Function.comp_def]
+  · simp [liftSub, liftRen, Function.comp_def]
+
+theorem subst_rename {n m k : Nat} (t : Term n) (r : Fin n → Fin m) (s : Fin m → Term k) :
+    subst s (rename r t) = subst (s ∘ r) t := by
+  induction t generalizing m k with
+  | var i => rfl
+  | atom x => rfl
+  | unary op a ih => simp [rename, subst, ih]
+  | binary op a b ia ib => simp [rename, subst, ia, ib]
+  | app f a hf ha => simp [rename, subst, hf, ha]
+  | bind op a b ia ib =>
+    simp only [rename, subst, ia, ib, liftSub_liftRen]
+
+/-- Renaming after substitution acts on every substituted term. -/
+theorem liftRen_liftSub {n m k : Nat} (s : Fin n → Term m) (r : Fin m → Fin k) :
+    (fun i => rename (liftRen r) (liftSub s i)) =
+      liftSub (fun i => rename r (s i)) := by
+  funext i
+  refine Fin.cases ?_ (fun j => ?_) i
+  · simp [liftSub, liftRen, rename]
+  · simp only [liftSub, Fin.cases_succ, rename_comp]
+    congr 1
+    funext x
+    simp [liftRen, Function.comp_def]
+
+theorem rename_subst {n m k : Nat} (t : Term n) (s : Fin n → Term m) (r : Fin m → Fin k) :
+    rename r (subst s t) = subst (fun i => rename r (s i)) t := by
+  induction t generalizing m k with
+  | var i => rfl
+  | atom x => rfl
+  | unary op a ih => simp [rename, subst, ih]
+  | binary op a b ia ib => simp [rename, subst, ia, ib]
+  | app f a hf ha => simp [rename, subst, hf, ha]
+  | bind op a b ia ib =>
+    simp only [rename, subst, ia, ib, liftRen_liftSub]
+
+theorem liftSub_comp {n m k : Nat} (s : Fin n → Term m) (r : Fin m → Term k) :
+    (fun i => subst (liftSub r) (liftSub s i)) =
+      liftSub (fun i => subst r (s i)) := by
+  funext i
+  refine Fin.cases ?_ (fun j => ?_) i
+  · simp [liftSub, subst]
+  · simp only [liftSub, Fin.cases_succ, subst_rename, rename_subst]
+    congr 1
+    funext x
+    rfl
+
+/-- Associativity of simultaneous capture-avoiding substitution.
+    Together with subst_var and the variable equation, this gives the
+    relative Kleisli composition laws on finite contexts. -/
+theorem subst_comp {n m k : Nat} (t : Term n) (s : Fin n → Term m) (r : Fin m → Term k) :
+    subst r (subst s t) = subst (fun i => subst r (s i)) t := by
+  induction t generalizing m k with
+  | var i => rfl
+  | atom x => rfl
+  | unary op a ih => simp [subst, ih]
+  | binary op a b ia ib => simp [subst, ia, ib]
+  | app f a hf ha => simp [subst, hf, ha]
+  | bind op a b ia ib =>
+    simp only [subst, ia, ib, liftSub_comp]
+
+abbrev Substitution (n m : Nat) := Fin n → Term m
+
+def composeSub {n m k : Nat} (s : Substitution n m) (r : Substitution m k) : Substitution n k :=
+  fun i => subst r (s i)
+
+theorem composeSub_id_left {n m : Nat} (s : Substitution n m) :
+    composeSub Term.var s = s := rfl
+
+theorem composeSub_id_right {n m : Nat} (s : Substitution n m) :
+    composeSub s Term.var = s := by
+  funext i
+  exact subst_var (s i)
+
+theorem composeSub_assoc {n m k l : Nat} (s : Substitution n m)
+    (r : Substitution m k) (q : Substitution k l) :
+    composeSub (composeSub s r) q = composeSub s (composeSub r q) := by
+  funext i
+  exact subst_comp (s i) r q
+
 /-- A concrete capture-avoidance test: inserting free variable 0 under
     a binder must shift it to 1, not turn it into the binder's variable. -/
 example :

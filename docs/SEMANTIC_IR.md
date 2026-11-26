@@ -32,3 +32,7 @@ Define a context-indexed typed signature with distinct object, proposition, proo
 Regex is useful for lexical tokens and finite controlled phrase boundaries; a recursive parser is needed for nested formulas and binders. Plain LaTeX does not uniquely determine mathematical semantics; explicit typed annotations, context and user disambiguation are necessary. Lean LSP identifier completion and bounded proof search are complementary, not the same operation.
 
 The controlled chain also admits explicit proof holes: `Establish h : $P$ | ?` and `Conclude | ?`. These lower to Lean `exact?` calls, not `sorry`. Every completed candidate is subject to the existing rebuilt-proof and structural checks, including rejection of references to the original theorem. Failure to solve a hole is an ordinary elaboration failure. No completeness or deterministic proof choice is claimed.
+
+## Composition laws
+
+Scoped.lean now also states mixed renaming/substitution equations and associativity of simultaneous substitution. Substitution arrows n → m are Fin n → Term m; their composition is substitution of the second arrow into the first. The direction is that of variable assignments (opposite to context maps Δ → Γ). Identity and associativity are stated for these arrows. This is the finite-context relative Kleisli construction for the scope syntax, not a claim of a typed category of all Lean terms or an initiality proof. CI checks these Lean proofs.
