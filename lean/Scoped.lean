@@ -173,6 +173,100 @@ example :
     (Term.bind "∀" (.atom "Nat") (.var (1 : Fin 2)) : Term 1) := by
   rfl
 
+
+/-! ## Interpretation in an algebra with binders
+
+The syntactic substitution laws above do not themselves say that
+interpretation respects substitution. An algebra assigns meanings to
+atoms, operators, application and binding; a binder receives the meaning
+of its body as a function of the newly bound value. This interface is
+intentionally untyped and does not identify arbitrary TeX with Lean.
+-/
+universe u
+
+structure Algebra (D : Type u) where
+  atom : String → D
+  unary : String → D → D
+  binary : String → D → D → D
+  app : D → D → D
+  bind : String → D → (D → D) → D
+
+abbrev Valuation (n : Nat) (D : Type u) := Fin n → D
+
+def extendEnv {n : Nat} {D : Type u} (ρ : Valuation n D) (x : D) :
+    Valuation (n+1) D := Fin.cases x ρ
+
+/-- Interpret bound variables using their positions, not their printed names. -/
+def denote {D : Type u} (M : Algebra D) {n : Nat} (t : Term n)
+    (ρ : Valuation n D) : D :=
+  match t with
+  | .var i => ρ i
+  | .atom s => M.atom s
+  | .unary op a => M.unary op (denote M a ρ)
+  | .binary op a b => M.binary op (denote M a ρ) (denote M b ρ)
+  | .app f a => M.app (denote M f ρ) (denote M a ρ)
+  | .bind op a b => M.bind op (denote M a ρ) (fun x => denote M b (extendEnv ρ x))
+
+theorem extendEnv_rename {D : Type u} {n m : Nat} (ρ : Valuation m D)
+    (r : Fin n → Fin m) (x : D) :
+    extendEnv ρ x ∘ liftRen r = extendEnv (ρ ∘ r) x := by
+  funext i
+  refine Fin.cases ?_ (fun j => ?_) i
+  · rfl
+  · rfl
+
+/-- Semantic reindexing: renaming a term amounts to precomposing its
+    valuation with the renaming map. -/
+theorem denote_rename {D : Type u} (M : Algebra D) {n m : Nat}
+    (t : Term n) (r : Fin n → Fin m) (ρ : Valuation m D) :
+    denote M (rename r t) ρ = denote M t (ρ ∘ r) := by
+  induction t generalizing m with
+  | var i => rfl
+  | atom s => rfl
+  | unary op a ih => simp only [rename, denote, ih]
+  | binary op a b ia ib => simp only [rename, denote, ia, ib]
+  | app f a hf ha => simp only [rename, denote, hf, ha]
+  | bind op a b ia ib =>
+    simp only [rename, denote, ia, ib, extendEnv_rename]
+
+def substEnv {D : Type u} (M : Algebra D) {n m : Nat}
+    (σ : Substitution n m) (ρ : Valuation m D) : Valuation n D :=
+  fun i => denote M (σ i) ρ
+
+theorem substEnv_lift {D : Type u} (M : Algebra D) {n m : Nat}
+    (σ : Substitution n m) (ρ : Valuation m D) (x : D) :
+    substEnv M (liftSub σ) (extendEnv ρ x) =
+      extendEnv (substEnv M σ ρ) x := by
+  funext i
+  refine Fin.cases ?_ (fun j => ?_) i
+  · rfl
+  · simp [substEnv, liftSub, denote_rename, extendEnv, Function.comp_def]
+
+/-- Interpretation commutes with simultaneous capture-avoiding substitution
+    for every algebra of this signature and every scoped term, including
+    the binder case. It is not merely a check of selected examples. -/
+theorem denote_subst {D : Type u} (M : Algebra D) {n m : Nat}
+    (t : Term n) (σ : Substitution n m) (ρ : Valuation m D) :
+    denote M (subst σ t) ρ = denote M t (substEnv M σ ρ) := by
+  induction t generalizing m with
+  | var i => rfl
+  | atom s => rfl
+  | unary op a ih => simp only [subst, denote, ih]
+  | binary op a b ia ib => simp only [subst, denote, ia, ib]
+  | app f a hf ha => simp only [subst, denote, hf, ha]
+  | bind op a b ia ib =>
+    simp only [subst, denote, ia, ib, substEnv_lift]
+
+/-- The substitution action is contravariant on valuations. -/
+theorem substEnv_id {D : Type u} (M : Algebra D) {n : Nat}
+    (ρ : Valuation n D) : substEnv M Term.var ρ = ρ := rfl
+
+theorem substEnv_comp {D : Type u} (M : Algebra D) {n m k : Nat}
+    (σ : Substitution n m) (τ : Substitution m k) (ρ : Valuation k D) :
+    substEnv M (composeSub σ τ) ρ = substEnv M σ (substEnv M τ ρ) := by
+  funext i
+  exact denote_subst M (σ i) τ ρ
+
 end LeanDuet.Scoped
 
 namespace LeanDuet.Context
