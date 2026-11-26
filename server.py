@@ -40,6 +40,13 @@ def ai_request(source, prose, mode):
     if not endpoint or not model:
         raise ValueError('AI is disabled. Set LEANDUET_AI_URL and LEANDUET_AI_MODEL.')
     system = ('Return only Lean 4 source, no Markdown. Preserve exact imports and complete theorem header. Use space-indented proof lines; no sorry/admit.' if mode=='propose' else 'Explain the supplied Lean proof as a mathematical narrative, distinguishing actual reasoning from opaque tactics and referenced lemmas. Do not invent omitted arguments. Use LaTeX notation where helpful.')
+    if mode=='interpretations':
+        system = ("Suggest at most six alternative interpretations of the requested mathematical wording in the selected Lean context. "
+                  "Return only a JSON object with a lines array of strings. Each string is ONE candidate, not a proof sequence: "
+                  "a single delimited LaTeX goal, a known Lean declaration name with optional 'using' followed by exact local premise names, "
+                  "or a simple local function application. A goal and named rule may be separated by |. "
+                  "Do not invent local assumptions or erase mathematical qualifiers. If the meaning is unclear, return fewer or zero lines. "
+                  "Do not include tactics, code fences, commands, imports, or commentary. The results will be shown for review and independently checked.")
     payload={'model':model,'messages':[{'role':'system','content':system},{'role':'user','content':json.dumps({'source':source,'requested_proof':prose},ensure_ascii=False)}]}
     headers={'Content-Type':'application/json'}
     if os.getenv('LEANDUET_AI_KEY'):
@@ -49,6 +56,12 @@ def ai_request(source, prose, mode):
         result=json.loads(response.read(512*1024))
     value=result['choices'][0]['message']['content'].strip()
     if not value or len(value.encode())>MAX_BODY: raise ValueError('Empty or oversized response.')
+    if mode=='interpretations':
+        obj=json.loads(value)
+        lines=obj.get('lines') if isinstance(obj,dict) else None
+        if not isinstance(lines,list) or len(lines)>6 or any(not isinstance(x,str) or not x.strip() or len(x)>1500 or '\n' in x or '\r' in x for x in lines):
+            raise ValueError('Expected up to six single-line candidate interpretations.')
+        return {'lines':lines,'verified':False}
     return {'source':value+'\n'} if mode=='propose' else {'narrative':value}
 
 class Handler(http.server.SimpleHTTPRequestHandler):
@@ -93,7 +106,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if self.path=='/api/search': return self.send_json(200,semantic.search(source,data.get('path'),data.get('rule',''),self.project,data.get('required'),data.get('formula','')))
             if self.path=='/api/patch': return self.send_json(200,semantic.patch(source,data.get('path'),data.get('replacement'),self.project))
             if self.path=='/api/informath': return self.send_json(200,semantic.informath(source,self.project))
-            if self.path in {'/api/propose','/api/explain'}:
+            if self.path in {'/api/propose','/api/explain','/api/interpretations'}:
                 prose=data.get('prose','')
                 if not isinstance(prose,str): raise ValueError('Prose must be text.')
                 return self.send_json(200,ai_request(source,prose,self.path[5:]))

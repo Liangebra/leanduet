@@ -48,3 +48,16 @@ export function rankInterpretations(plan,checked){
   }
   return rows.sort((a,b)=>b.score-a.score||a.term.length-b.term.length||a.term.localeCompare(b.term));
 }
+
+export function mergeInterpretations(primary,reviewed){
+ const alternatives=[...primary.alternatives],unresolved=[...primary.unresolved];
+ const seen=new Set(alternatives.map(a=>JSON.stringify([a.formula,a.rule,a.required,a.term])));
+ for(const a of reviewed.alternatives){
+   const k=JSON.stringify([a.formula,a.rule,a.required,a.term]);
+   if(seen.has(k))continue;
+   if(alternatives.length>=8){unresolved.push({raw:a.raw,reason:'Reviewed AI alternative outside the eight-candidate check limit.'});continue;}
+   seen.add(k);alternatives.push({...a,origin:'reviewed AI · '+a.origin,specificity:Math.max(0,a.specificity-1)});
+ }
+ for(const a of reviewed.unresolved)unresolved.push({...a,reason:'AI suggestion: '+a.reason});
+ return {alternatives,unresolved};
+}

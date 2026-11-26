@@ -10,7 +10,7 @@ import {compileFormula} from './math-formula.mjs';
 import {compileChain,compileFormulaSequence} from './proof-chain.mjs';
 import {languagePacks,registerPack,customPacks,phrase} from './languages.mjs';
 import {positionAt,completionEdit} from './completion.mjs';
-import {interpretations,rankInterpretations} from './interpretations.mjs';
+import {interpretations,rankInterpretations,mergeInterpretations} from './interpretations.mjs';
 import {wordingFor,putWording,uniqueMatch} from './wording.mjs';
 import {mountEditor} from './editor.mjs';
 const $=id=>document.getElementById(id),lean=$('lean'),prose=$('prose'),notes=$('prompt');
@@ -279,7 +279,7 @@ $('collapseProof').onclick=()=>{foldedPaths=outlinePaths(typedRoot);showTypedNar
 $('expandProof').onclick=()=>{foldedPaths.clear();showTypedNarrative();};
 function openPatch(node){
   if(!clean()||!typedRoot)return;
-  patchNode=node;patchCandidate=null;interpretVersion++;clearTimeout(interpretTimer);$('interpretPanel').hidden=node.kind==='witness';$('interpretPanel').open=false;$('interpretText').value='';$('interpretResults').replaceChildren();$('interpretStatus').textContent='';$('typedPatch').hidden=false;$('applyPatch').disabled=true;
+  patchNode=node;patchCandidate=null;interpretVersion++;clearTimeout(interpretTimer);$('interpretPanel').hidden=node.kind==='witness';$('interpretPanel').open=false;$('interpretText').value='';$('aiInterpretText').value='';$('includeAiInterpret').checked=false;$('aiInterpretStatus').textContent='';$('interpretAiPanel').open=false;$('interpretResults').replaceChildren();$('interpretStatus').textContent='';$('typedPatch').hidden=false;$('applyPatch').disabled=true;
   $('irOutput').textContent='';$('irStatus').textContent='';$('irInspector').open=false;
   $('abstractPanel').hidden=node.kind==='witness';$('abstractPanel').open=false;$('abstractOutput').textContent='';$('abstractStatus').textContent='';$('factorProof').disabled=true;
   $('wordingInput').value=wordingFor(typedRoot,node,wording);$('wordingStatus').textContent='Author wording, not a checked assertion.';$('patchTarget').textContent=node.path+' · '+node.type;$('patchTerm').value=node.term||'';
@@ -401,7 +401,7 @@ function drawInterpretations(plan,checked=null){
     const use=element('button','Use candidate');use.onclick=()=>{$('patchTerm').value=c.term;$('patchTerm').dispatchEvent(new Event('input'));};row.append(use);target.append(row);
   }
 }
-function planInterpretation(){return interpretations($('interpretText').value,(patchNode?.scope||[]).map(d=>d.name));}
+function planInterpretation(){const scope=(patchNode?.scope||[]).map(d=>d.name);const primary=interpretations($('interpretText').value,scope);return $('includeAiInterpret').checked?mergeInterpretations(primary,interpretations($('aiInterpretText').value,scope)):primary;}
 async function checkInterpretations(){
   if(!patchNode||!clean()||!local||patchNode.kind==='witness'||interpretBusy)return;
   const node=patchNode,revision=rev,version=interpretVersion,raw=$('interpretText').value;
@@ -416,9 +416,26 @@ async function checkInterpretations(){
   finally{interpretBusy=false;$('interpretRun').disabled=false;if(version!==interpretVersion&&patchNode&&clean()&&$('liveInterpret').checked)scheduleInterpretation();}
 }
 function scheduleInterpretation(){clearTimeout(interpretTimer);if($('liveInterpret').checked&&local)interpretTimer=setTimeout(checkInterpretations,750);}
-$('interpretText').oninput=()=>{interpretVersion++;try{drawInterpretations(planInterpretation());$('interpretStatus').textContent='Draft interpretations · not yet checked';scheduleInterpretation();}catch(e){$('interpretStatus').textContent=e.message;}};
+$('interpretText').oninput=()=>{interpretVersion++;$('includeAiInterpret').checked=false;if($('aiInterpretText').value)$('aiInterpretStatus').textContent='Original wording changed; suggestions are retained but no longer included.';try{drawInterpretations(planInterpretation());$('interpretStatus').textContent='Draft interpretations · not yet checked';scheduleInterpretation();}catch(e){$('interpretStatus').textContent=e.message;}};
 $('liveInterpret').onchange=scheduleInterpretation;
+$('aiInterpretText').oninput=()=>{interpretVersion++;$('includeAiInterpret').checked=false;$('aiInterpretStatus').textContent='Review the modified alternatives before including them.';drawInterpretations(planInterpretation());};
+$('includeAiInterpret').onchange=()=>{interpretVersion++;drawInterpretations(planInterpretation());scheduleInterpretation();};
 $('interpretRun').onclick=checkInterpretations;
+$('suggestInterpretations').onclick=async()=>{
+  if(!local||!patchNode||!clean()||!$('interpretText').value.trim())return;
+  if(!confirm('Send this mathematical wording, current Lean proof and selected context to your configured AI provider?'))return;
+  const node=patchNode,revision=rev,version=interpretVersion,raw=$('interpretText').value;
+  $('suggestInterpretations').disabled=true;$('aiInterpretStatus').textContent='Requesting unverified alternatives…';
+  try{
+    const r=await api('interpretations',{source:lean.value,prose:JSON.stringify({wording:raw,goal:node.type,scope:(node.scope||[]).map(x=>({name:x.name,type:x.type}))})});
+    if(revision!==rev||node!==patchNode||version!==interpretVersion)return;
+    if(!Array.isArray(r.lines))throw Error('Provider did not return alternatives.');
+    $('aiInterpretText').value=r.lines.join('\n');$('includeAiInterpret').checked=false;
+    $('aiInterpretStatus').textContent='Review or edit these unverified suggestions. Include them explicitly to check.';
+    interpretVersion++;drawInterpretations(planInterpretation());
+  }catch(e){if(revision===rev&&node===patchNode&&version===interpretVersion)$('aiInterpretStatus').textContent=e.message;}
+  finally{$('suggestInterpretations').disabled=false;}
+};
 function parseChainInput(text,scope){return $('chainFormat').value==='formula'?compileFormulaSequence(text,scope):compileChain(text,scope);}
 $('chainFormat').onchange=()=>{$('chainText').placeholder=$('chainFormat').value==='formula'?'$Q$\n$R$':'Establish hq | f using p\nConclude | g using hq';$('chainText').dispatchEvent(new Event('input'));};
 $('chainText').addEventListener('input',()=>{$('chainBindings').replaceChildren();$('patchTerm').value='';$('patchTerm').dispatchEvent(new Event('input'));$('chainStatus').textContent='Narrative changed. Compile again.';});
