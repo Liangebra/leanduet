@@ -117,6 +117,6 @@ const EXAMPLES = [
     "name": "Equality symmetry",
     "source": "theorem reverse_eq (a b : Nat) (h : a = b) : b = a := by\n  exact h.symm\n"
   }
-  ,{"name":"Composition of injective maps","source":"theorem injective_comp (f : α → β) (g : β → γ)\n    (hf : Function.Injective f) (hg : Function.Injective g) :\n    Function.Injective (fun x => g (f x)) := by\n  intro a b hab\n  apply hf\n  apply hg\n  exact hab\n"}
+  ,{"name":"Composition of injective maps","source":"theorem injective_comp (f : α → β) (g : β → γ)\n    (hf : ∀ {a b}, f a = f b → a = b) (hg : ∀ {a b}, g a = g b → a = b) :\n    ∀ {a b}, g (f a) = g (f b) → a = b := by\n  intro a b hab\n  apply hf\n  apply hg\n  exact hab\n"}
 ];
 export { parseLean, renderLean, renderProse, parseProse, sameStatement, planSync, stepSentence, sentenceFragment, EXAMPLES };

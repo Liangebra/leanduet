@@ -17,8 +17,8 @@ theorem reverse_eq (a b : Nat) (h : a = b) : b = a := by
   exact h.symm
 
 theorem injective_comp (f : α → β) (g : β → γ)
-    (hf : Function.Injective f) (hg : Function.Injective g) :
-    Function.Injective (fun x => g (f x)) := by
+    (hf : ∀ {a b}, f a = f b → a = b) (hg : ∀ {a b}, g a = g b → a = b) :
+    ∀ {a b}, g (f a) = g (f b) → a = b := by
   intro a b hab
   apply hf
   apply hg
