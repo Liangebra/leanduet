@@ -133,3 +133,17 @@ stores initial goal and scope-introduction dependencies even if a later
 proof does not use the binder. Structured chain validation accepts bounded
 nested named applications emitted by the quantifier translator. Added
 actual JavaScript-to-Lean tests for both kinds of context extension.
+
+## Backward proposition constraints (first finite domain)
+
+The explicit proposition hole `建立 hp : $?$,由 h` derives a finite type
+and proof domain from a typed conjunction h. A subsequent explicit inference
+using hp and currently typed premises constrains that domain. Intersect
+supported matches; preserve the original domain and report contradictory or
+unsupported constraints without inventing a type. A singleton compatible
+candidate can be emitted; otherwise the user must choose or provide more
+information. This is not general type inference: only conjunction projections
+and supported local relation schemas are used. The incremental cache disables
+prefix reuse after any edit in a draft with backward constraints, since a
+later line may change an earlier binding. Lean independently validates the
+resulting proof.

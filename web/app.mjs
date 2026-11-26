@@ -500,9 +500,10 @@ function previewDraft({edited=false}={}){
      d.append(element('small','Line '+x.line+' · '+x.status+(x.proofStatus?' · '+x.proofStatus:'')),element('span',x.raw));
      if(x.step)d.append(element('code',['introduce','assume'].includes(x.step.kind)?'intro '+x.step.name:x.step.kind==='define'?'let '+x.step.name+' : '+x.step.type+' := '+x.step.value:x.step.kind==='establish'?'have '+x.step.name+' : '+x.step.type+' := '+x.step.application:'show '+x.step.type+'; '+x.step.application));
      if(x.reason)d.append(element('small',x.reason));
+     if(x.constraints?.length)d.append(element('small','Later structural constraints: '+x.constraints.map(c=>'line '+c.line+' ('+c.status+')').join(', ')));
      if(x.dependencies?.length)d.append(element('small','Depends on open obligations: '+x.dependencies.join(', ')));
      for(const c of x.candidates||[]){
-      d.append(element('code',c.term+' · '+c.schema));
+      d.append(element('code',(c.type?c.type+' ← ':'')+c.term+' · '+c.schema));
       if(c.premiseFacts?.length)d.append(element('small',c.premiseFacts.map(p=>p.type+' ['+p.name+']').join(' · ')));
       const selected=draftChoices.get(x.line)===c.term;
       const b=element('button',selected?'Clear choice':'Use this candidate');b.type='button';

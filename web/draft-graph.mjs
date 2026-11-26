@@ -37,13 +37,13 @@ export function buildDraftGraph(scope,facts,rows,{goal=null}={}){
  for(const row of rows){
   const id='line:'+row.line,step=row.step,parsed=formula(row.type),value=step?.kind==='define'?formula(step.value):null;
   const alternatives=(row.candidates||[]).map((c,i)=>({
-   id:id+':candidate:'+i,schema:c.schema,term:c.term,dependencies:refs(c.premises||[])
+   id:id+':candidate:'+i,schema:c.schema,term:c.term,...(c.type?{type:c.type,formula:formula(c.type)}:{}),dependencies:refs(c.premises||[])
   }));
   const application=step?.application||null;
   const selected=application&&application!=='?'?alternatives.find(c=>c.term===application):null;
   const proofRefs=application&&application!=='?'?(selected?.dependencies||refs(application.split(/\s+/))):[];
   const node={id,kind:step?.kind||'unresolved',name:step?.name||null,type:row.type||null,raw:row.raw,modifiers:row.modifiers||[],formula:parsed,
-   proofStatus:row.proofStatus||'open',status:row.status,application,alternatives,value,
+   proofStatus:row.proofStatus||'open',status:row.status,application,alternatives,value,...(row.domain?{typeDomain:row.domain.map(c=>({type:c.type,term:c.term,formula:formula(c.type),dependencies:refs(c.premises)})),constraints:row.constraints}:{}),
    selectedCandidate:selected?.id||null,scopeRefs:[...scopeRefs],dependencies:[...new Set([...scopeRefs,...parsed.refs,...(value?.refs||[]),...proofRefs])]};
   declare(node);
   if(['introduce','assume'].includes(node.kind))scopeRefs.push(id);
