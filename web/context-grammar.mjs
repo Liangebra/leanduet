@@ -8,7 +8,11 @@ const parsedTypes=new Map();
 const parse=s=>{
  if(typeof s!=='string'||s.length>3000)return null;
  if(parsedTypes.has(s))return parsedTypes.get(s);
- let result=null;try{result=compileFormula(s).scoped;}catch{}
+ let result=null;try{
+  // Delimited math and Lean context are distinct concrete syntaxes.
+  const syntax=/^\s*(?:\$|\\)/.test(s)||s.includes('\\')?'math':'lean';
+  result=compileFormula(s,{syntax}).scoped;
+ }catch{}
  if(parsedTypes.size>=256)parsedTypes.delete(parsedTypes.keys().next().value);
  parsedTypes.set(s,result);return result;
 };
@@ -18,6 +22,18 @@ export function premiseFrame(text,scope){
  const names=m[1].trim().replace(/[，,。.]$/,'').split(/\s*(?:[,，、]|与|和|\band\b)\s*/iu);
  if(!names.length||names.length>4||names.some(n=>!simple.test(n)||scope.filter(x=>x===n).length!==1))return null;
  return {kind:'premise-frame',premises:names};
+}
+// Capture-safe removal of the outer binder for a free local witness.
+function specialize(tree,witness,depth=0){
+ if(tree.kind==='bound'){
+  if(tree.index===depth)return {kind:'free',name:witness};
+  return tree.index>depth?{kind:'bound',index:tree.index-1}:tree;
+ }
+ if(tree.kind==='binder')return {...tree,domain:tree.domain?specialize(tree.domain,witness,depth):null,body:specialize(tree.body,witness,depth+1)};
+ if(tree.kind==='binary')return {...tree,left:specialize(tree.left,witness,depth),right:specialize(tree.right,witness,depth)};
+ if(tree.kind==='unary')return {...tree,body:specialize(tree.body,witness,depth)};
+ if(tree.kind==='call')return {...tree,fn:specialize(tree.fn,witness,depth),args:tree.args.map(a=>specialize(a,witness,depth))};
+ return tree;
 }
 export function contextCandidates(goal,names,facts){
  const target=parse(goal),out=[],seen=new Set();
@@ -41,6 +57,7 @@ export function contextCandidates(goal,names,facts){
  if(entries.length===2){
   for(const [a,b] of [entries,[entries[1],entries[0]]]){
    if(binary(a.type,'→')&&equal(a.type.left,b.type)&&equal(a.type.right,target))add('implication elimination',a.name,[b.name]);
+   if(a.type.kind==='binder'&&a.type.op==='∀'&&equal(a.type.domain,b.type)&&equal(specialize(a.type.body,b.name),target))add('universal specialization',a.name,[b.name]);
    if(binary(a.type,'↔')){
     if(equal(a.type.left,b.type)&&equal(a.type.right,target))add('equivalence forward','Iff.mp',[''+a.name,b.name]);
     if(equal(a.type.right,b.type)&&equal(a.type.left,target))add('equivalence backward','Iff.mpr',[a.name,b.name]);
@@ -148,6 +165,7 @@ export function implicitCandidates(goal,scope,facts,{rule='',limit=8}={}){
   const t=e.t;
   let partners=[];
   if(binary(t,'→')&&equal(t.right,target))partners.push(...lookup(t.left));
+  if(t.kind==='binder'&&t.op==='∀'&&t.domain)partners.push(...lookup(t.domain));
   if(binary(t,'↔')){
    if(equal(t.right,target))partners.push(...lookup(t.left));
    if(equal(t.left,target))partners.push(...lookup(t.right));

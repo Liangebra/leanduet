@@ -26,3 +26,12 @@ test('bounded quantifiers preserve membership and reject capture',()=>{
  assert.equal(compileFormula('\\exists x \\in S, P(x)').lean,'(∃ x, (x ∈ S) ∧ (P x))');
  assert.throws(()=>compileFormula('∀ x ∈ f(x), P(x)'));
 });
+
+test('Lean presentation round trips preserve application and binder structure',()=>{
+ for(const input of ['P(x)','f(g(x), y)=z','f(x)(y)','∀ x : Nat, P(x)','∀ x ∈ S, P(x)','∃ x ∈ S, P(x)','∀ S : Set, ∀ x ∈ S, P(x)']){
+  const math=compileFormula(input);
+  assert.deepEqual(compileFormula(math.lean,{syntax:'lean'}).scoped,math.scoped,input);
+ }
+ assert.throws(()=>compileFormula('P x'));
+ assert.throws(()=>compileFormula('f (x,y)',{syntax:'lean'}));
+});

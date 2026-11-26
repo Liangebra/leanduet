@@ -34,6 +34,7 @@ export function draftProof(input,scope=[],context=new Map()){
  const lines=input.split(/\r?\n/).map((raw,i)=>({raw,line:i+1})).filter(x=>x.raw.trim());
  if(lines.length>16)throw Error('Use at most sixteen inference lines.');
  const occupied=new Set(scope),visible=new Set(scope.filter((x,i)=>scope.indexOf(x)===i&&scope.lastIndexOf(x)===i));
+ const planned=new Set(lines.map(({raw})=>{try{return parseLine(raw).name;}catch{return null;}}).filter(Boolean));
  let serial=1;const rows=[],steps=[];let blocked=false;
  for(let i=0;i<lines.length;i++){
    const {raw,line}=lines[i];
@@ -55,7 +56,7 @@ export function draftProof(input,scope=[],context=new Map()){
       else {
        const r=parseRuleIntent(p.ruleText,{ordered:true});
        if(!r.rule||r.required.some(x=>!visible.has(x)))throw Error('Unknown or ambiguous premise; check scope and wording.');
-       if(occupied.has(r.rule)&&!visible.has(r.rule))throw Error('Ambiguous local rule.');
+       if((occupied.has(r.rule)||planned.has(r.rule))&&!visible.has(r.rule))throw Error('Ambiguous or forward local rule reference.');
        if(!r.required.length&&(structuralRules.has(r.rule)||visible.has(r.rule))){
          const resolution=implicitCandidates(p.type,[...visible],facts,{rule:r.rule});candidates=resolution.candidates;
          if(resolution.overflow||candidates.length!==1){blocked=true;rows.push({...p,line,status:'unresolved',candidates,reason:'The named rule needs a unique premise correspondence; choose or specify its premises.'});continue;}
@@ -72,7 +73,7 @@ export function draftProof(input,scope=[],context=new Map()){
     else{
       let name=p.name;
       if(name&&occupied.has(name))throw Error('This intermediate name already exists.');
-      if(!name){do{name='duet_h'+serial++;}while(occupied.has(name));}
+      if(!name){do{name='duet_h'+serial++;}while(occupied.has(name)||planned.has(name));}
       occupied.add(name);visible.add(name);facts.set(name,p.type);
       step={kind:'establish',name,type:p.type,application};
     }

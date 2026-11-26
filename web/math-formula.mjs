@@ -37,7 +37,8 @@ function tokenize(s){
  push('end','',s.length);return t;
 }
 function hasFreeName(ast,name){return ast?.kind==='free'&&ast.name===name||Object.values(ast||{}).some(x=>Array.isArray(x)?x.some(v=>v&&typeof v==='object'&&hasFreeName(v,name)):x&&typeof x==='object'&&hasFreeName(x,name));}
-export function parseFormula(input){
+export function parseFormula(input,{syntax='math'}={}){
+ if(!['math','lean'].includes(syntax))throw Error('Unknown formula syntax.');
  const tokens=tokenize(input);let i=0;
  const peek=()=>tokens[i];
  function take(k,v){const t=peek();if(t.kind!==k||(v!==undefined&&t.value!==v))throw Error('Expected '+(v??k)+' at '+t.pos);i++;return t;}
@@ -55,6 +56,8 @@ export function parseFormula(input){
       take('op','∈');const set=expr(0,depth+1);take(',');
       if(hasFreeName(scopedFormula(set),name))throw Error('Bounded quantifier set would capture '+name+'; rename the binder.');
       left={kind:'bounded',op:t.value,name,set,body:expr(0,depth+1)};
+    }else if(syntax==='lean'&&peek().kind===','){
+      take(',');left={kind:'binder',op:t.value,name,domain:null,body:expr(0,depth+1)};
     }else{
       take(':');const domain=expr(0,depth+1);take(',');
       left={kind:'binder',op:t.value,name,domain,body:expr(0,depth+1)};
@@ -62,7 +65,12 @@ export function parseFormula(input){
   }else throw Error('Expected a formula at '+t.pos);
   while(true){
    t=peek();
-   if(t.kind==='('&&90>=min){
+   // Lean adjacency denotes application, unlike presentation math.
+   if(syntax==='lean'&&90>=min&&['id','number','('].includes(t.kind)){
+    const arg=expr(91,depth+1);
+    left=left.kind==='call'?{...left,args:[...left.args,arg]}:{kind:'call',fn:left,args:[arg]};continue;
+   }
+   if(syntax==='math'&&t.kind==='('&&90>=min){
     i++;const args=[expr(0,depth+1)];while(peek().kind===','){i++;args.push(expr(0,depth+1));}take(')');
     left={kind:'call',fn:left,args};continue;
    }
@@ -81,12 +89,12 @@ export function renderFormula(ast){
   case 'unary':return '('+ast.op+' '+renderFormula(ast.body)+')';
   case 'binary':return '('+renderFormula(ast.left)+' '+ast.op+' '+renderFormula(ast.right)+')';
   case 'call':return '('+[renderFormula(ast.fn),...ast.args.map(renderFormula)].join(' ')+')';
-  case 'binder':return '('+ast.op+' '+ast.name+' : '+renderFormula(ast.domain)+', '+renderFormula(ast.body)+')';
+  case 'binder':return '('+ast.op+' '+ast.name+(ast.domain?' : '+renderFormula(ast.domain):'')+', '+renderFormula(ast.body)+')';
   case 'bounded':return '('+ast.op+' '+ast.name+', ('+ast.name+' ∈ '+renderFormula(ast.set)+') '+(ast.op==='∀'?'→':'∧')+' '+renderFormula(ast.body)+')';
   default:throw Error('Unknown mathematical AST node.');
  }
 }
-export function compileFormula(text){const ast=parseFormula(text);return {ast,scoped:scopedFormula(ast),lean:renderFormula(ast)};}
+export function compileFormula(text,options){const ast=parseFormula(text,options);return {ast,scoped:scopedFormula(ast),lean:renderFormula(ast)};}
 
 
 // Bindings are a separate canonical syntax view. Bound occurrences use
@@ -101,9 +109,17 @@ export function scopedFormula(ast,scope=[]){
   case 'number':return {kind:'number',value:ast.value};
   case 'unary':return {kind:'unary',op:ast.op,body:scopedFormula(ast.body,scope)};
   case 'binary':return {kind:'binary',op:ast.op,left:scopedFormula(ast.left,scope),right:scopedFormula(ast.right,scope)};
-  case 'call':return {kind:'call',fn:scopedFormula(ast.fn,scope),args:ast.args.map(a=>scopedFormula(a,scope))};
-  case 'binder':return {kind:'binder',op:ast.op,domain:scopedFormula(ast.domain,scope),body:scopedFormula(ast.body,[ast.name,...scope])};
-  case 'bounded':return {kind:'bounded',op:ast.op,set:scopedFormula(ast.set,scope),body:scopedFormula(ast.body,[ast.name,...scope])};
+  case 'call':{
+   const fn=scopedFormula(ast.fn,scope),args=ast.args.map(a=>scopedFormula(a,scope));
+   return fn.kind==='call'?{kind:'call',fn:fn.fn,args:[...fn.args,...args]}:{kind:'call',fn,args};
+  }
+  case 'binder':return {kind:'binder',op:ast.op,domain:ast.domain?scopedFormula(ast.domain,scope):null,body:scopedFormula(ast.body,[ast.name,...scope])};
+  case 'bounded':{
+   const inner=[ast.name,...scope];
+   return {kind:'binder',op:ast.op,domain:null,body:{kind:'binary',op:ast.op==='∀'?'→':'∧',
+     left:{kind:'binary',op:'∈',left:{kind:'bound',index:0},right:scopedFormula(ast.set,inner)},
+     right:scopedFormula(ast.body,inner)}};
+  }
   default:throw Error('Unknown mathematical AST node.');
  }
 }

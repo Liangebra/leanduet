@@ -72,3 +72,21 @@ test('indexed retrieval keeps ambiguity and excludes irrelevant premises',()=>{
  assert.equal(r.candidates.length,1);
  assert.equal(draftProof('由等式传递性得到 $a=c$',[...facts.keys()],facts).term,null);
 });
+
+test('Lean application syntax participates in citations and contextual inference',()=>{
+ const facts=new Map([['h','P x'],['f','P x → Q x']]);
+ assert.deepEqual(contextCandidates('(Q x)',['h','f'],facts).map(c=>c.term),['f h']);
+ assert.equal(draftProof('由 $P(x)$ 与 f 得到 $Q(x)$',['h','f'],facts).rows[0].step.application,'f h');
+});
+test('universal specialization uses typed local witnesses and preserves nested binders',()=>{
+ const facts=new Map([['h','∀ x : Nat, ∃ y : Nat, R x y'],['a','Nat'],['b','Int']]);
+ const r=implicitCandidates('(∃ z : Nat, R a z)',[...facts.keys()],facts);
+ assert.deepEqual(r.candidates.map(c=>c.term),['h a']);
+ assert.equal(contextCandidates('(∃ z : Nat, R b z)',['h','b'],facts).length,0);
+ assert.equal(contextCandidates('(∃ z : Nat, R z z)',['h','a'],facts).length,0);
+});
+test('bounded math citations match the generated Lean binder representation',()=>{
+ const facts=new Map([['h','∀ x, x ∈ S → P x']]);
+ const frame=formulaPremiseSentence('由 $∀ y ∈ S, P(y)$ 可得 $∀ z ∈ S, P(z)$');
+ assert.equal(citationCandidates(frame,['h'],facts).candidates[0].term,'h');
+});

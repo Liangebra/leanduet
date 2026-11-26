@@ -16,3 +16,14 @@ test('unknown assumptions do not vanish and block executable export',()=>{
  assert.equal(d.complete,false);assert.equal(d.term,null);
  assert.equal(d.rows[0].raw,'uniformly $Q$');assert.equal(d.rows[1].status,'provisional');
 });
+
+test('future intermediate names cannot masquerade as global declarations',()=>{
+ const d=draftProof('$P$ | later\nestablish later : $Q$ | f\n$R$ | g',['f','g']);
+ assert.equal(d.complete,false);
+ assert.match(d.rows[0].reason,/forward/);
+});
+test('automatic naming does not collide with a later explicit binding',()=>{
+ const d=draftProof('$P$ | f\nestablish duet_h1 : $Q$ | g\n$R$ | h',['f','g','h']);
+ assert.equal(d.complete,true);
+ assert.equal(d.steps[0].name,'duet_h2');
+});
