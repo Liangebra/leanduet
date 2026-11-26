@@ -48,3 +48,23 @@ test('formula-only obligations are distinct from verified proofs',()=>{
  assert.equal(r.rows[1].proofStatus,'depends-on-open');
  assert.match(r.term,/by exact\?/);
 });
+
+test('explicit candidate choice resolves an ambiguity without rewriting the original prose',()=>{
+ const input='establish hp : $P$ | from h\n$Q$ | from f and hp';
+ const facts=new Map([['h','P ∧ P'],['f','P → Q']]);
+ const r=draftProof(input,['h','f'],facts,{choices:new Map([[1,'And.right h']])});
+ assert.equal(r.complete,true);assert.match(r.term,/have hp : P := And.right h/);
+ assert.equal(r.rows[0].raw,input.split('\n')[0]);
+ assert.equal(r.rows[1].proofStatus,'candidate');
+ assert.equal(r.graph.nodes.at(-2).selectedCandidate,'line:1:candidate:1');
+ const stale=draftProof(input,['h','f'],facts,{choices:new Map([[1,'And.right nonexistent']])});
+ assert.equal(stale.complete,false);assert.match(stale.rows[0].reason,/no longer available/);
+});
+test('bare conclusion remains an open search unless the user chooses a candidate',()=>{
+ const facts=new Map([['h','P']]);
+ const plain=draftProof('$P$',['h'],facts);
+ const chosen=draftProof('$P$',['h'],facts,{choices:new Map([[1,'h']])});
+ assert.equal(plain.rows[0].proofStatus,'open');
+ assert.equal(chosen.rows[0].step.application,'h');
+ assert.equal(chosen.rows[0].proofStatus,'candidate');
+});

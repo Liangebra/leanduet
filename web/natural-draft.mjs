@@ -29,7 +29,7 @@ function parseLine(raw){
  }
  return {raw,formula,type:compileFormula(formula).lean,name,ruleText,conclusion,modifiers,forwardText};
 }
-export function draftProof(input,scope=[],context=new Map()){
+export function draftProof(input,scope=[],context=new Map(),{choices=new Map()}={}){
  const facts=new Map(context);
  if(typeof input!=='string'||input.length>12000)throw Error('Draft exceeds 12000 characters.');
  const lines=input.split(/\r?\n/).map((raw,i)=>({raw,line:i+1})).filter(x=>x.raw.trim());
@@ -63,13 +63,20 @@ export function draftProof(input,scope=[],context=new Map()){
     if(p.conclusion&&!last)throw Error('A conclusion must be the last inference.');
     if(last&&p.name)throw Error('The final inference must conclude the goal, not name a fact.');
     let application='?',candidates=[];
+    function chosen(){
+     if(!choices.has(line))return null;
+     const candidate=candidates.find(c=>c.term===choices.get(line));
+     if(!candidate)throw Error('Selected candidate is no longer available.');
+     return candidate.term;
+    }
     const frame=premiseFrame(p.forwardText||p.ruleText,[...visible]);
     if(p.citation||frame){
       const resolution=p.citation?citationCandidates(p.citation,[...visible],facts):{candidates:contextCandidates(p.type,frame.premises,facts),overflow:false};
       candidates=resolution.candidates;
-      if(resolution.overflow){unresolved(p,raw,line,last,{candidates,reason:'Too many matching formula citations; name a specific premise.'});continue;}
-      if(candidates.length!==1){unresolved(p,raw,line,last,{frame,candidates,reason:candidates.length?'Multiple structural interpretations; specify the rule and ordered premises.':'No structural match for these premises. Name a rule or provide context types.'});continue;}
-      application=candidates[0].term;
+      const picked=chosen();
+      if(!picked&&resolution.overflow){unresolved(p,raw,line,last,{candidates,reason:'Too many matching formula citations; name a specific premise.'});continue;}
+      if(!picked&&candidates.length!==1){unresolved(p,raw,line,last,{frame,candidates,reason:candidates.length?'Multiple structural interpretations; specify the rule and ordered premises.':'No structural match for these premises. Name a rule or provide context types.'});continue;}
+      application=picked||candidates[0].term;
     }else if(p.ruleText&&p.ruleText!=='?'){
       const words=p.ruleText.split(/\s+/);
       if(words.length<=9&&words.every(w=>namePattern.test(w)&&visible.has(w)))application=words.join(' ');
@@ -79,15 +86,18 @@ export function draftProof(input,scope=[],context=new Map()){
        if((occupied.has(r.rule)||planned.has(r.rule))&&!visible.has(r.rule))throw Error('Ambiguous or forward local rule reference.');
        if(!r.required.length&&(structuralRules.has(r.rule)||visible.has(r.rule))){
          const resolution=implicitCandidates(p.type,[...visible],facts,{rule:r.rule});candidates=resolution.candidates;
-         if(resolution.overflow||candidates.length!==1){unresolved(p,raw,line,last,{candidates,reason:'The named rule needs a unique premise correspondence; choose or specify its premises.'});continue;}
-         application=candidates[0].term;
+         const picked=chosen();
+         if(!picked&&(resolution.overflow||candidates.length!==1)){unresolved(p,raw,line,last,{candidates,reason:'The named rule needs a unique premise correspondence; choose or specify its premises.'});continue;}
+         application=picked||candidates[0].term;
        }else application=[r.rule,...r.required].join(' ');
       }
     }else if(!p.ruleText){
       const resolution=implicitCandidates(p.type,[...visible],facts);candidates=resolution.candidates;
+      application=chosen()||'?';
       // Bare conclusions specify no reasoning. Keep the proof obligation,
       // even when a limited schema finds just one possible proof.
     }
+    if(choices.has(line)&&!candidates.some(c=>c.term===choices.get(line)))throw Error('Selected candidate is no longer available.');
     const dependencies=[...new Set(application.split(/\s+/).filter(name=>openNames.has(name)))];
     const proofStatus=application==='?'?'open':dependencies.length?'depends-on-open':'candidate';
     const step=makeStep(p,last,application);
@@ -98,8 +108,8 @@ export function draftProof(input,scope=[],context=new Map()){
  const complete=lines.length>0&&!blocked&&steps.at(-1)?.kind==='conclude';
  return {rows,steps,complete,openBindings:[...openNames],graph:buildDraftGraph(scope,context,rows),term:complete?renderChain(steps):null};
 }
-export function compileNaturalDraft(input,scope,context){
- const r=draftProof(input,scope,context);
+export function compileNaturalDraft(input,scope,context,options){
+ const r=draftProof(input,scope,context,options);
  if(!r.complete){const unresolved=r.rows.find(x=>x.status==='unresolved');throw Error(unresolved?'Line '+unresolved.line+': '+unresolved.reason:'No complete conclusion.');}
  return r;
 }

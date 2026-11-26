@@ -39,3 +39,11 @@ separate from selected proof dependencies. An invalidation traversal includes
 possible candidate dependencies by default. This is a dependency index, not
 yet an incremental scheduler. The native kernel judgment is not reconstructed
 from this speculative graph.
+
+## Explicit candidate resolution
+
+A draft choice is a line-local selection of a currently available candidate;
+no choice is inferred from ordering. The original text remains unchanged.
+The browser resets choices on text or target change and invalidates staged
+patches and in-flight inference when choices change. Choices are not verified
+proofs, persisted cross-revision identities, or an automatic CSP solver.

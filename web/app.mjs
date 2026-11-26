@@ -24,6 +24,8 @@ let lastTypedSource=null,lastTypedProfile=null,lastTypedTree=null,saveTimer;
 let liveTimer,interpretTimer,interpretVersion=0,interpretBusy=false,typedBusy=false;
 let exploration=emptyExploration(),wording=[];
 let foldedPaths=new Set();
+const draftChoices=new Map();let draftChoiceVersion=0;
+function clearDraftChoices(){draftChoices.clear();draftChoiceVersion++;}
 let ir,base,rev=0,notesRev=0,candidate=null,narrative=null,timer,selected=null,name='proof',exampleIndex=null,view='reading';
 const clean=()=>lean.value===base.lean&&prose.value===base.prose;
 const state=(id,label,kind='')=>{$(id).textContent=label;$(id).dataset.state=kind;};
@@ -307,7 +309,7 @@ $('collapseProof').onclick=()=>{foldedPaths=outlinePaths(typedRoot);showTypedNar
 $('expandProof').onclick=()=>{foldedPaths.clear();showTypedNarrative();};
 function openPatch(node){
   if(!clean()||!typedRoot||proofIndex?.find(node.path)!==node)return;
-  patchNode=node;patchCandidate=null;interpretVersion++;clearTimeout(interpretTimer);$('interpretPanel').hidden=node.kind==='witness';$('interpretPanel').open=false;$('interpretText').value='';$('aiInterpretText').value='';$('includeAiInterpret').checked=false;$('aiInterpretStatus').textContent='';$('interpretAiPanel').open=false;$('interpretResults').replaceChildren();$('interpretStatus').textContent='';$('typedPatch').hidden=false;$('applyPatch').disabled=true;
+  clearDraftChoices();patchNode=node;patchCandidate=null;interpretVersion++;clearTimeout(interpretTimer);$('interpretPanel').hidden=node.kind==='witness';$('interpretPanel').open=false;$('interpretText').value='';$('aiInterpretText').value='';$('includeAiInterpret').checked=false;$('aiInterpretStatus').textContent='';$('interpretAiPanel').open=false;$('interpretResults').replaceChildren();$('interpretStatus').textContent='';$('typedPatch').hidden=false;$('applyPatch').disabled=true;
   $('irOutput').textContent='';$('irStatus').textContent='';$('irInspector').open=false;
   $('abstractPanel').hidden=node.kind==='witness';$('abstractPanel').open=false;$('abstractOutput').textContent='';$('abstractStatus').textContent='';$('factorProof').disabled=true;
   $('wordingInput').value=wordingFor(typedRoot,node,wording);$('wordingStatus').textContent='Author wording, not a checked assertion.';$('patchTarget').textContent=node.path+' · '+node.type;$('patchTerm').value=node.term||'';
@@ -464,21 +466,33 @@ $('suggestInterpretations').onclick=async()=>{
   }catch(e){if(revision===rev&&node===patchNode&&version===interpretVersion)$('aiInterpretStatus').textContent=e.message;}
   finally{$('suggestInterpretations').disabled=false;}
 };
-function parseChainInput(text,scope){const mode=$('chainFormat').value;return mode==='formula'?compileFormulaSequence(text,scope):mode==='natural'?compileNaturalDraft(text,scope,factsFromScope(patchNode?.scope)):compileChain(text,scope);}
+function parseChainInput(text,scope){const mode=$('chainFormat').value;return mode==='formula'?compileFormulaSequence(text,scope):mode==='natural'?compileNaturalDraft(text,scope,factsFromScope(patchNode?.scope),{choices:draftChoices}):compileChain(text,scope);}
 $('chainFormat').onchange=()=>{$('chainText').placeholder=$('chainFormat').value==='formula'?'$Q$\n$R$':$('chainFormat').value==='natural'?'建立 hq : $Q$，由 f，使用 p\n因此 $R$，由 g，使用 hq':'Establish hq | f using p\nConclude | g using hq';$('chainText').dispatchEvent(new Event('input'));};
-$('chainText').addEventListener('input',()=>{$('chainBindings').replaceChildren();$('patchTerm').value='';$('patchTerm').dispatchEvent(new Event('input'));$('chainStatus').textContent='Narrative changed. Stage the new candidate.';previewDraft();});
+$('chainText').addEventListener('input',()=>{clearDraftChoices();$('chainBindings').replaceChildren();$('patchTerm').value='';$('patchTerm').dispatchEvent(new Event('input'));$('chainStatus').textContent='Narrative changed. Stage the new candidate.';previewDraft();});
 function previewDraft(){
  const target=$('draftTranslation');target.replaceChildren();
  if($('chainFormat').value!=='natural'||!patchNode)return;
  try{
-   const r=draftProof($('chainText').value,(patchNode.scope||[]).map(d=>d.name),factsFromScope(patchNode.scope));
+   const r=draftProof($('chainText').value,(patchNode.scope||[]).map(d=>d.name),factsFromScope(patchNode.scope),{choices:draftChoices});
    for(const x of r.rows){
      const d=element('div',undefined,'ruleResult');
      d.append(element('small','Line '+x.line+' · '+x.status+(x.proofStatus?' · '+x.proofStatus:'')),element('span',x.raw));
      if(x.step)d.append(element('code',x.step.kind==='establish'?'have '+x.step.name+' : '+x.step.type+' := '+x.step.application:'show '+x.step.type+'; '+x.step.application));
      if(x.reason)d.append(element('small',x.reason));
      if(x.dependencies?.length)d.append(element('small','Depends on open obligations: '+x.dependencies.join(', ')));
-     for(const c of x.candidates||[]){d.append(element('code',c.term+' · '+c.schema));if(c.premiseFacts?.length)d.append(element('small',c.premiseFacts.map(p=>p.type+' ['+p.name+']').join(' · ')));}
+     for(const c of x.candidates||[]){
+      d.append(element('code',c.term+' · '+c.schema));
+      if(c.premiseFacts?.length)d.append(element('small',c.premiseFacts.map(p=>p.type+' ['+p.name+']').join(' · ')));
+      const selected=draftChoices.get(x.line)===c.term;
+      const b=element('button',selected?'Clear choice':'Use this candidate');b.type='button';
+      b.onclick=()=>{
+       if(!patchNode||!clean())return;
+       if(selected)draftChoices.delete(x.line);else draftChoices.set(x.line,c.term);
+       draftChoiceVersion++;$('chainBindings').replaceChildren();$('patchTerm').value='';$('patchTerm').dispatchEvent(new Event('input'));
+       $('chainStatus').textContent='Candidate choice changed. Stage and check again.';previewDraft();
+      };
+      d.append(b);
+     }
      target.append(d);
    }
    if(r.term)target.append(element('pre',r.term));
@@ -494,20 +508,20 @@ $('compileChain').onclick=()=>{
 };
 $('inferChain').onclick=async()=>{
   if(!patchNode||!clean()||patchNode.kind==='witness')return;
-  const node=patchNode,revision=rev,query=$('chainText').value,format=$('chainFormat').value;
+  const node=patchNode,revision=rev,query=$('chainText').value,format=$('chainFormat').value,choiceVersion=draftChoiceVersion;
   $('chainBindings').replaceChildren();$('inferChain').disabled=true;
   $('patchTerm').value='';$('patchTerm').dispatchEvent(new Event('input'));
   $('chainStatus').textContent='Inferring intermediate propositions in Lean…';
   try{
     const {steps}=parseChainInput(query,(node.scope||[]).map(d=>d.name));
     const r=await api('chain',{source:lean.value,path:node.path,steps});
-    if(revision!==rev||node!==patchNode||query!==$('chainText').value||format!==$('chainFormat').value)return;
+    if(revision!==rev||node!==patchNode||query!==$('chainText').value||format!==$('chainFormat').value||choiceVersion!==draftChoiceVersion)return;
     if(r.status!=='inferred')throw Error('Lean did not confirm inference.');
     $('patchTerm').value=r.term;$('patchTerm').dispatchEvent(new Event('input'));
     for(const b of r.bindings){const row=element('div',undefined,'scopeRow');row.append(element('strong',b.name),element('code',b.type));$('chainBindings').append(row);}
     const goal=element('div',undefined,'scopeRow');goal.append(element('strong','Conclusion'),element('code',r.goal));$('chainBindings').append(goal);
     $('chainStatus').textContent='Intermediate propositions inferred by Lean. Check replacement before applying.';
-  }catch(e){if(revision===rev&&node===patchNode&&query===$('chainText').value&&format===$('chainFormat').value)$('chainStatus').textContent=e.message;}
+  }catch(e){if(revision===rev&&node===patchNode&&query===$('chainText').value&&format===$('chainFormat').value&&choiceVersion===draftChoiceVersion)$('chainStatus').textContent=e.message;}
   finally{$('inferChain').disabled=false;}
 };
 function stageWitness(){
