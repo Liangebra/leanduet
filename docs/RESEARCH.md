@@ -44,3 +44,13 @@ Definitional equality of proof terms is too weak (proof irrelevance). The export
 ### Type-directed local alternatives
 
 For proof-valued nodes the extractor compares each local declaration type to the node's inferred proposition using Lean's definitional equality. The editor offers unambiguous local names as guided replacement candidates. It still elaborates, checks, reconstructs and round-trips the chosen proof; this is local assumption selection, not a general proof search or a free-language parser.
+
+## Dependent contexts and witness editing
+
+lean/Dependent.lean models a context Γ as a type of environments, propositions as families Γ → Prop, and object types as families Γ → Type. Sigma extension represents a variable and Subtype extension represents an assumption. The indexed narrative supports universal introduction/elimination, existential introduction/elimination, implication and equality transport. The compiler is a shallow semantic interpretation; known leaves contain already supplied Lean evidence. It is not a complete syntax for Lean or a formal bridge to Expr.
+
+A CertifiedWitness packages a section w and evidence in the fibre P(γ,w γ). Changing w requires evidence in the new fibre; equal carrier types alone are insufficient. transportSection illustrates how an equality of sections pointwise transports dependent data. In the native inspector, only the witness argument of Exists.intro is newly editable; the entire rebuilt term, type and shape are still checked. Changing a witness while retaining incompatible evidence must be rejected. General simultaneous edits of a dependent witness and its evidence are not yet implemented.
+
+Bounded local application discovery tries one explicit Pi binder and up to 24 local declarations, returning at most eight matching applications at an application node. It substitutes the actual argument into the codomain and uses Lean definitional equality, including for ∀-elimination. No AI or arbitrary global theorem search is involved; all proposed terms require full patch validation. The previous reserved-keyword error in the extractor is corrected.
+
+Deployment now checks that the tested SHA is the actual checkout, current main, and has a successful push CI run before publishing; manual deployment cannot bypass this gate.

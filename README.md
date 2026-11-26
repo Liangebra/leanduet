@@ -57,6 +57,8 @@ The Typed proof tab calls a local Lean metaprogram to inspect elaborated theorem
 
 The local Typed proof tab also offers a checked term-level replacement preview for monomorphic theorems: local elaboration, whole-proof checking, standalone recompile and definitional statement comparison precede explicit application. This can rewrite the surface header and tactic layout.
 
+The experimental dependent track adds quantified inference, certified existential witnesses and equality transport in [lean/Dependent.lean](lean/Dependent.lean). The local inspector offers bounded one-argument applications and editable existential witnesses, subject to full dependent validation.
+
 See [research references and reuse policy](docs/RESEARCH.md) and the small indexed natural-deduction calculus in [lean/TMN.lean](lean/TMN.lean). The calculus and extractor are included in CI; no claim of full Lean-to-natural-language reversibility.
 
 ## Trust and privacy

@@ -26,11 +26,40 @@ def localScope (goal : Expr) (editable : Bool) : MetaM (Array Json) := do
   let mut entries := #[]
   for d in (← getLCtx) do
     if !d.isImplementationDetail then
-      let matches ← if editable then isDefEq d.type goal else pure false
+      let matchesType ← if editable then isDefEq d.type goal else pure false
       entries := entries.push (Json.mkObj [
-        ("matchesGoal", toJson matches), ("name", toJson d.userName.toString),
+        ("matchesGoal", toJson matchesType), ("name", toJson d.userName.toString),
         ("type", toJson (← ppExpr d.type).pretty)])
   return entries
+
+-- Bounded local application search. Instantiate a single explicit dependent
+-- binder with a local object, then compare the resulting proposition in Lean.
+def localApplications (goal : Expr) : MetaM (Array Json) := do
+  let mut locals : Array LocalDecl := #[]
+  for d in (← getLCtx) do
+    if !d.isImplementationDetail && locals.size < 24 then
+      locals := locals.push d
+  let mut results := #[]
+  for f in locals do
+    let ty ← whnf f.type
+    match ty with
+    | .forallE _ domain body .default =>
+      for a in locals do
+        if results.size < 8 then
+          if ← isDefEq a.type domain then
+            let resultType := body.instantiate1 (mkFVar a.fvarId)
+            if ← isDefEq resultType goal then
+              results := results.push (Json.mkObj [
+                ("function", toJson f.userName.toString),
+                ("argument", toJson a.userName.toString),
+                ("type", toJson (← ppExpr resultType).pretty)])
+    | _ => pure ()
+  return results
+
+def isWitnessArg (head : Expr) (i : Nat) : Bool :=
+  match head with
+  | .const n _ => n == `Exists.intro && i == 2
+  | _ => false
 
 partial def inspect (e : Expr) (fuel : Nat) (path : String := "root") : MetaM Json := do
   let term := (← ppExpr e).pretty
@@ -38,6 +67,7 @@ partial def inspect (e : Expr) (fuel : Nat) (path : String := "root") : MetaM Js
   let typ := (← ppExpr ty).pretty
   let editable ← isProp ty
   let scope ← localScope ty editable
+  let alternatives ← if editable then localApplications ty else pure #[]
   if fuel == 0 then return node path editable scope "opaque" term typ
   match e with
   | .lam n t b bi =>
@@ -62,14 +92,20 @@ partial def inspect (e : Expr) (fuel : Nat) (path : String := "root") : MetaM Js
       let args := e.getAppArgs
       for i in [:args.size] do
         let a := args[i]!
-        if ← isProp (← inferType a) then
+        let argPath := path ++ "/arg" ++ toString i
+        if isWitnessArg head i then
+          let aType ← inferType a
+          let aScope ← localScope aType true
+          children := children.push (node argPath true aScope "witness"
+            (← ppExpr a).pretty (← ppExpr aType).pretty)
+        else if ← isProp (← inferType a) then
           if children.size < 8 then
-            children := children.push (← inspect a (fuel - 1) (path ++ "/arg" ++ toString i))
+            children := children.push (← inspect a (fuel - 1) argPath)
       let ref := match head with
         | .const n _ => n.toString
         | _ => headText
       return node path editable scope "apply" term typ children
-        [("reference", toJson ref), ("referenceType", toJson headType)]
+        [("reference", toJson ref), ("referenceType", toJson headType), ("applications", Json.arr alternatives)]
   | .const n _ => return node path editable scope "reference" term typ #[] [("reference", toJson n.toString)]
   | .fvar _ => return node path editable scope "hypothesis" term typ
   | .mdata _ body => inspect body (fuel - 1) path
@@ -88,11 +124,11 @@ elab "#duet_extract " n:ident : command => do
 
 /-- Rebuild exactly one expression path, elaborating the replacement in its actual scope. -/
 partial def replaceAt (e : Expr) (path : List String) (stx : Syntax) :
-    TermElabM (Expr × String × String) := do
+    (allowWitness : Bool := false) : TermElabM (Expr × String × String) := do
   match path with
   | [] =>
     let ty ← inferType e
-    unless ← isProp ty do throwError "Only proposition-valued holes are editable"
+    unless allowWitness || (← isProp ty) do throwError "Only proofs and existential witness positions are editable"
     let value ← Term.elabTermEnsuringType stx (some ty)
     Term.synthesizeSyntheticMVarsNoPostponing
     let value ← instantiateMVars value
@@ -124,7 +160,7 @@ partial def replaceAt (e : Expr) (path : List String) (stx : Syntax) :
       let some i := (String.mk (p.toList.drop 3)).toNat? | throwError "Invalid argument index"
       let args := e.getAppArgs
       unless i < args.size do throwError "Argument index out of bounds"
-      let (v, ty, old) ← replaceAt args[i]! rest stx
+      let (v, ty, old) ← replaceAt args[i]! rest stx (isWitnessArg e.getAppFn i && rest.isEmpty)
       return (mkAppN e.getAppFn (args.set! i v), ty, old)
     | _ => throwError "Invalid expression path"
 

@@ -1,6 +1,10 @@
 // Deterministic realization of the extracted proof tree, not a reverse parser.
 // Never identify two proofs merely because their types are equal.
 const meanings = {
+  'Exists.intro':['Establish existence using the witness','利用所选见证证明存在性'],
+  'Exists.elim':['Eliminate the existential hypothesis','利用存在命题的消去规则'],
+  'Eq.rec':['Transport along equality','沿等式进行运输'],
+  'Eq.ndrec':['Transport along equality','沿等式进行运输'],
   'And.intro':['Combine the two claims','合并两个结论'],
   'And.left':['Use the first conjunct','取合取命题的第一项'],
   'And.right':['Use the second conjunct','取合取命题的第二项'],
@@ -22,6 +26,9 @@ export function narrate(root,lang='en'){
       add(n.kind,zh?(n.kind==='assume'?'假设 ':'任取 ')+n.binder:(n.kind==='assume'?'Assume ':'Introduce ')+n.binder,n.binderType,d);
       for(const c of children)walk(c,d+1);
       return;
+    }
+    if(n.kind==='witness'){
+      add('witness',(zh?'选取见证 ':'Choose witness ')+n.term+(zh?'，其类型为':' of type'),n.type,d);return;
     }
     if(n.kind==='let'){
       if(children[0])walk(children[0],d+1);

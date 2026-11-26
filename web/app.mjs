@@ -92,10 +92,10 @@ function renderTyped(node,container,depth=0){
   if(!node||typeof node.kind!=='string'||depth>12)return;
   const block=element('details',undefined,'typedNode');block.open=depth<3;
   const title=element('summary');
-  const label={assume:'Assume',introduce:'Introduce',apply:'Apply',let:'Establish local binding',hypothesis:'Use hypothesis',reference:'Use declaration',opaque:'Opaque term'}[node.kind]||node.kind;
+  const label={assume:'Assume',introduce:'Introduce',apply:'Apply',let:'Establish local binding',hypothesis:'Use hypothesis',reference:'Use declaration',opaque:'Opaque term',witness:'Choose witness'}[node.kind]||node.kind;
   title.append(element('strong',label+(node.binder?' '+node.binder:node.reference?' '+node.reference:'')));
   block.append(title);
-  if(node.editable&&node.path&&local){const edit=element('button','Replace this proof','typedEdit');edit.onclick=()=>openPatch(node);block.append(edit);}
+  if(node.editable&&node.path&&local){const edit=element('button',node.kind==='witness'?'Replace witness':'Replace this proof','typedEdit');edit.onclick=()=>openPatch(node);block.append(edit);}
   const typ=element('div',undefined,'typedType');typ.append(element('span','Type / conclusion','eyebrow'));typ.append(element('code',node.type||''));block.append(typ);
   if(node.binderType)block.append(element('code','Binder: '+node.binderType));
   if(node.referenceType)block.append(element('code','Reference type: '+node.referenceType));
@@ -122,13 +122,21 @@ function openPatch(node){
     const row=element('div',undefined,'scopeRow');row.append(element('strong',d.name),element('code',d.type));$('patchScope').append(row);
     // Only offer unambiguous simple names; the actual term must still pass Lean.
     if(d.matchesGoal&&/^[A-Za-z_][A-Za-z0-9_']*$/.test(d.name)&&scope.filter(x=>x.name===d.name).length===1){
-      const button=element('button',($('typedLanguage').value==='zh'?'使用假设 ':'Use hypothesis ')+d.name,'suggestion');
+      const button=element('button',(node.kind==='witness'?($('typedLanguage').value==='zh'?'选取对象 ':'Choose object '):($('typedLanguage').value==='zh'?'使用假设 ':'Use hypothesis '))+d.name,'suggestion');
       button.onclick=()=>{$('patchTerm').value=d.name;$('patchTerm').dispatchEvent(new Event('input'));$('patchTerm').focus();};
       $('patchChoices').append(button);
     }
   }
+  for(const a of node.applications||[]){
+    const safe=n=>/^[A-Za-z_][A-Za-z0-9_']*$/.test(n)&&scope.filter(x=>x.name===n).length===1;
+    if(!safe(a.function)||!safe(a.argument))continue;
+    const term=a.function+' '+a.argument;
+    const button=element('button',($('typedLanguage').value==='zh'?'应用 ':'Apply ')+a.function+($('typedLanguage').value==='zh'?' 于 ':' to ')+a.argument,'suggestion');
+    button.onclick=()=>{$('patchTerm').value=term;$('patchTerm').dispatchEvent(new Event('input'));$('patchTerm').focus();};
+    $('patchChoices').append(button);
+  }
   $('patchSuggestions').hidden=!$('patchChoices').children.length;
-  $('patchPreview').textContent='';$('patchStatus').textContent='Edit the local proof term. Lean will check its type and the entire exported theorem.';
+  $('patchPreview').textContent='';$('patchStatus').textContent=node.kind==='witness'?'Choose a new witness. Lean will recheck all dependent proof obligations; the unchanged evidence may become invalid.':'Edit the local proof term. Lean will check its type and the entire exported theorem.';
   $('typedPatch').scrollIntoView({block:'nearest'});$('patchTerm').focus();
 }
 $('cancelPatch').onclick=()=>{patchNode=null;patchCandidate=null;$('typedPatch').hidden=true;};

@@ -32,6 +32,7 @@ r=patch(source2,target["path"],"hq")
 assert r["statementDefEq"] and r["proofShapePreserved"] and r["status"]=="checked",r
 assert any(d["name"]=="hq" and d["type"]=="Q" and d["matchesGoal"] for d in target["scope"]), target
 assert not any(d["name"]=="hp" and d["matchesGoal"] for d in target["scope"]), target
+assert any(a["function"]=="hpq" and a["argument"]=="hp" for a in target["applications"]),target
 noop=patch(source2,target["path"],"hpq hp")
 assert noop["unchanged"] and noop["source"]==source2,noop
 assert "hqr hq" in r["source"],r
@@ -52,3 +53,29 @@ r=patch(same_type,target["path"],"h2")
 assert r["proofShapePreserved"] and not r["unchanged"],r
 assert "h2" in r["source"],r
 print("Same-proposition assumptions retain their distinct proof occurrences; no-op preserves source")
+
+source3 = """theorem witness_example : ∃ n : Nat, True := by
+  exact ⟨0, True.intro⟩
+"""
+w=next(n for n in walk(extract(source3)["tree"]) if n["kind"]=="witness")
+assert w["type"]=="Nat" and w["editable"],w
+r=patch(source3,w["path"],"1")
+assert r["proofShapePreserved"] and not r["unchanged"],r
+
+dependent = """theorem dependent_witness : ∃ n : Nat, n = 0 := by
+  exact ⟨0, rfl⟩
+"""
+w=next(n for n in walk(extract(dependent)["tree"]) if n["kind"]=="witness")
+try:
+    patch(dependent,w["path"],"1")
+except ValueError:
+    pass
+else:
+    raise AssertionError("Invalid dependent witness accepted")
+
+quantified = """theorem quantified (P : Nat → Prop) (h : ∀ n : Nat, P n) (a : Nat) : P a := by
+  exact h a
+"""
+q=next(n for n in walk(extract(quantified)["tree"]) if n.get("reference")=="h" and n["kind"]=="apply")
+assert any(a["function"]=="h" and a["argument"]=="a" for a in q["applications"]),q
+print("Dependent applications and existential witness replacement/rejection passed")

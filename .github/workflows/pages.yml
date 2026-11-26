@@ -7,11 +7,12 @@ on:
     branches: [main]
 permissions:
   contents: read
+  actions: read
   pages: write
   id-token: write
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 jobs:
   deploy:
     if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main')
@@ -23,10 +24,33 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - name: Require a successful test run for this exact main revision
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          set -eu
+          actual="$(git rev-parse HEAD)"
+          latest="$(git ls-remote origin refs/heads/main | cut -f1)"
+          if [ "$actual" != "$EXPECTED" ] || [ "$latest" != "$EXPECTED" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping stale revision"
+            exit 0
+          fi
+          count="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$EXPECTED&status=success&event=push&per_page=1" --jq '.total_count')"
+          if [ "$count" -lt 1 ]; then
+            echo "No successful Tests run for this exact commit"
+            exit 1
+          fi
+          echo "ready=true" >> "$GITHUB_OUTPUT"
       - uses: actions/configure-pages@v5
+        if: steps.gate.outputs.ready == 'true'
       - uses: actions/upload-pages-artifact@v3
+        if: steps.gate.outputs.ready == 'true'
         with:
           path: web
       - name: Deploy
         id: deployment
+        if: steps.gate.outputs.ready == 'true'
         uses: actions/deploy-pages@v4
