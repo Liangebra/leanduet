@@ -105,3 +105,18 @@ scope={d["name"]:d for d in dep_node["scope"]}
 assert scope["h1"]["usedInTerm"] and not scope["h2"]["usedInTerm"],scope
 assert scope["P"]["usedInType"] and not scope["h1"]["usedInType"],scope
 print("Direct expression dependencies preserve distinct local hypotheses")
+
+
+# A dependent object or function can require an earlier variable without
+# mentioning it directly in the selected application or its result type.
+closure_source = """theorem context_closure (n : Nat) (f : Fin (n+1) → True) (x : Fin (n+1)) : True := by
+  exact f x
+"""
+closure_node=next(n for n in walk(extract(closure_source)["tree"]) if n.get("reference")=="f")
+ctx={d["name"]:d for d in closure_node["scope"]}
+assert ctx["f"]["usedInTerm"] and ctx["x"]["usedInTerm"],ctx
+assert not ctx["n"]["usedInTerm"] and not ctx["n"]["usedInType"],ctx
+assert ctx["n"]["neededForContext"],ctx
+assert ctx["n"]["contextIndex"] in ctx["f"]["dependsOn"],ctx
+assert ctx["n"]["contextIndex"] in ctx["x"]["dependsOn"],ctx
+print("Dependent context closure retained the type of a referenced local object")

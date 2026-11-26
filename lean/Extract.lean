@@ -22,15 +22,47 @@ partial def shape (e : Expr) : Expr :=
 
 def sameShape (a b : Expr) : Bool := Expr.equal (shape a) (shape b)
 
+/-- A declaration depends on an earlier declaration through its type or let value.
+    This is a syntactic relation on local free-variable identities. -/
+def declDepends (d : LocalDecl) (id : FVarId) : Bool :=
+  d.type.containsFVar id || (match d.value? with
+    | some v => v.containsFVar id
+    | none => false)
+
+/-- The local context is ordered by introduction. Close the used declarations
+    backwards through their dependent types and local definitions. -/
 def localScope (goal : Expr) (editable : Bool) (term : Expr) : MetaM (Array Json) := do
-  let mut entries := #[]
+  let mut locals : Array LocalDecl := #[]
   for d in (← getLCtx) do
+    locals := locals.push d
+  let mut needed : Array FVarId := #[]
+  for d in locals do
+    if term.containsFVar d.fvarId || goal.containsFVar d.fvarId then
+      needed := needed.push d.fvarId
+  for d in locals.reverse do
+    if needed.contains d.fvarId then
+      for earlier in locals do
+        if earlier.index < d.index && declDepends d earlier.fvarId && !needed.contains earlier.fvarId then
+          needed := needed.push earlier.fvarId
+  let mut entries := #[]
+  for d in locals do
     if !d.isImplementationDetail then
       let matchesType ← if editable then isDefEq d.type goal else pure false
+      let mut dependencies : Array Json := #[]
+      let mut hiddenDependencies := 0
+      for earlier in locals do
+        if earlier.index < d.index && declDepends d earlier.fvarId then
+          if earlier.isImplementationDetail then
+            hiddenDependencies := hiddenDependencies + 1
+          else
+            dependencies := dependencies.push (toJson earlier.index)
       entries := entries.push (Json.mkObj [
         ("matchesGoal", toJson matchesType), ("name", toJson d.userName.toString),
+        ("contextIndex", toJson d.index), ("dependsOn", Json.arr dependencies),
+        ("hiddenDependencies", toJson hiddenDependencies),
         ("usedInTerm", toJson (term.containsFVar d.fvarId)),
         ("usedInType", toJson (goal.containsFVar d.fvarId)),
+        ("neededForContext", toJson (needed.contains d.fvarId)),
         ("type", toJson (← ppExpr d.type).pretty)])
   return entries
 

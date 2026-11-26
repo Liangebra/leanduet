@@ -158,14 +158,19 @@ function openPatch(node){
   const paired=node.reference==='Exists.intro'&&witness&&evidence;
   $('witnessPair').hidden=!paired;
   if(paired){$('witnessValue').value=witness.term||'';$('witnessEvidence').value=evidence.term||'';}
-  $('patchScope').replaceChildren();$('patchChoices').replaceChildren();
+  $('patchScope').replaceChildren();$('patchChoices').replaceChildren();$('usedContextOnly').checked=false;
   const scope=node.scope||[];
   for(const d of scope){
     const row=element('div',undefined,'scopeRow');
     const info=element('div');info.append(element('code',d.type));
+    row.dataset.needed=String(d.neededForContext===true);
+    const dependencies=(d.dependsOn||[]).map(index=>scope.find(x=>x.contextIndex===index)).filter(Boolean);
+    if(dependencies.length||d.hiddenDependencies)info.append(element('small','Context dependencies: '+dependencies.map(x=>x.name+' (#'+x.contextIndex+')').join(', ')+(d.hiddenDependencies?' · '+d.hiddenDependencies+' internal declaration(s)':''),'dependencyUse'));
     const usage=[d.usedInTerm?'term':null,d.usedInType?'type':null].filter(Boolean);
     if(usage.length)info.append(element('small','Direct occurrence: '+usage.join(' + '),'dependencyUse'));
-    row.append(element('strong',d.name),info);$('patchScope').append(row);
+    else if(d.neededForContext)info.append(element('small','Indirect context dependency','dependencyUse'));
+    if(scope.filter(x=>x.name===d.name).length>1)row.dataset.contextIndex=String(d.contextIndex);
+    row.append(element('strong',d.name+(row.dataset.contextIndex?' (#'+d.contextIndex+')':'')),info);$('patchScope').append(row);
     // Only offer unambiguous simple names; the actual term must still pass Lean.
     if(d.matchesGoal&&/^[A-Za-z_][A-Za-z0-9_']*$/.test(d.name)&&scope.filter(x=>x.name===d.name).length===1){
       const button=element('button',(node.kind==='witness'?($('typedLanguage').value==='zh'?'选取对象 ':'Choose object '):($('typedLanguage').value==='zh'?'使用假设 ':'Use hypothesis '))+d.name,'suggestion');
@@ -185,6 +190,7 @@ function openPatch(node){
   $('patchPreview').textContent='';$('patchStatus').textContent=node.kind==='witness'?'Choose a new witness. Lean will recheck all dependent proof obligations; the unchanged evidence may become invalid.':'Edit the local proof term. Lean will check its type and the entire exported theorem.';
   $('typedPatch').scrollIntoView({block:'nearest'});$('patchTerm').focus();
 }
+$('usedContextOnly').onchange=()=>{for(const row of $('patchScope').children)row.hidden=$('usedContextOnly').checked&&row.dataset.needed!=='true';};
 for(const c of concepts)for(const label of [c.en,c.zh,c.ja,c.rule]){
   const option=element('option');option.value=label;$('ruleConcepts').append(option);
 }

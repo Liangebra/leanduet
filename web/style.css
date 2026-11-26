@@ -72,3 +72,5 @@ html[data-theme=dark] .tok-keyword{color:#569cd6}html[data-theme=dark] .tok-comm
  #prose,#prompt{min-width:0;max-width:100%}
  .statement,.steptext,.derivedStep,.typedType{overflow-x:auto}
 }
+
+.typedPatch .scopeFilter{display:flex;align-items:center;gap:5px;font-size:12px;font-weight:400;color:var(--muted);margin-bottom:10px}
