@@ -68,3 +68,14 @@ assert [p["name"] for p in a["parameters"]]==["n","f","x"],a
 assert a["standaloneChecked"] and a["exportShapePreserved"] and a["source"],a
 assert "theorem LeanDuetExtractedLemma" in a["source"] and "irrelevant" not in a["source"],a
 print("Dependency-closed abstraction compiles independently and preserves the proof occurrence")
+
+
+# Same-type premises remain distinct during abstraction, not just serialization.
+a=abstract_preview(source,next(n["path"] for n in walk(extract(source)["tree"]) if n.get("term")=="h1" and n["kind"]=="hypothesis"))
+assert [p["name"] for p in a["parameters"]]==["P","h1"],a
+assert a["standaloneChecked"] and a["exportShapePreserved"],a
+# Universe-polymorphic abstraction is internally checked but not presented as standalone source.
+u=abstract_preview(source2,"root")
+assert u["closedChecked"] and u["reopenedShape"] and u["universes"],u
+assert u["source"] is None and not u["standaloneChecked"],u
+print("Abstraction preserves distinct premises and reports the polymorphic export limit")
