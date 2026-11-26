@@ -55,7 +55,8 @@ def compile {Γ : Type u} {P : Predicate Γ} (d : Narrative Γ P) : (γ : Γ) �
   | .allE f w => fun γ => compile f γ (w γ)
   | .exI w p => fun γ => ⟨w γ, compile p γ⟩
   | .exE s b => fun γ => Exists.elim (compile s γ) (fun a h => compile b ⟨⟨γ,a⟩,h⟩)
-  | .transport e p => fun γ => (compile e γ) ▸ (compile p γ)
+  | @Narrative.transport _ _ B _ _ e p => fun γ =>
+      Eq.mp (congrArg (B γ) (compile e γ)) (compile p γ)
 
 /-- A witness is a section together with its own dependent proof obligation. -/
 structure CertifiedWitness {Γ : Type u} (A : Family Γ) (P : (γ : Γ) → A γ → Prop) where
