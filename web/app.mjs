@@ -9,6 +9,7 @@ import {validateJudgment} from './semantic-ir.mjs';
 import {compileFormula} from './math-formula.mjs';
 import {compileChain,compileFormulaSequence} from './proof-chain.mjs';
 import {createDraftSession} from './natural-draft.mjs';
+import {reconcileDraftIdentity,migrateDraftChoices} from './draft-identity.mjs';
 import {factsFromScope} from './context-grammar.mjs';
 import {languagePacks,registerPack,customPacks,phrase} from './languages.mjs';
 import {positionAt,completionEdit} from './completion.mjs';
@@ -24,9 +25,9 @@ let lastTypedSource=null,lastTypedProfile=null,lastTypedTree=null,saveTimer;
 let liveTimer,interpretTimer,interpretVersion=0,interpretBusy=false,typedBusy=false;
 let exploration=emptyExploration(),wording=[];
 let foldedPaths=new Set();
-const draftChoices=new Map();let draftChoiceVersion=0;
+const draftChoices=new Map();let draftChoiceVersion=0,draftIdentity=null;
 const draftSession=createDraftSession(),offlineSession=createDraftSession();
-function clearDraftChoices(){draftChoices.clear();draftChoiceVersion++;}
+function clearDraftChoices(){draftChoices.clear();draftIdentity=null;draftChoiceVersion++;}
 let ir,base,rev=0,notesRev=0,candidate=null,narrative=null,timer,selected=null,name='proof',exampleIndex=null,view='reading';
 const clean=()=>lean.value===base.lean&&prose.value===base.prose;
 const state=(id,label,kind='')=>{$(id).textContent=label;$(id).dataset.state=kind;};
@@ -479,14 +480,23 @@ $('suggestInterpretations').onclick=async()=>{
 };
 function parseChainInput(text,scope){const mode=$('chainFormat').value;return mode==='formula'?compileFormulaSequence(text,scope):mode==='natural'?draftSession.compile(text,scope,factsFromScope(patchNode?.scope),{choices:draftChoices}):compileChain(text,scope);}
 $('chainFormat').onchange=()=>{$('chainText').placeholder=$('chainFormat').value==='formula'?'$Q$\n$R$':$('chainFormat').value==='natural'?'建立 hq : $Q$，由 f，使用 p\n因此 $R$，由 g，使用 hq':'Establish hq | f using p\nConclude | g using hq';$('chainText').dispatchEvent(new Event('input'));};
-$('chainText').addEventListener('input',()=>{clearDraftChoices();$('chainBindings').replaceChildren();$('patchTerm').value='';$('patchTerm').dispatchEvent(new Event('input'));$('chainStatus').textContent='Narrative changed. Stage the new candidate.';previewDraft();});
-function previewDraft(){
+$('chainText').addEventListener('input',()=>{draftChoiceVersion++;if($('chainFormat').value!=='natural')clearDraftChoices();$('chainBindings').replaceChildren();$('patchTerm').value='';$('patchTerm').dispatchEvent(new Event('input'));$('chainStatus').textContent='Narrative changed. Stage the new candidate.';previewDraft({edited:true});});
+function previewDraft({edited=false}={}){
  const target=$('draftTranslation');target.replaceChildren();
  if($('chainFormat').value!=='natural'||!patchNode)return;
  try{
-   const r=draftSession.evaluate($('chainText').value,(patchNode.scope||[]).map(d=>d.name),factsFromScope(patchNode.scope),{choices:draftChoices});
+   const input=$('chainText').value,scope=(patchNode.scope||[]).map(d=>d.name),facts=factsFromScope(patchNode.scope);
+    if(edited&&draftChoices.size){
+     const unselected=draftSession.evaluate(input,scope,facts);
+     const correspondence=reconcileDraftIdentity(draftIdentity,unselected.graph);
+     const migrated=migrateDraftChoices(draftIdentity,correspondence,draftChoices);
+     draftChoices.clear();for(const [line,term] of migrated)draftChoices.set(line,term);
+    }
+    const r=draftSession.evaluate(input,scope,facts,{choices:draftChoices});
+    draftIdentity=reconcileDraftIdentity(draftIdentity,r.graph);
    for(const x of r.rows){
      const d=element('div',undefined,'ruleResult');
+     d.dataset.objectId=draftIdentity.ids.get('line:'+x.line)||'';
      d.append(element('small','Line '+x.line+' · '+x.status+(x.proofStatus?' · '+x.proofStatus:'')),element('span',x.raw));
      if(x.step)d.append(element('code',x.step.kind==='establish'?'have '+x.step.name+' : '+x.step.type+' := '+x.step.application:'show '+x.step.type+'; '+x.step.application));
      if(x.reason)d.append(element('small',x.reason));
