@@ -31,7 +31,7 @@ def declDepends (d : LocalDecl) (id : FVarId) : Bool :=
 
 /-- The local context is ordered by introduction. Close the used declarations
     backwards through their dependent types and local definitions. -/
-def localScope (goal : Expr) (editable : Bool) (term : Expr) : MetaM (Array Json) := do
+def referencedContext (goal term : Expr) : MetaM (Array LocalDecl × Array FVarId) := do
   let mut locals : Array LocalDecl := #[]
   for d in (← getLCtx) do
     locals := locals.push d
@@ -44,6 +44,11 @@ def localScope (goal : Expr) (editable : Bool) (term : Expr) : MetaM (Array Json
       for earlier in locals do
         if earlier.index < d.index && declDepends d earlier.fvarId && !needed.contains earlier.fvarId then
           needed := needed.push earlier.fvarId
+  return (locals, needed)
+
+/-- Display the same dependency closure used for proof abstraction. -/
+def localScope (goal : Expr) (editable : Bool) (term : Expr) : MetaM (Array Json) := do
+  let (locals, needed) ← referencedContext goal term
   let mut entries := #[]
   for d in locals do
     if !d.isImplementationDetail then
@@ -589,6 +594,182 @@ elab "#duet_ir " n:ident path:str formula:str : command => do
           ("universes", Json.arr (v.levelParams.toArray.map encodeName)), ("judgment", judgment)])
       logInfo m!"LEANDUET_JSON:{result.compress}"
     | _ => throwError "Expected a theorem"
+
+
+/-- Close a selected proof over its dependency-closed telescope. Local
+    definitions remain lets, not unconstrained parameters. This is an
+    abstraction of an existing proof, not discovery of a stronger theorem. -/
+def abstractProof (e : Expr) : MetaM (Expr × Expr × Array LocalDecl) := do
+  let goal ← inferType e
+  unless ← isProp goal do throwError "Abstraction requires a proof of a proposition"
+  let (locals, needed) ← referencedContext goal e
+  let deps := locals.filter (fun d => needed.contains d.fvarId)
+  if deps.size > 128 then throwError "Abstraction context exceeds 128 declarations"
+  let mut term := e
+  let mut statement := goal
+  for d in deps.reverse do
+    let x := mkFVar d.fvarId
+    let body := term.abstract #[x]
+    let target := statement.abstract #[x]
+    match d.value? with
+    | some v =>
+      term := .letE d.userName d.type v body false
+      statement := .letE d.userName d.type v target false
+    | none =>
+      term := .lam d.userName d.type body d.binderInfo
+      statement := .forallE d.userName d.type target d.binderInfo
+  if term.hasFVar || statement.hasFVar || term.hasLooseBVars || statement.hasLooseBVars ||
+      term.hasMVar || statement.hasMVar || term.hasLevelMVar || statement.hasLevelMVar then
+    throwError "Abstraction did not produce a closed judgment"
+  withLCtx {} #[] do
+    Lean.Meta.check statement
+    Lean.Meta.check term
+    unless ← isProp statement do throwError "Abstracted statement is not a proposition"
+    unless ← isDefEq (← inferType term) statement do
+      throwError "Abstracted proof has the wrong type"
+  -- Reopen the exact binders (including let-bound identities). This is an
+  -- occurrence-level check, stronger than comparing proof types alone.
+  let mut opened := term
+  let mut openedType := statement
+  for d in deps do
+    let x := mkFVar d.fvarId
+    match opened, openedType, d.value? with
+    | .lam _ _ b _, .forallE _ _ q _, none =>
+      opened := b.instantiate1 x
+      openedType := q.instantiate1 x
+    | .letE _ _ _ b _, .letE _ _ _ q _, some _ =>
+      opened := b.instantiate1 x
+      openedType := q.instantiate1 x
+    | _, _, _ => throwError "Abstraction telescope does not reopen"
+  unless sameShape opened e && sameShape openedType goal do
+    throwError "Abstraction changed the selected proof occurrence"
+  return (term, statement, deps)
+
+elab "#duet_abstract " n:ident path:str : command => do
+  liftTermElabM do
+    let ci ← getConstInfo n.getId
+    match ci with
+    | .thmInfo v =>
+      let parts := path.getString.splitOn "/"
+      unless parts.head? == some "root" do throwError "Invalid root path"
+      let result ← withNodeAt v.value (parts.drop 1) fun e => do
+        let (term, statement, deps) ← abstractProof e
+        if mentions term n.getId || mentions statement n.getId || mentions term `sorryAx then
+          throwError "Abstraction relies on the original theorem or an incomplete proof"
+        let typeText ← withOptions (fun o => o.setBool `pp.fullNames true |>.setBool `pp.funBinderTypes true |>.setBool `pp.piBinderTypes true |>.setBool `pp.explicit true |>.setBool `pp.notation false |>.setBool `pp.universes true |>.setBool `pp.coercions true |>.setBool `pp.proofs true |>.setBool `pp.numericTypes true) do
+          pure (← ppExpr statement).pretty
+        let termText ← withOptions (fun o => o.setBool `pp.fullNames true |>.setBool `pp.funBinderTypes true |>.setBool `pp.piBinderTypes true |>.setBool `pp.explicit true |>.setBool `pp.notation false |>.setBool `pp.universes true |>.setBool `pp.coercions true |>.setBool `pp.proofs true |>.setBool `pp.numericTypes true) do
+          pure (← ppExpr term).pretty
+        let ctx := deps.map fun d => Json.mkObj [("slot", toJson d.index),
+          ("name", toJson d.userName.toString), ("isLet", toJson d.value?.isSome),
+          ("internal", toJson d.isImplementationDetail)]
+        return Json.mkObj [("schema", toJson (1 : Nat)), ("type", toJson typeText),
+          ("term", toJson termText), ("parameters", Json.arr ctx),
+          ("universes", toJson (v.levelParams.map Name.toString)),
+          ("closedChecked", toJson true), ("reopenedShape", toJson true)]
+      logInfo m!"LEANDUET_JSON:{result.compress}"
+    | _ => throwError "Expected a theorem"
+
+elab "#duet_compare_abstraction " n:ident m:ident path:str : command => do
+  liftTermElabM do
+    match ← getConstInfo n.getId, ← getConstInfo m.getId with
+    | .thmInfo v, .thmInfo candidate =>
+      let parts := path.getString.splitOn "/"
+      unless parts.head? == some "root" do throwError "Invalid root path"
+      withNodeAt v.value (parts.drop 1) fun e => do
+        let (term, statement, _) ← abstractProof e
+        unless ← isDefEq candidate.type statement do throwError "Abstracted theorem type changed on export"
+        unless sameShape term candidate.value do
+          throwError "Abstracted theorem proof changed on export\nExpected: {repr (shape term)}\nActual: {repr (shape candidate.value)}"
+        logInfo "LEANDUET_ABSTRACTION_MATCH"
+    | _, _ => throwError "Expected two theorems"
+
+
+/-- Rebuild a single path using an Expr produced in that exact scope.
+    Unlike textual replacement, this never resolves arguments by names. -/
+partial def replaceExprAt (e : Expr) (path : List String)
+    (k : Expr → MetaM Expr) : MetaM Expr := do
+  match path with
+  | [] =>
+    let new ← k e
+    Lean.Meta.check new
+    unless ← isDefEq (← inferType e) (← inferType new) do
+      throwError "Refactoring changed the local type"
+    return new
+  | p :: rest =>
+    match e with
+    | .mdata md b => return .mdata md (← replaceExprAt b path k)
+    | .lam n t b bi =>
+      unless p == "body" do throwError "Invalid lambda path"
+      withLocalDecl n bi t fun x => do
+        let b' ← replaceExprAt (b.instantiate1 x) rest k
+        return .lam n t (b'.abstract #[x]) bi
+    | .letE n t v b nd =>
+      if p == "value" then
+        return .letE n t (← replaceExprAt v rest k) b nd
+      else if p == "body" then
+        withLetDecl n t v fun x => do
+          let b' ← replaceExprAt (b.instantiate1 x) rest k
+          return .letE n t v (b'.abstract #[x]) nd
+      else throwError "Invalid let path"
+    | .app .. =>
+      unless p.startsWith "arg" do throwError "Invalid application path"
+      let some i := (String.mk (p.toList.drop 3)).toNat? | throwError "Invalid argument index"
+      let args := e.getAppArgs
+      unless i < args.size do throwError "Argument index out of bounds"
+      let v ← replaceExprAt args[i]! rest k
+      return mkAppN e.getAppFn (args.set! i v)
+    | _ => throwError "Invalid expression path"
+
+/-- Build the exact lemma call using local-variable identities. Check its
+    actual definition against the abstraction; theorem proof irrelevance
+    is insufficient for this purpose. -/
+def factorProof (original : Expr) (path : List String) (lemmaName : Name) :
+    MetaM Expr := do
+  let ci ← getConstInfo lemmaName
+  let .thmInfo lemma := ci | throwError "Expected an extracted theorem"
+  unless lemma.levelParams.isEmpty do throwError "Polymorphic factoring is not supported yet"
+  replaceExprAt original path fun e => do
+    let (t, statement, deps) ← abstractProof e
+    unless ← isDefEq lemma.type statement do throwError "Extracted lemma statement mismatch"
+    unless sameShape t lemma.value do throwError "Extracted lemma proof mismatch"
+    -- A local definition is preserved as a let in the extracted theorem,
+    -- so it is not an argument to the lemma.
+    let args := (deps.filter (fun d => d.value?.isNone)).map (fun d => mkFVar d.fvarId)
+    let call := mkAppN (mkConst lemmaName) args
+    Lean.Meta.check call
+    unless ← isDefEq (← inferType call) (← inferType e) do
+      throwError "Extracted lemma application has the wrong dependent type"
+    return call
+
+elab "#duet_factor " n:ident lemma:ident path:str : command => do
+  liftTermElabM do
+    let .thmInfo v ← getConstInfo n.getId | throwError "Expected a theorem"
+    unless v.levelParams.isEmpty do throwError "Polymorphic factoring is not supported yet"
+    let parts := path.getString.splitOn "/"
+    unless parts.head? == some "root" do throwError "Invalid root path"
+    let proof ← factorProof v.value (parts.drop 1) lemma.getId
+    Lean.Meta.check proof
+    unless ← isDefEq (← inferType proof) v.type do throwError "Factored proof changes theorem type"
+    if mentions proof n.getId || mentions proof `sorryAx then throwError "Invalid factored proof"
+    let typeText ← withOptions (fun o => o.setBool `pp.fullNames true |>.setBool `pp.funBinderTypes true |>.setBool `pp.piBinderTypes true |>.setBool `pp.explicit true |>.setBool `pp.notation false |>.setBool `pp.universes true |>.setBool `pp.coercions true |>.setBool `pp.proofs true |>.setBool `pp.numericTypes true) do
+      pure (← ppExpr v.type).pretty
+    let termText ← withOptions (fun o => o.setBool `pp.fullNames true |>.setBool `pp.funBinderTypes true |>.setBool `pp.piBinderTypes true |>.setBool `pp.explicit true |>.setBool `pp.notation false |>.setBool `pp.universes true |>.setBool `pp.coercions true |>.setBool `pp.proofs true |>.setBool `pp.numericTypes true) do
+      pure (← ppExpr proof).pretty
+    logInfo m!"LEANDUET_JSON:{(Json.mkObj [("type", toJson typeText), ("term", toJson termText)]).compress}"
+
+elab "#duet_compare_factor " n:ident m:ident lemma:ident path:str : command => do
+  liftTermElabM do
+    match ← getConstInfo n.getId, ← getConstInfo m.getId with
+    | .thmInfo v, .thmInfo candidate =>
+      let parts := path.getString.splitOn "/"
+      unless parts.head? == some "root" do throwError "Invalid root path"
+      let expected ← factorProof v.value (parts.drop 1) lemma.getId
+      unless ← isDefEq v.type candidate.type do throwError "Factored export changed the statement"
+      unless sameShape expected candidate.value do
+        throwError "Factored export changed the proof complement or call\nExpected: {repr (shape expected)}\nActual: {repr (shape candidate.value)}"
+      logInfo "LEANDUET_FACTOR_MATCH"
+    | _, _ => throwError "Expected two theorems"
 
 def finishCandidate (goal : Expr) (expected : Expr) (forbidden : Name)
     (label : String) (required : List FVarId) : MetaM (Option Json) := do

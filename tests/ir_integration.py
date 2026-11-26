@@ -55,3 +55,39 @@ for node in walk(tree):
 else:
     raise AssertionError("Expected existential witness")
 print("Dependent expressions and selected witness survive structural decoding")
+
+
+from semantic import abstract_preview
+source4="""theorem ir_abstract (n : Nat) (f : Fin (n+1) → True) (x : Fin (n+1)) (irrelevant : Nat) : True := by
+  exact f x
+"""
+target=next(n for n in walk(extract(source4)["tree"]) if n.get("reference")=="f")
+a=abstract_preview(source4,target["path"])
+assert a["closedChecked"] and a["reopenedShape"],a
+assert [p["name"] for p in a["parameters"]]==["n","f","x"],a
+assert a["standaloneChecked"] and a["exportShapePreserved"] and a["source"],a
+assert "theorem LeanDuetExtractedLemma" in a["source"] and "irrelevant" not in a["source"],a
+print("Dependency-closed abstraction compiles independently and preserves the proof occurrence")
+
+
+# Same-type premises remain distinct during abstraction, not just serialization.
+a=abstract_preview(source,next(n["path"] for n in walk(extract(source)["tree"]) if n.get("term")=="h1" and n["kind"]=="hypothesis"))
+assert [p["name"] for p in a["parameters"]]==["P","h1"],a
+assert a["standaloneChecked"] and a["exportShapePreserved"],a
+# Universe-polymorphic abstraction is internally checked but not presented as standalone source.
+u=abstract_preview(source2,"root")
+assert u["closedChecked"] and u["reopenedShape"] and u["universes"],u
+assert u["source"] is None and not u["standaloneChecked"],u
+print("Abstraction preserves distinct premises and reports the polymorphic export limit")
+
+
+from semantic import factor_preview
+source5="""theorem ir_factor (P Q R : Prop) (f : P → Q) (g : Q → R) (p : P) : R := by
+  exact g (f p)
+"""
+inner=next(n for n in walk(extract(source5)["tree"]) if n.get("reference")=="f")
+r=factor_preview(source5,inner["path"])
+assert r["standaloneChecked"] and r["statementDefEq"] and r["proofComplementPreserved"] and r["lemmaShapePreserved"],r
+assert "theorem LeanDuetExtractedLemma" in r["source"] and "theorem ir_factor" in r["source"],r
+assert "g (LeanDuetExtractedLemma" in r["source"],r
+print("Factoring a nested inference produces a standalone checked two-theorem document")
