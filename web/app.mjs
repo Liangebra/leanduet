@@ -8,7 +8,7 @@ import {conceptLabels,parseRuleIntent} from './rule-intent.mjs';
 import {validateJudgment} from './semantic-ir.mjs';
 import {compileFormula} from './math-formula.mjs';
 import {compileChain,compileFormulaSequence} from './proof-chain.mjs';
-import {draftProof,compileNaturalDraft} from './natural-draft.mjs';
+import {createDraftSession} from './natural-draft.mjs';
 import {factsFromScope} from './context-grammar.mjs';
 import {languagePacks,registerPack,customPacks,phrase} from './languages.mjs';
 import {positionAt,completionEdit} from './completion.mjs';
@@ -25,6 +25,7 @@ let liveTimer,interpretTimer,interpretVersion=0,interpretBusy=false,typedBusy=fa
 let exploration=emptyExploration(),wording=[];
 let foldedPaths=new Set();
 const draftChoices=new Map();let draftChoiceVersion=0;
+const draftSession=createDraftSession(),offlineSession=createDraftSession();
 function clearDraftChoices(){draftChoices.clear();draftChoiceVersion++;}
 let ir,base,rev=0,notesRev=0,candidate=null,narrative=null,timer,selected=null,name='proof',exampleIndex=null,view='reading';
 const clean=()=>lean.value===base.lean&&prose.value===base.prose;
@@ -155,7 +156,7 @@ function refreshOffline(){
  try{
    const scope=$('offlineScope').value.trim().split(/\s+/).filter(Boolean);
    if(scope.length>128||scope.some(s=>!/^[A-Za-z_][A-Za-z0-9_']{0,63}$/.test(s)))throw Error('Enter up to 128 simple Lean context names.');
-   const r=draftProof($('offlineDraft').value,scope);
+   const r=offlineSession.evaluate($('offlineDraft').value,scope);
    for(const row of r.rows){
      const p=element('div',undefined,'ruleResult');p.append(element('small','Line '+row.line+' · '+row.status+(row.proofStatus?' · '+row.proofStatus:'')),element('span',row.raw));
      if(row.reason)p.append(element('small',row.reason));out.append(p);
@@ -309,7 +310,7 @@ $('collapseProof').onclick=()=>{foldedPaths=outlinePaths(typedRoot);showTypedNar
 $('expandProof').onclick=()=>{foldedPaths.clear();showTypedNarrative();};
 function openPatch(node){
   if(!clean()||!typedRoot||proofIndex?.find(node.path)!==node)return;
-  clearDraftChoices();patchNode=node;patchCandidate=null;interpretVersion++;clearTimeout(interpretTimer);$('interpretPanel').hidden=node.kind==='witness';$('interpretPanel').open=false;$('interpretText').value='';$('aiInterpretText').value='';$('includeAiInterpret').checked=false;$('aiInterpretStatus').textContent='';$('interpretAiPanel').open=false;$('interpretResults').replaceChildren();$('interpretStatus').textContent='';$('typedPatch').hidden=false;$('applyPatch').disabled=true;
+  clearDraftChoices();draftSession.reset();patchNode=node;patchCandidate=null;interpretVersion++;clearTimeout(interpretTimer);$('interpretPanel').hidden=node.kind==='witness';$('interpretPanel').open=false;$('interpretText').value='';$('aiInterpretText').value='';$('includeAiInterpret').checked=false;$('aiInterpretStatus').textContent='';$('interpretAiPanel').open=false;$('interpretResults').replaceChildren();$('interpretStatus').textContent='';$('typedPatch').hidden=false;$('applyPatch').disabled=true;
   $('irOutput').textContent='';$('irStatus').textContent='';$('irInspector').open=false;
   $('abstractPanel').hidden=node.kind==='witness';$('abstractPanel').open=false;$('abstractOutput').textContent='';$('abstractStatus').textContent='';$('factorProof').disabled=true;
   $('wordingInput').value=wordingFor(typedRoot,node,wording);$('wordingStatus').textContent='Author wording, not a checked assertion.';$('patchTarget').textContent=node.path+' · '+node.type;$('patchTerm').value=node.term||'';
@@ -466,14 +467,14 @@ $('suggestInterpretations').onclick=async()=>{
   }catch(e){if(revision===rev&&node===patchNode&&version===interpretVersion)$('aiInterpretStatus').textContent=e.message;}
   finally{$('suggestInterpretations').disabled=false;}
 };
-function parseChainInput(text,scope){const mode=$('chainFormat').value;return mode==='formula'?compileFormulaSequence(text,scope):mode==='natural'?compileNaturalDraft(text,scope,factsFromScope(patchNode?.scope),{choices:draftChoices}):compileChain(text,scope);}
+function parseChainInput(text,scope){const mode=$('chainFormat').value;return mode==='formula'?compileFormulaSequence(text,scope):mode==='natural'?draftSession.compile(text,scope,factsFromScope(patchNode?.scope),{choices:draftChoices}):compileChain(text,scope);}
 $('chainFormat').onchange=()=>{$('chainText').placeholder=$('chainFormat').value==='formula'?'$Q$\n$R$':$('chainFormat').value==='natural'?'建立 hq : $Q$，由 f，使用 p\n因此 $R$，由 g，使用 hq':'Establish hq | f using p\nConclude | g using hq';$('chainText').dispatchEvent(new Event('input'));};
 $('chainText').addEventListener('input',()=>{clearDraftChoices();$('chainBindings').replaceChildren();$('patchTerm').value='';$('patchTerm').dispatchEvent(new Event('input'));$('chainStatus').textContent='Narrative changed. Stage the new candidate.';previewDraft();});
 function previewDraft(){
  const target=$('draftTranslation');target.replaceChildren();
  if($('chainFormat').value!=='natural'||!patchNode)return;
  try{
-   const r=draftProof($('chainText').value,(patchNode.scope||[]).map(d=>d.name),factsFromScope(patchNode.scope),{choices:draftChoices});
+   const r=draftSession.evaluate($('chainText').value,(patchNode.scope||[]).map(d=>d.name),factsFromScope(patchNode.scope),{choices:draftChoices});
    for(const x of r.rows){
      const d=element('div',undefined,'ruleResult');
      d.append(element('small','Line '+x.line+' · '+x.status+(x.proofStatus?' · '+x.proofStatus:'')),element('span',x.raw));

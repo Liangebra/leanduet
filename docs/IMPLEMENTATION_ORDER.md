@@ -55,3 +55,13 @@ elimination, and bounded existential introduction using actual local witness
 and membership/evidence references. Indexed joins and a 4096-probe budget
 bound search; overflow is not uniqueness. For untyped binders the domain is
 not inferred by the browser: Lean elaboration remains necessary.
+
+## Conservative incremental evaluator
+
+The browser uses a bounded exact-text syntax cache and a semantic prefix
+cache. Context, planned local names, source line position, conclusion role and
+explicit choices are part of reuse conditions. A reused prefix restores the
+scope, generated-name counter and open obligations before recomputing the
+remaining suffix. The graph is rebuilt for each evaluation. Regression tests
+compare incremental and full results. This is not arbitrary DAG scheduling,
+cross-revision identity reconciliation or a measured latency guarantee.

@@ -29,14 +29,45 @@ function parseLine(raw){
  }
  return {raw,formula,type:compileFormula(formula).lean,name,ruleText,conclusion,modifiers,forwardText};
 }
-export function draftProof(input,scope=[],context=new Map(),{choices=new Map()}={}){
+export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),cache=null}={}){
  const facts=new Map(context);
  if(typeof input!=='string'||input.length>12000)throw Error('Draft exceeds 12000 characters.');
  const lines=input.split(/\r?\n/).map((raw,i)=>({raw,line:i+1})).filter(x=>x.raw.trim());
  if(lines.length>16)throw Error('Use at most sixteen inference lines.');
  const occupied=new Set(scope),visible=new Set(scope.filter((x,i)=>scope.indexOf(x)===i&&scope.lastIndexOf(x)===i));
- const planned=new Set(lines.map(({raw})=>{try{return parseLine(raw).name;}catch{return null;}}).filter(Boolean));
- let serial=1;const rows=[],steps=[],openNames=new Set();let blocked=false;
+ // Cache syntax by exact text, independently of context. Cached errors are
+ // deterministic syntax diagnostics, not semantic failures.
+ const syntax=cache?(cache.syntax??=new Map()):new Map();
+ const parsed=lines.map(({raw})=>{
+  if(syntax.has(raw))return syntax.get(raw);
+  let entry;try{entry={value:parseLine(raw)};}catch(e){entry={error:e.message};}
+  if(syntax.size>=128)syntax.delete(syntax.keys().next().value);
+  syntax.set(raw,entry);return entry;
+ });
+ const planned=new Set(parsed.map(p=>p.value?.name).filter(Boolean));
+ const key=JSON.stringify([scope,[...context],[...planned].sort()]);
+ const signatures=lines.map(({raw,line},i)=>JSON.stringify([raw,line,i===lines.length-1,choices.has(line),choices.get(line)]));
+ let serial=1;const rows=[],steps=[],openNames=new Set(),serials=[];let blocked=false,reusedRows=0;
+ // The context and all planned names affect the entire draft. Under the
+ // same context, reuse only an identical prefix, including choice and
+ // conclusion-vs-intermediate role. Reconstruct its local scope exactly.
+ const previous=cache?.previous;
+ if(previous?.key===key){
+  while(reusedRows<signatures.length&&signatures[reusedRows]===previous.signatures[reusedRows]){
+   const row=previous.rows[reusedRows];if(!row)break;
+   rows.push(row);serials.push(previous.serials[reusedRows]);
+   if(row.status==='unresolved')blocked=true;
+   if(row.step){
+    steps.push(row.step);
+    if(row.step.kind==='establish'){
+     const {name,type}=row.step;occupied.add(name);visible.add(name);facts.set(name,type);
+     if(row.proofStatus!=='candidate')openNames.add(name);
+    }
+   }
+   reusedRows++;
+  }
+  if(reusedRows)serial=serials.at(-1);
+ }
  function makeStep(p,last,application){
   if(last)return {kind:'conclude',type:p.type,application};
   let name=p.name;
@@ -56,10 +87,11 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map()}=
   }
   rows.push(row);
  }
- for(let i=0;i<lines.length;i++){
+ for(let i=reusedRows;i<lines.length;i++){
    const {raw,line}=lines[i],last=i===lines.length-1;let p=null;
    try{
-    p=parseLine(raw);
+    if(parsed[i].error)throw Error(parsed[i].error);
+    p=parsed[i].value;
     if(p.conclusion&&!last)throw Error('A conclusion must be the last inference.');
     if(last&&p.name)throw Error('The final inference must conclude the goal, not name a fact.');
     let application='?',candidates=[];
@@ -105,9 +137,19 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map()}=
     if(step.kind==='establish'&&proofStatus!=='candidate')openNames.add(step.name);
     rows.push({...p,line,status:blocked?'provisional':'translated',proofStatus,dependencies,step,candidates});steps.push(step);
    }catch(e){unresolved(p,raw,line,last,{reason:e.message});}
+   finally{serials.push(serial);}
  }
+ if(cache)cache.previous={key,signatures,rows,serials};
  const complete=lines.length>0&&!blocked&&steps.at(-1)?.kind==='conclude';
- return {rows,steps,complete,openBindings:[...openNames],graph:buildDraftGraph(scope,context,rows),term:complete?renderChain(steps):null};
+ return {rows,steps,complete,reusedRows,openBindings:[...openNames],graph:buildDraftGraph(scope,context,rows),term:complete?renderChain(steps):null};
+}
+export function createDraftSession(){
+ const cache={};
+ return {
+  evaluate:(input,scope,context,options)=>draftProof(input,scope,context,{...options,cache}),
+  compile:(input,scope,context,options)=>compileNaturalDraft(input,scope,context,{...options,cache}),
+  reset:()=>{delete cache.previous;cache.syntax?.clear();}
+ };
 }
 export function compileNaturalDraft(input,scope,context,options){
  const r=draftProof(input,scope,context,options);
