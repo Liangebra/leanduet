@@ -1,32 +1,77 @@
 import {parseLean,renderLean,renderProse,planSync,sameStatement,EXAMPLES} from './core.mjs';
-const $=id=>document.getElementById(id),lean=$('lean'),prose=$('prose');
-let ir,base,rev=0,candidate=null,timer;
+import {replaceStep,snapshot,restore,lineRange} from './workspace.mjs';
+const $=id=>document.getElementById(id),lean=$('lean'),prose=$('prose'),notes=$('prompt');
+const KEY='leanduet.workspace.v1',THEME='leanduet.theme';
+let ir,base,rev=0,candidate=null,narrative=null,timer,selected=null,name='proof',exampleIndex=null,view='reading';
 const clean=()=>lean.value===base.lean&&prose.value===base.prose;
+const state=(id,label,kind='')=>{$(id).textContent=label;$(id).dataset.state=kind;};
 function notice(s,error=false){$('notice').textContent=s;$('notice').classList.toggle('error',error);}
-function invalidate(){rev++;candidate=null;$('accept').disabled=true;$('proposal').textContent='No proposal yet.';$('output').textContent='No check for current revision.';}
-function dirty(){lean.classList.toggle('dirty',lean.value!==base.lean);prose.classList.toggle('dirty',prose.value!==base.prose);}
-function math(target,s){
-  if(window.katex&&/^[\p{L}\p{N}_\s=→∧∨¬↔∀∃()+*\-]+$/u.test(s)){
-    const tex=s.replace(/_/g,'\\_').replace(/→/g,'\\to ').replace(/∧/g,'\\land ').replace(/∨/g,'\\lor ').replace(/¬/g,'\\neg ').replace(/↔/g,'\\leftrightarrow ').replace(/∀/g,'\\forall ').replace(/∃/g,'\\exists ');
-    try{window.katex.render(tex,target,{trust:false,throwOnError:true});return;}catch{}
-  }target.textContent=s;
+function persist(){try{localStorage.setItem(KEY,JSON.stringify(snapshot(base,{lean:lean.value,prose:prose.value},notes.value,name)));state('saveState','Saved locally','pass');}catch{state('saveState','Not saved','dirty');}}
+function invalidate(){rev++;candidate=null;narrative=null;$('accept').disabled=true;$('useNarrative').disabled=true;$('proposal').textContent='No proposal yet.';$('output').textContent='Run the local checker to see diagnostics for this revision.';state('verifyState','Not checked');}
+function dirty(){state('leanDirty',lean.value===base.lean?'Synced':'Edited',lean.value===base.lean?'':'dirty');state('proseDirty',prose.value===base.prose?'Synced':'Edited',prose.value===base.prose?'':'dirty');gutter();}
+function gutter(){$('gutter').textContent=lean.value.split('\n').map((_,i)=>i+1).join('\n');$('gutter').scrollTop=lean.scrollTop;$('cursor').textContent='Ln '+(lean.value.slice(0,lean.selectionStart).split('\n').length);}
+function element(tag,txt,cls){const e=document.createElement(tag);if(txt!==undefined)e.textContent=txt;if(cls)e.className=cls;return e;}
+function formula(parent,source){
+  // Conservative offline token rendering. Unknown syntax is kept as source.
+  if(!source||!/^[\p{L}\p{N}\s_=→∧∨¬↔∀∃()+*≤≥<>-]+$/u.test(source)){parent.append(element('code',source));return;}
+  const ns='http://www.w3.org/1998/Math/MathML',m=document.createElementNS(ns,'math');
+  m.setAttribute('aria-label',source);
+  for(const token of source.match(/\p{L}[\p{L}\p{N}_]*|\p{N}+|[^\s]/gu)||[]){
+    const tag=/^\p{L}/u.test(token)?'mi':/^\p{N}/u.test(token)?'mn':'mo',child=document.createElementNS(ns,tag);
+    child.textContent=token;m.append(child);
+  }parent.append(m);
 }
+function describe(n){
+  const labels={intro:'Introduce',exact:'Conclude using',have:'Establish',apply:'Apply',rw:'Rewrite using',simp:'Simplify',show:'Show',refine:'Refine using',change:'Change the goal to',cases:'Split into cases on',induction:'Proceed by induction on',opaque:'Formal step'};
+  return labels[n.kind]||n.label;
+}
+function setView(next){view=next;for(const key of ['reading','prose','notes']){$(key+'View').hidden=key!==view;}document.querySelectorAll('[data-view]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.view===view)));}
+function selection(id,locate=false){
+  if(!clean()){notice('Synchronize edits before navigating or editing a step.',true);return;}
+  const n=ir.nodes.find(x=>x.id===id&&x.kind!=='blank');if(!n)return;
+  selected=n.id;$('stepEditor').hidden=true;
+  $('inspectName').textContent='Line '+n.leanLine+' · '+describe(n);$('inspectCode').textContent=n.lean;
+  $('inspectParent').textContent=n.parent?'Nested under '+n.parent:'Top-level proof step';$('editStep').disabled=false;
+  document.querySelectorAll('[data-node]').forEach(b=>{b.classList.toggle('selected',b.dataset.node===id);b.classList.toggle('active',b.dataset.node===id);});
+  if(locate){const [start,end]=lineRange(lean.value,n.leanLine);lean.focus();lean.setSelectionRange(start,end);lean.scrollTop=Math.max(0,(n.leanLine-3)*24);gutter();}
+}
+function startEdit(){if(!selected||!clean()){notice('Select a synchronized proof step first.',true);return;}const n=ir.nodes.find(x=>x.id===selected);setView('reading');$('stepLabel').textContent='Edit line '+n.leanLine+' · '+describe(n);$('stepInput').value=n.lean;$('stepEditor').hidden=false;$('stepInput').focus();}
 function reading(){
- const box=$('reading');box.replaceChildren();const h=document.createElement('div');h.className='statement';h.textContent=ir.header;box.append(h);
- for(const n of ir.nodes){if(n.kind==='blank')continue;const b=document.createElement('button');b.className='step';b.style.paddingLeft=Math.min(n.indent-2,40)*8+'px';b.append(document.createTextNode(n.leanLine+' · '+n.label+' '));if(n.argument!==null){const span=document.createElement('span');math(span,n.argument);b.append(span);}b.onclick=()=>{if(!clean()){notice('Synchronize edits before navigating.',true);return;}const lines=lean.value.split('\n'),start=lines.slice(0,n.leanLine-1).join('\n').length+(n.leanLine>1?1:0);lean.focus();lean.setSelectionRange(start,start+lines[n.leanLine-1].length);};box.append(b);}
+  const title=/^(?:theorem|lemma)\s+(\S+)/.exec(ir.header)?.[1]||'Proof';
+  $('theoremName').textContent=title.replaceAll('_',' ');$('docname').textContent=name;$('theoremMeta').textContent=ir.nodes.filter(n=>n.kind!=='blank').length+' proof steps · '+(ir.prelude.filter(x=>x.startsWith('import ')).length)+' imports';
+  const h=$('statement');h.replaceChildren();const statement=ir.header.replace(/^(?:theorem|lemma)\s+\S+\s*/,'').replace(/\s*:= by$/,'');formula(h,statement);
+  const box=$('reading'),outline=$('outline');box.replaceChildren();outline.replaceChildren();$('stepCount').textContent=ir.nodes.filter(n=>n.kind!=='blank').length;
+  for(const n of ir.nodes){if(n.kind==='blank')continue;const b=element('button',undefined,'step');b.dataset.node=n.id;b.style.marginLeft=Math.min(n.indent-2,8)*5+'px';b.style.width='calc(100% - '+Math.min(n.indent-2,8)*5+'px)';b.append(element('span',String(n.leanLine),'line'));const content=element('span',undefined,'steptext');content.append(document.createTextNode(describe(n)+(n.argument===null?'':' ')));if(n.argument!==null)formula(content,n.argument);b.append(content);b.onclick=()=>selection(n.id,true);b.ondblclick=()=>{selection(n.id);startEdit();};box.append(b);
+    const item=element('button',n.leanLine+'  '+n.lean,'outlineItem');item.dataset.node=n.id;item.style.paddingLeft=(10+Math.min(n.indent-2,8)*4)+'px';item.onclick=()=>{setView('reading');selection(n.id,true);};outline.append(item);}
+  selected=null;$('stepEditor').hidden=true;$('editStep').disabled=true;$('inspectName').textContent='No step selected';$('inspectCode').textContent='';$('inspectParent').textContent='—';
 }
-function install(next){clearTimeout(timer);ir=next;const nextLean=renderLean(ir),nextProse=renderProse(ir);if(lean.value!==nextLean)lean.value=nextLean;if(prose.value!==nextProse)prose.value=nextProse;base={lean:lean.value,prose:prose.value};invalidate();dirty();reading();notice('Synchronized · syntax only, not verified.');}
-function sync(side){clearTimeout(timer);try{install(planSync(base,lean.value,prose.value,side).ir);}catch(e){notice(e.message,true);}}
-for(const [el,side] of [[lean,'lean'],[prose,'prose']])el.addEventListener('input',()=>{clearTimeout(timer);invalidate();dirty();notice('Unsynchronized edits.');if($('auto').checked)timer=setTimeout(()=>sync(side),400);});
+function install(next,{save=true}={}){clearTimeout(timer);ir=next;const l=renderLean(ir),p=renderProse(ir);if(lean.value!==l)lean.value=l;if(prose.value!==p)prose.value=p;base={lean:l,prose:p};invalidate();dirty();reading();notice('Representations synchronized. Lean verification and narrative review are separate.');if(save)persist();}
+function sync(side){clearTimeout(timer);try{install(planSync(base,lean.value,prose.value,side).ir);}catch(e){notice(e.message,true);persist();}}
+for(const [el,side] of [[lean,'lean'],[prose,'prose']])el.addEventListener('input',()=>{clearTimeout(timer);invalidate();$('stepEditor').hidden=true;$('editStep').disabled=true;dirty();notice('Unsynchronized edits · both drafts are retained.');persist();if($('auto').checked)timer=setTimeout(()=>sync(side),450);});
+notes.addEventListener('input',()=>{rev++;candidate=null;narrative=null;$('accept').disabled=true;$('useNarrative').disabled=true;$('proposal').textContent='Notes changed. Request a new proposal.';persist();});
+for(const evt of ['click','keyup','scroll','select'])lean.addEventListener(evt,gutter);
 $('fromLean').onclick=()=>sync('lean');$('fromProse').onclick=()=>sync('prose');
-for(const [id,el,key] of [['revertLean',lean,'lean'],['revertProse',prose,'prose']])$(id).onclick=()=>{clearTimeout(timer);if(el.value!==base[key]&&!confirm('Discard edits on this side?'))return;el.value=base[key];invalidate();dirty();notice('Reverted this side to the last synchronized version.');};
-EXAMPLES.forEach((e,i)=>$('example').add(new Option(e.name,i)));
-$('example').onchange=()=>{if(!clean()&&!confirm('Discard unsynchronized edits?'))return;install(parseLean(EXAMPLES[+$('example').value].source));};
+document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>setView(b.dataset.view));
+$('editStep').onclick=startEdit;$('cancelStep').onclick=()=>{$('stepEditor').hidden=true;};
+$('applyStep').onclick=()=>{if(!clean()){notice('Synchronize changes first.',true);return;}try{install(replaceStep(lean.value,selected,$('stepInput').value));}catch(e){notice(e.message,true);}};
+for(const [id,el,key] of [['revertLean',lean,'lean'],['revertProse',prose,'prose']])$(id).onclick=()=>{clearTimeout(timer);if(el.value!==base[key]&&!confirm('Discard unsynchronized changes on this side?'))return;el.value=base[key];invalidate();dirty();persist();notice('Reverted this side.');};
+$('adopt').onclick=()=>{try{const next=parseLean(lean.value);if(!confirm('Adopt this Lean source as a new baseline? This replaces the controlled-text draft. Export your workspace first if needed.'))return;install(next);}catch(e){notice(e.message,true);}};
+function mayReplace(){return (clean()&&!notes.value)||confirm('Replace current workspace? Export it first to preserve both drafts and notes.');}
+EXAMPLES.forEach((e,i)=>{const b=element('button',e.name,'example');b.onclick=()=>{if(!mayReplace())return;name=e.name;notes.value='';exampleIndex=i;install(parseLean(e.source));document.querySelectorAll('.example').forEach((x,j)=>x.classList.toggle('active',j===i));};$('examples').append(b);});
+function loadWorkspace(data){const r=restore(data);name=r.name;notes.value=r.notes;install(r.ir,{save:false});lean.value=r.drafts.lean;prose.value=r.drafts.prose;dirty();if(!clean())notice('Restored unsynchronized drafts. Synchronize from the edited side.');persist();}
 $('open').onclick=()=>$('file').click();
-$('file').onchange=async()=>{try{const f=$('file').files[0];if(!f)return;if(!clean()&&!confirm('Discard unsynchronized edits?'))return;if(f.size>128*1024)throw Error('File exceeds 128 KiB.');install(parseLean((await f.text()).replace(/\r\n/g,'\n')));}catch(e){notice(e.message,true);}finally{$('file').value='';}};
-async function api(path,payload){const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const d=await r.json();if(!r.ok)throw Error(d.error||'Request failed');return d;}
-$('check').onclick=async()=>{if(!clean()){notice('Synchronize first.',true);return;}const snapshot=rev;$('check').disabled=true;$('output').textContent='Running Lean…';try{const r=await api('/api/check',{source:lean.value});if(snapshot!==rev)return;$('output').textContent=r.output;notice('Lean check: '+r.status,r.status!=='passed');}catch(e){if(snapshot===rev)notice('Checker unavailable: '+e.message,true);}finally{$('check').disabled=false;}};
-$('download').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([lean.value],{type:'text/plain'}));a.download='proof.lean';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);};
-async function ai(mode){if(!clean()){notice('Synchronize first.',true);return;}if(mode==='propose'&&!$('prompt').value.trim()){notice('Enter a free-form proof.',true);return;}if(!confirm('Send current proof to the configured AI endpoint?'))return;const snapshot=rev;candidate=null;$('accept').disabled=true;$('propose').disabled=$('explain').disabled=true;$('proposal').textContent='Requesting unverified AI output…';try{const r=await api('/api/'+mode,{source:lean.value,prose:$('prompt').value});if(snapshot!==rev)return;if(mode==='explain'){$('proposal').textContent=r.narrative;notice('AI explanation · unverified, not synchronized.');return;}const next=parseLean(r.source);if(!sameStatement(ir,next))throw Error('Theorem header or environment changed.');candidate=next;$('proposal').textContent=r.source;$('accept').disabled=false;notice('Unverified proposal · review before applying and checking.');}catch(e){if(snapshot===rev){$('proposal').textContent=e.message;notice('AI unavailable or rejected.',true);}}finally{$('propose').disabled=$('explain').disabled=false;}}
-$('propose').onclick=()=>ai('propose');$('explain').onclick=()=>ai('explain');$('accept').onclick=()=>{if(candidate&&clean())install(candidate);};
-window.addEventListener('load',reading);install(parseLean(EXAMPLES[0].source));
+$('file').onchange=async()=>{try{const f=$('file').files[0];if(!f||!mayReplace())return;if(f.size>1024*1024)throw Error('File exceeds 1 MiB.');const s=await f.text();if(f.name.endsWith('.json'))loadWorkspace(JSON.parse(s));else{const next=parseLean(s.replace(/\r\n/g,'\n'));name=f.name;notes.value='';install(next);}}catch(e){notice(e.message,true);}finally{$('file').value='';}};
+function download(content,filename,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([content],{type}));a.download=filename;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
+$('download').onclick=()=>download(lean.value,'proof.lean','text/plain');
+$('saveDoc').onclick=()=>download(JSON.stringify(snapshot(base,{lean:lean.value,prose:prose.value},notes.value,name),null,2),'proof.leanduet.json','application/json');
+async function api(path,payload){const r=await fetch('/api/'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});if(!r.headers.get('content-type')?.includes('application/json'))throw Error('Local backend not available. Start python server.py.');const d=await r.json();if(!r.ok)throw Error(d.error||'Request failed');return d;}
+$('check').onclick=async()=>{if(!clean()){notice('Synchronize first.',true);return;}const snapshotRev=rev;$('check').disabled=true;state('verifyState','Checking…');$('output').textContent='Running Lean…';try{const r=await api('check',{source:lean.value});if(snapshotRev!==rev)return;$('output').textContent=r.output;state('verifyState',r.status==='passed'?'Lean passed':r.status,r.status==='passed'?'pass':'dirty');notice('Lean check: '+r.status,r.status!=='passed');}catch(e){if(snapshotRev===rev){state('verifyState','Unavailable','dirty');$('output').textContent=e.message;notice('Checker unavailable: '+e.message,true);}}finally{$('check').disabled=false;}};
+async function ai(mode){if(!clean()){notice('Synchronize first.',true);return;}if(mode==='propose'&&!notes.value.trim()){notice('Enter a mathematical argument first.',true);return;}if(!confirm('Send the current Lean proof and notes to your configured AI provider?'))return;const snapshotRev=rev;candidate=null;narrative=null;$('accept').disabled=$('useNarrative').disabled=true;$('propose').disabled=$('explain').disabled=true;$('proposal').textContent='Requesting unverified output…';try{const r=await api(mode,{source:lean.value,prose:notes.value});if(snapshotRev!==rev)return;if(mode==='explain'){narrative=r.narrative;$('proposal').textContent=narrative;$('useNarrative').disabled=false;notice('AI explanation · unverified.');return;}const next=parseLean(r.source);if(!sameStatement(ir,next))throw Error('Theorem header or environment changed.');candidate=next;$('proposal').textContent=r.source;$('accept').disabled=false;notice('Unverified proposal · review before applying and checking.');}catch(e){if(snapshotRev===rev){$('proposal').textContent=e.message;notice('AI unavailable or rejected.',true);}}finally{$('propose').disabled=$('explain').disabled=false;}}
+$('propose').onclick=()=>ai('propose');$('explain').onclick=()=>ai('explain');$('accept').onclick=()=>{if(candidate&&clean()&&confirm('Apply the proposed Lean source? Review before running Lean.'))install(candidate);};
+$('useNarrative').onclick=()=>{if(narrative&&(!notes.value||confirm('Replace your free-prose notes with this unverified explanation?'))){notes.value=narrative;persist();}};
+function theme(t){document.documentElement.dataset.theme=t;$('theme').textContent=t==='dark'?'Light mode':'Dark mode';try{localStorage.setItem(THEME,t);}catch{}}
+$('theme').onclick=()=>theme(document.documentElement.dataset.theme==='dark'?'light':'dark');
+try{theme(localStorage.getItem(THEME)||'light');}catch{theme('light');}
+try{const saved=localStorage.getItem(KEY);if(saved)loadWorkspace(JSON.parse(saved));else{name=EXAMPLES[0].name;install(parseLean(EXAMPLES[0].source));}}catch(e){name=EXAMPLES[0].name;install(parseLean(EXAMPLES[0].source),{save:false});notice('Saved workspace could not be restored: '+e.message+'. Original storage retained until the next edit.',true);}
+$('envState').textContent=location.hostname==='127.0.0.1'||location.hostname==='localhost'?'Local workspace':'Static demo · checker and AI require local server';
+document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='s'){e.preventDefault();persist();notice('Workspace saved locally. Export for a portable backup.');}});
