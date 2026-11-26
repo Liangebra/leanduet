@@ -337,8 +337,9 @@ partial def encodeExpr (e : Expr) (fuel : Nat := 96) (depth : Nat := 0) :
     unless i < depth do throwError "Loose bound variable in IR"
     return tag "bound" #[toJson i]
   | .fvar id =>
-    let some d := (← getLCtx).findDecl? id | throwError "Unknown free variable in IR"
-    return tag "local" #[toJson d.index]
+    for d in (← getLCtx) do
+      if d.fvarId == id then return tag "local" #[toJson d.index]
+    throwError "Unknown free variable in IR"
   | .mvar _ => throwError "Unresolved metavariable in IR"
   | .sort u => return tag "sort" #[encodeLevel u]
   | .const n us => return tag "const" #[encodeName n, Json.arr (us.toArray.map encodeLevel)]
