@@ -114,6 +114,23 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
             patch_page.locator("#applyPatch").click()
             patch_page.locator("#check").click()
             expect(patch_page.locator("#verifyState")).to_have_text("Lean passed",timeout=60000)
+            rule_source="""theorem reversed (a b : Nat) (h : a = b) : b = a := by
+  exact Eq.symm h
+"""
+            patch_page.locator("#lean").fill(rule_source)
+            patch_page.once("dialog",lambda d:d.accept())
+            patch_page.locator("#adopt").click()
+            patch_page.locator('[data-view="typed"]').click()
+            patch_page.locator("#extractTerm").click()
+            expect(patch_page.locator("#typedStatus")).to_contain_text("Extracted from Lean elaboration",timeout=60000)
+            patch_page.locator("#typedTree").evaluate("(root) => root.querySelectorAll('details.typedNode').forEach(x=>x.open=true)")
+            patch_page.locator(".typedNode").filter(has=patch_page.locator("summary").filter(has_text=__import__("re").compile("^Apply Eq.symm$"))).last.locator(":scope > .typedEdit").click()
+            patch_page.locator("#ruleIntent").fill("等式对称性")
+            patch_page.locator("#findRules").click()
+            expect(patch_page.locator("#ruleResults")).to_contain_text("Eq.symm",timeout=60000)
+            patch_page.locator("#ruleResults").get_by_role("button",name="Use this proof").first.click()
+            patch_page.locator("#checkPatch").click()
+            expect(patch_page.locator("#patchStatus")).to_contain_text("No structural change",timeout=120000)
             patch_page.close()
             assert not errors, errors
             browser.close()

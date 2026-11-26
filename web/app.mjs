@@ -3,6 +3,7 @@ import {replaceStep,snapshot,restore,lineRange} from './workspace.mjs';
 import {authoredNarrative} from './narratives.mjs';
 import {narrate} from './typed-narrative.mjs';
 import {witnessTerm} from './dependent-edit.mjs';
+import {concepts,resolveIntent} from './rule-intent.mjs';
 const $=id=>document.getElementById(id),lean=$('lean'),prose=$('prose'),notes=$('prompt');
 const KEY='leanduet.workspace.v1',THEME='leanduet.theme';
 let typedRoot=null, patchNode=null, patchCandidate=null;
@@ -117,6 +118,7 @@ function openPatch(node){
   if(!clean()||!typedRoot)return;
   patchNode=node;patchCandidate=null;$('typedPatch').hidden=false;$('applyPatch').disabled=true;
   $('patchTarget').textContent=node.path+' · '+node.type;$('patchTerm').value=node.term||'';
+  $('ruleSearch').hidden=node.kind==='witness';$('ruleResults').replaceChildren();$('ruleIntent').value='';$('ruleStatus').textContent='Leave blank for goal-type search across loaded libraries.';
   const witness=(node.children||[]).find(x=>x.kind==='witness');
   const evidence=(node.children||[]).find(x=>x.kind!=='witness');
   const paired=node.reference==='Exists.intro'&&witness&&evidence;
@@ -145,6 +147,28 @@ function openPatch(node){
   $('patchPreview').textContent='';$('patchStatus').textContent=node.kind==='witness'?'Choose a new witness. Lean will recheck all dependent proof obligations; the unchanged evidence may become invalid.':'Edit the local proof term. Lean will check its type and the entire exported theorem.';
   $('typedPatch').scrollIntoView({block:'nearest'});$('patchTerm').focus();
 }
+for(const c of concepts)for(const label of [c.en,c.zh,c.rule]){
+  const option=element('option');option.value=label;$('ruleConcepts').append(option);
+}
+$('ruleIntent').addEventListener('input',()=>{$('ruleResults').replaceChildren();$('ruleStatus').textContent='Query changed. Search again.';});
+$('findRules').onclick=async()=>{
+  if(!patchNode||!clean()||patchNode.kind==='witness')return;
+  const node=patchNode,snapshotRev=rev,query=$('ruleIntent').value;
+  const target=$('ruleResults');target.replaceChildren();
+  $('findRules').disabled=true;$('ruleStatus').textContent='Searching in the selected Lean context…';
+  try{
+    const rule=resolveIntent(query);
+    const r=await api('search',{source:lean.value,path:node.path,rule});
+    if(snapshotRev!==rev||patchNode!==node||$('ruleIntent').value!==query)return;
+    const candidates=r.candidates||[];
+    $('ruleStatus').textContent=candidates.length?candidates.length+' locally closed candidate(s) · select one, then check replacement.':'No closed candidate found in the bounded search. This is not a proof of impossibility.';
+    for(const c of candidates){
+      const row=element('div',undefined,'ruleResult');row.append(element('strong',c.rule),element('code',c.term));
+      const use=element('button','Use this proof');use.onclick=()=>{$('patchTerm').value=c.term;$('patchTerm').dispatchEvent(new Event('input'));};row.append(use);target.append(row);
+    }
+  }catch(e){if(snapshotRev===rev&&patchNode===node)$('ruleStatus').textContent=e.message;}
+  finally{$('findRules').disabled=false;}
+};
 function stageWitness(){
   if(!patchNode||$('witnessPair').hidden)return;
   try{

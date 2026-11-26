@@ -209,4 +209,108 @@ elab "#duet_compare " n:ident m:ident path:str replacement:str : command => do
       logInfo "LEANDUET_TYPE_AND_SHAPE_MATCH"
     | _, _ => throwError "Expected two theorems"
 
+
+/-- Traverse a selected occurrence under exactly its original binders. -/
+partial def withNodeAt {α : Type} (e : Expr) (path : List String)
+    (k : Expr → MetaM α) : MetaM α := do
+  match path with
+  | [] => k e
+  | p :: rest =>
+    match e with
+    | .mdata _ b => withNodeAt b path k
+    | .lam n t b bi =>
+      unless p == "body" do throwError "Invalid lambda path"
+      withLocalDecl n bi t fun x => withNodeAt (b.instantiate1 x) rest k
+    | .letE n t v b _ =>
+      if p == "value" then withNodeAt v rest k
+      else if p == "body" then
+        withLetDecl n t v fun x => withNodeAt (b.instantiate1 x) rest k
+      else throwError "Invalid let path"
+    | .app .. =>
+      unless p.startsWith "arg" do throwError "Invalid application path"
+      let some i := (String.mk (p.toList.drop 3)).toNat? | throwError "Invalid argument index"
+      let args := e.getAppArgs
+      unless i < args.size do throwError "Argument index out of bounds"
+      withNodeAt args[i]! rest k
+    | _ => throwError "Invalid expression path"
+
+/-- No self-reference, including auxiliary declarations under the theorem name. -/
+partial def mentions (e : Expr) (forbidden : Name) : Bool :=
+  match e with
+  | .const n _ => forbidden.isPrefixOf n
+  | .app f a => mentions f forbidden || mentions a forbidden
+  | .lam _ t b _ | .forallE _ t b _ => mentions t forbidden || mentions b forbidden
+  | .letE _ t v b _ => mentions t forbidden || mentions v forbidden || mentions b forbidden
+  | .mdata _ b | .proj _ _ b => mentions b forbidden
+  | _ => false
+
+def finishCandidate (goal : Expr) (expected : Expr) (forbidden : Name)
+    (label : String) : MetaM (Option Json) := do
+  let p ← instantiateMVars goal
+  if p.hasMVar || p.hasLevelMVar || mentions p forbidden || mentions p `sorryAx then
+    return none
+  Lean.Meta.check p
+  unless ← isDefEq (← inferType p) expected do return none
+  let term ← withOptions (fun o => o.setBool `pp.fullNames true) do
+    pure (← ppExpr p).pretty
+  return some (Json.mkObj [("rule", toJson label), ("term", toJson term),
+    ("type", toJson (← ppExpr expected).pretty)])
+
+/-- Each attempt starts with a fresh metavariable and rolls back all assignments.
+    The imported declaration index is Lean's own, including Mathlib when imported. -/
+def findProofs (goalType : Expr) (forbidden : Name) (only : String) : MetaM (Array Json) := do
+  let saved ← getMCtx
+  let mut results : Array Json := #[]
+  if only.isEmpty then
+    let localResult ← observing? do
+      let goal ← mkFreshExprMVar goalType
+      let remaining ← LibrarySearch.solveByElim [] false [goal.mvarId!] 4
+      unless remaining.isEmpty do throwError "Unsolved premises"
+      finishCandidate goal goalType forbidden "local elimination"
+    setMCtx saved
+    if let some (some j) := localResult then results := results.push j
+  let candidates ← if only.isEmpty then
+    LibrarySearch.libSearchFindDecls goalType
+  else
+    let n := only.toName
+    if (← getEnv).contains n then
+      pure #[(n, LibrarySearch.DeclMod.none), (n, .mp), (n, .mpr)]
+    else pure #[]
+  let mut attempts := 0
+  for (n, direction) in candidates do
+    if results.size >= 6 || attempts >= 48 then break
+    if !forbidden.isPrefixOf n && n != `sorryAx then
+      attempts := attempts + 1
+      let found ← observing? do
+        let goal ← mkFreshExprMVar goalType
+        let rule ← LibrarySearch.mkLibrarySearchLemma n direction
+        let pending ← goal.mvarId!.apply rule
+        let remaining ← LibrarySearch.solveByElim [] false pending 4
+        unless remaining.isEmpty do throwError "Unsolved premises"
+        let label := n.toString ++ (match direction with
+          | .none => ""
+          | .mp => " (forward)"
+          | .mpr => " (backward)")
+        finishCandidate goal goalType forbidden label
+      setMCtx saved
+      if let some (some j) := found then
+        unless results.contains j do results := results.push j
+  return results
+
+elab "#duet_search " n:ident path:str rule:str : command => do
+  liftTermElabM do
+    let ci ← getConstInfo n.getId
+    match ci with
+    | .thmInfo v =>
+      let parts := path.getString.splitOn "/"
+      unless parts.head? == some "root" do throwError "Invalid root path"
+      let j ← withNodeAt v.value (parts.drop 1) fun e => do
+        let goal ← inferType e
+        unless ← isProp goal do throwError "Search requires a proposition"
+        let candidates ← findProofs goal n.getId rule.getString
+        pure (Json.mkObj [("schema", toJson (1 : Nat)),
+          ("goal", toJson (← ppExpr goal).pretty), ("candidates", Json.arr candidates)])
+      logInfo m!"LEANDUET_JSON:{j.compress}"
+    | _ => throwError "Expected a theorem"
+
 end LeanDuetExtract

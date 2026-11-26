@@ -96,6 +96,18 @@ def patch(source, path, replacement, project=None):
             "statementDefEq":True, "proofShapePreserved":True, "surfaceHeaderChanged":True, "unchanged":False}
 
 
+def search(source, path, rule="", project=None):
+    """Discover locally closed proof candidates from Lean's loaded environment."""
+    name = _name(source)
+    _safe_proof(source)
+    if not isinstance(path, str) or not re.fullmatch(r"root(?:/(?:body|value|arg[0-9]+)){0,16}", path):
+        raise ValueError("Invalid proof node path.")
+    if not isinstance(rule, str) or (rule and not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_'.]{0,159}", rule)):
+        raise ValueError("Use an exact declaration name or automatic type search.")
+    args = " ".join(json.dumps(x,ensure_ascii=False) for x in (path,rule))
+    return _run_lean("import Lean\n" + source.rstrip() + "\n\n" + _adapter() +
+                     "\n#duet_search " + name + " " + args + "\n", project)
+
 def informath(source, project=None):
     """Reuse the upstream CLI as an external, separately installed tool."""
     root = os.environ.get("LEANDUET_INFORMATH_ROOT")

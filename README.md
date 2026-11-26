@@ -59,6 +59,8 @@ The local Typed proof tab also offers a checked term-level replacement preview f
 
 The experimental dependent track adds quantified inference, certified existential witnesses and equality transport in [lean/Dependent.lean](lean/Dependent.lean). The local inspector offers bounded one-argument applications and editable existential witnesses, subject to full dependent validation.
 
+The local typed editor also offers on-demand proof search by goal type or a reviewed bilingual mathematical-rule alias. It calls Lean's own imported-declaration index, tries bounded applications and local premise solving, and stages candidates for checked replacement. Mathlib must be installed in a compatible project; automatic CI uses core Lean.
+
 See [research references and reuse policy](docs/RESEARCH.md) and the small indexed natural-deduction calculus in [lean/TMN.lean](lean/TMN.lean). The calculus and extractor are included in CI; no claim of full Lean-to-natural-language reversibility.
 
 ## Trust and privacy

@@ -23,6 +23,7 @@ jobs:
       - run: lean lean/TMN.lean
       - run: lean lean/Dependent.lean
       - run: python tests/semantic_integration.py
+      - run: python tests/search_integration.py
       - name: Install browser test dependencies
         run: |
           python -m pip install playwright==1.51.0
