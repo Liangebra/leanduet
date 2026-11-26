@@ -12,3 +12,5 @@ test('changed theorem rejected',()=>{const lean=EXAMPLES[0].source,prose=renderP
 test('blank lines and missing final newline preserved',()=>{const s='theorem t : True := by\n\n  trivial';assert.equal(renderLean(parseProse(renderProse(parseLean(s)))),s)});
 test('multiple declarations rejected',()=>assert.throws(()=>parseLean(EXAMPLES[0].source+'theorem t : True := by\n  trivial\n')));
 test('block comments rejected',()=>assert.throws(()=>parseLean('theorem t : True := by\n  /- test -/\n  trivial\n')));
+
+test('wrong-direction sync rejects unsaved changes',()=>{const lean=EXAMPLES[0].source,prose=renderProse(parseLean(lean));assert.throws(()=>planSync({lean,prose},lean+'  rfl\n',prose,'prose'),/other side/);assert.throws(()=>planSync({lean,prose},lean,prose+'changed','lean'),/other side/);});
