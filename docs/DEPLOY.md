@@ -1,22 +1,17 @@
-# Launch and deployment checklist
+# Deployment
 
-The static editor is safe to host as static files; it does not expose Lean or AI services. Never publish the Python checker as an unauthenticated public service.
+## Online editor
 
-## GitHub Pages (one-time repository admin action)
+GitHub Pages serves only the contents of web/. The static workbench cannot execute Lean or call an AI provider.
 
-1. Open Settings → Pages.
-2. Under Build and deployment, choose GitHub Actions.
-3. Open Actions → Deploy browser-only demo → Run workflow (main).
-4. Subsequent main-branch pushes deploy automatically after the Tests workflow succeeds. After successful deployment, the workflow reports the actual site URL. Test it before sharing. Expected project URL: https://liangebra.github.io/leanduet/ (not live until deployment succeeds).
+In Settings → Pages, select GitHub Actions. The Deploy browser-only demo workflow runs on pushes to main and manual dispatch. It runs JavaScript tests and an independent Chromium test of the static site at a project-style /leanduet/ prefix, including the three-language about page. It then publishes the tested checkout. Superseded runs are cancelled or skip publication. The full Tests workflow separately checks Python, Lean, semantic extraction and real local browser integration. A static deployment does not imply that the local backend has passed.
 
-## Repository discoverability (admin UI)
+- Editor: https://liangebra.github.io/leanduet/
+- About: https://liangebra.github.io/leanduet/about.html
+- Documentation fallback: README.md, README.zh-CN.md, README.ja.md in the repository.
 
-- About → topics: lean4, mathlib, mathematics, theorem-proving, formal-verification, autoformalization, proof-assistant, latex, bidirectional-transformation, mathematical-reasoning.
-- About → website: set to the deployed URL only after verification.
-- Settings → General → Features → Discussions: enable. Keep Issues enabled. Use Q&A, Ideas and Announcements as discussion categories.
-- Add a social preview image and pin the repository on the owner's profile if desired.
-- Keep starter issues labeled "good first issue" / "help wanted". Use discussions for research ideas; issues for actionable changes.
+A workflow that reports success with a skipped Deploy step is not a successful publication. Inspect the Deploy step and its page URL.
 
-## Release gates
+## Local server
 
-Check CI and browser smoke test; verify the demo on desktop and mobile; capture a real short demo GIF or video; then share with Lean Zulip and mathematical communities. Do not advertise full unrestricted prose synchronization as implemented.
+Run python server.py. Use --project for a built compatible Lean project. Run only trusted Lean source; this is not a sandbox. See docs/RESEARCH.md for the current limits.
