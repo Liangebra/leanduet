@@ -111,8 +111,6 @@ theorem liftRen_liftSub {n m k : Nat} (s : Fin n → Term m) (r : Fin m → Fin 
   · simp [liftSub, liftRen, rename]
   · simp only [liftSub, Fin.cases_succ, rename_comp]
     congr 1
-    funext x
-    simp [liftRen, Function.comp_def]
 
 theorem rename_subst {n m k : Nat} (t : Term n) (s : Fin n → Term m) (r : Fin m → Fin k) :
     rename r (subst s t) = subst (fun i => rename r (s i)) t := by
@@ -133,8 +131,6 @@ theorem liftSub_comp {n m k : Nat} (s : Fin n → Term m) (r : Fin m → Term k)
   · simp [liftSub, subst]
   · simp only [liftSub, Fin.cases_succ, subst_rename, rename_subst]
     congr 1
-    funext x
-    rfl
 
 /-- Associativity of simultaneous capture-avoiding substitution.
     Together with subst_var and the variable equation, this gives the
