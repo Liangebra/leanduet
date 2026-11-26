@@ -11,6 +11,7 @@ import tempfile
 import urllib.request
 import urllib.error
 import semantic
+import lean_lsp
 
 ROOT = Path(__file__).resolve().parent
 MAX_BODY = 128 * 1024
@@ -81,6 +82,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             data=json.loads(self.rfile.read(n))
             source=data.get('source')
             if not isinstance(source,str) or not source.strip(): raise ValueError('Source must be nonempty text.')
+            if self.path=='/api/completion': return self.send_json(200,lean_lsp.complete(source,data.get('line'),data.get('character'),self.project))
             if self.path=='/api/check': return self.send_json(200,check_source(source,self.project))
             if self.path=='/api/structure': return self.send_json(200,semantic.extract(source,self.project))
             if self.path=='/api/chain': return self.send_json(200,semantic.infer_chain(source,data.get('path'),data.get('steps'),self.project))

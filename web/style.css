@@ -76,3 +76,5 @@ html[data-theme=dark] .tok-keyword{color:#569cd6}html[data-theme=dark] .tok-comm
 .typedPatch .scopeFilter{display:flex;align-items:center;gap:5px;font-size:12px;font-weight:400;color:var(--muted);margin-bottom:10px}
 
 #formulaPreview{font-family:var(--mono);overflow-wrap:anywhere}
+
+.completionPanel{padding:8px 12px;max-height:180px;overflow:auto;border-top:1px solid var(--line);background:var(--paper);flex-shrink:0}.completionPanel .completionItem{display:block;text-align:left;width:100%;font:12px var(--mono);white-space:normal;overflow-wrap:anywhere}.completionPanel .completionItem:hover{background:var(--accent-soft)}

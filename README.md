@@ -30,7 +30,7 @@ The [online editor](https://liangebra.github.io/leanduet/) is a static demo. Run
 
 ### Workbench
 
-- Read a mathematical proof next to its Lean source, or switch to a notebook layout.
+- Read a mathematical proof next to its Lean source, with native Lean completion (Ctrl+Space), or switch to a notebook layout.
 - Inspect elaborated proof terms, local hypotheses and their types.
 - Select a proof occurrence, search applicable rules, and review a checked replacement.
 - Enter a supported LaTeX formula for typed proof completion, or compose controlled mathematical sentences with intermediate propositions inferred by Lean.

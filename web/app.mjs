@@ -7,6 +7,7 @@ import {conceptLabels,parseRuleIntent} from './rule-intent.mjs';
 import {compileFormula} from './math-formula.mjs';
 import {compileChain} from './proof-chain.mjs';
 import {languagePacks,registerPack,customPacks,phrase} from './languages.mjs';
+import {positionAt,completionEdit} from './completion.mjs';
 import {mountEditor} from './editor.mjs';
 const $=id=>document.getElementById(id),lean=$('lean'),prose=$('prose'),notes=$('prompt');
 const refreshEditor=mountEditor();
@@ -94,6 +95,34 @@ $('file').onchange=async()=>{try{const f=$('file').files[0];if(!f||!mayReplace()
 function download(content,filename,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([content],{type}));a.download=filename;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
 $('download').onclick=()=>download(lean.value,'proof.lean','text/plain');
 $('saveDoc').onclick=()=>download(JSON.stringify(snapshot(base,{lean:lean.value,prose:prose.value},notes.value,name),null,2),'proof.leanduet.json','application/json');
+let completionVersion=0;
+function hideCompletion(){completionVersion++;$('completionPanel').hidden=true;}
+$('closeCompletion').onclick=hideCompletion;
+lean.addEventListener('input',hideCompletion);
+lean.addEventListener('keydown',e=>{
+  if(e.ctrlKey&&e.code==='Space'&&local){e.preventDefault();$('completeLean').click();}
+  if(e.key==='Escape')hideCompletion();
+});
+$('completeLean').onclick=async()=>{
+  if(!local)return;
+  if(lean.selectionStart!==lean.selectionEnd){notice('Place the cursor at a single completion position.',true);return;}
+  const source=lean.value,cursor=lean.selectionStart,version=++completionVersion;
+  $('completionPanel').hidden=false;$('completionItems').replaceChildren();$('completionStatus').textContent='Requesting native Lean language-server completion…';
+  try{
+    const r=await api('completion',{source,...positionAt(source,cursor)});
+    if(version!==completionVersion||source!==lean.value)return;
+    $('completionStatus').textContent=r.items.length?r.items.length+' suggestions from Lean LSP · select to insert.':'No completion suggestions at this position.';
+    for(const item of r.items){
+      const b=element('button',item.label,'completionItem');if(item.detail)b.title=item.detail;
+      b.onclick=()=>{
+        if(version!==completionVersion||source!==lean.value||lean.selectionStart!==cursor||lean.selectionEnd!==cursor){hideCompletion();notice('Source or cursor changed. Request completion again.',true);return;}
+        try{const e=completionEdit(source,cursor,item);lean.setRangeText(e.text,e.start,e.end,'end');lean.dispatchEvent(new Event('input'));lean.focus();}
+        catch(err){$('completionStatus').textContent=err.message;}
+      };
+      $('completionItems').append(b);
+    }
+  }catch(e){if(version===completionVersion)$('completionStatus').textContent=e.message;}
+};
 async function api(path,payload){const r=await fetch('/api/'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});if(!r.headers.get('content-type')?.includes('application/json'))throw Error('Local backend not available. Start python server.py.');const d=await r.json();if(!r.ok)throw Error(d.error||'Request failed');return d;}
 $('check').onclick=async()=>{if(!clean()){notice('Synchronize first.',true);return;}const snapshotRev=rev;$('check').disabled=true;state('verifyState','Checking…');$('output').textContent='Running Lean…';try{const r=await api('check',{source:lean.value});if(snapshotRev!==rev)return;$('output').textContent=r.output;state('verifyState',r.status==='passed'?'Lean passed':r.status,r.status==='passed'?'pass':'dirty');notice('Lean check: '+r.status,r.status!=='passed');}catch(e){if(snapshotRev===rev){state('verifyState','Unavailable','dirty');$('output').textContent=e.message;notice('Checker unavailable: '+e.message,true);}}finally{$('check').disabled=false;}};
 function renderTyped(node,container,depth=0){
@@ -319,5 +348,5 @@ try{theme(localStorage.getItem(THEME)||'light');}catch{theme('light');}
 try{const saved=localStorage.getItem(KEY);if(saved)loadWorkspace(JSON.parse(saved));else{name=EXAMPLES[0].name;install(parseLean(EXAMPLES[0].source));}}catch(e){name=EXAMPLES[0].name;install(parseLean(EXAMPLES[0].source),{save:false});notice('Saved workspace could not be restored: '+e.message+'. Original storage retained until the next edit.',true);}
 const local=(location.hostname==='127.0.0.1'||location.hostname==='localhost')&&!new URLSearchParams(location.search).has('demo');
 $('envState').textContent=local?'Local workspace':'Static demo · checker and AI require local server';
-if(!local){for(const id of ['check','propose','explain','extractTerm','informath','inferChain','findRules','checkPatch']){$(id).disabled=true;$(id).title='Start the local Python server to use this feature.';}$('output').textContent='Browser-only demo. To verify in Lean or use AI, clone the repository and run python server.py.';state('verifyState','Local server required');}
+if(!local){for(const id of ['check','propose','explain','extractTerm','informath','inferChain','findRules','checkPatch','completeLean']){$(id).disabled=true;$(id).title='Start the local Python server to use this feature.';}$('output').textContent='Browser-only demo. To verify in Lean or use AI, clone the repository and run python server.py.';state('verifyState','Local server required');}
 document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='s'){e.preventDefault();persist();notice('Workspace saved locally. Export for a portable backup.');}});
