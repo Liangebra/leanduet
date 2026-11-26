@@ -34,7 +34,7 @@ export function buildDraftGraph(scope,facts,rows){
   declare({id:'context:'+i,kind:'context',name,type,formula:parsed,dependencies:parsed.refs,ambiguousName:counts.get(name)!==1});
  }
  for(const row of rows){
-  const id='line:'+row.line,step=row.step,parsed=formula(row.type);
+  const id='line:'+row.line,step=row.step,parsed=formula(row.type),value=step?.kind==='define'?formula(step.value):null;
   const alternatives=(row.candidates||[]).map((c,i)=>({
    id:id+':candidate:'+i,schema:c.schema,term:c.term,dependencies:refs(c.premises||[])
   }));
@@ -42,8 +42,8 @@ export function buildDraftGraph(scope,facts,rows){
   const selected=application&&application!=='?'?alternatives.find(c=>c.term===application):null;
   const proofRefs=application&&application!=='?'?(selected?.dependencies||refs(application.split(/\s+/))):[];
   const node={id,kind:step?.kind||'unresolved',name:step?.name||null,type:row.type||null,raw:row.raw,modifiers:row.modifiers||[],formula:parsed,
-   proofStatus:row.proofStatus||'open',status:row.status,application,alternatives,
-   selectedCandidate:selected?.id||null,dependencies:[...new Set([...parsed.refs,...proofRefs])]};
+   proofStatus:row.proofStatus||'open',status:row.status,application,alternatives,value,
+   selectedCandidate:selected?.id||null,dependencies:[...new Set([...parsed.refs,...(value?.refs||[]),...proofRefs])]};
   declare(node);
  }
  return {schema:1,identity:'revision-local',nodes};

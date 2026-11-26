@@ -40,7 +40,7 @@ export function reconcileDraftIdentity(previous,graph){
    // A repeated source occurrence has no reliable edit correspondence.
    if(a.length===1&&b.length===1&&n.formula.tree&&a[0].formula.tree){
     try{
-     if(same(stableTree(a[0].formula.tree,previous.ids),stableTree(n.formula.tree,ids)))prior=a[0];
+     if(same(stableTree(a[0].formula.tree,previous.ids),stableTree(n.formula.tree,ids))&&same(stableTree(a[0].value?.tree,previous.ids),stableTree(n.value?.tree,ids)))prior=a[0];
     }catch{}
    }
   }

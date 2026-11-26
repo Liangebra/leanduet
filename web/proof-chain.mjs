@@ -73,7 +73,8 @@ export function compileFormulaSequence(text,scope){
 export function renderChain(steps){
   const lines=['by'];
   for(const s of steps){
-    if(s.kind==='establish')lines.push('  have '+s.name+(s.type===null?'':' : '+s.type)+' := '+(s.application==='?'?'by exact?':s.application));
+    if(s.kind==='define')lines.push('  let '+s.name+' : '+s.type+' := '+s.value);
+    else if(s.kind==='establish')lines.push('  have '+s.name+(s.type===null?'':' : '+s.type)+' := '+(s.application==='?'?'by exact?':s.application));
     else {
       if(s.type!=null)lines.push('  show '+s.type);
       lines.push(s.application==='?'?'  exact?':'  exact '+s.application);

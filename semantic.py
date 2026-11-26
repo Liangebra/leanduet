@@ -115,6 +115,20 @@ def infer_chain(source, path, steps, project=None):
     for i,step in enumerate(steps):
         if not isinstance(step,dict):
             raise ValueError("Expected a structured proof step.")
+        if step.get("kind") == "define" and i < len(steps)-1:
+            h, ty, value = step.get("name"), step.get("type"), step.get("value")
+            if not isinstance(h,str) or not re.fullmatch(_SIMPLE,h) or h in names:
+                raise ValueError("Invalid or repeated local definition name.")
+            for expression in (ty,value):
+                if (not isinstance(expression,str) or not expression.strip() or len(expression)>2000 or
+                    not re.fullmatch(r"[\w'().,: +*/^=<>∀∃∈⊆↔→∧∨¬≤≥≠\-]+",expression) or
+                    re.search(r"/-|--|:=|\b(?:by|sorry|admit|sorryAx|let|have|fun|match|do|where|import|theorem|def)\b",expression)):
+                    raise ValueError("Expected a restricted local definition expression.")
+            names.append(h)
+            line = "  let " + h + " : " + ty + " := " + value
+            lines.append(line)
+            traced.extend([line,"  duet_trace "+h])
+            continue
         app = step.get("application")
         if not isinstance(app,str) or (app!='?' and not re.fullmatch(_RULE + r"(?: " + _SIMPLE + r"){0,8}",app)):
             raise ValueError("Expected an ordered application of a named rule.")

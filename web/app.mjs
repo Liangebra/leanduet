@@ -498,7 +498,7 @@ function previewDraft({edited=false}={}){
      const d=element('div',undefined,'ruleResult');
      d.dataset.objectId=draftIdentity.ids.get('line:'+x.line)||'';
      d.append(element('small','Line '+x.line+' · '+x.status+(x.proofStatus?' · '+x.proofStatus:'')),element('span',x.raw));
-     if(x.step)d.append(element('code',x.step.kind==='establish'?'have '+x.step.name+' : '+x.step.type+' := '+x.step.application:'show '+x.step.type+'; '+x.step.application));
+     if(x.step)d.append(element('code',x.step.kind==='define'?'let '+x.step.name+' : '+x.step.type+' := '+x.step.value:x.step.kind==='establish'?'have '+x.step.name+' : '+x.step.type+' := '+x.step.application:'show '+x.step.type+'; '+x.step.application));
      if(x.reason)d.append(element('small',x.reason));
      if(x.dependencies?.length)d.append(element('small','Depends on open obligations: '+x.dependencies.join(', ')));
      for(const c of x.candidates||[]){

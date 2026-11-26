@@ -105,3 +105,14 @@ All compatible referent tuples are retained within a bounded search, with
 explicit overflow. Open referents remain open. This is one local relational
 constraint over a shared draft graph, not general discourse understanding or
 a global parser for unrestricted prose.
+
+## Typed local definitions
+
+A definition `令 y : $Nat$ := $f(x)$` introduces a typed local value, not
+an equality proposition. The draft graph retains separate type and value trees,
+including value dependencies; subsequent candidate matching can use the
+explicit declared type. Lean checks the actual value and type. Duplicate,
+self and forward local references are rejected; unknown global names are
+left to Lean. Untyped inference, arbitrary set-builder notation and general
+unfolding are not implemented. The structured chain endpoint accepts bounded
+single-expression definitions and traces their elaborated local bindings.
