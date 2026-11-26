@@ -16,7 +16,7 @@ test('unknown notation is kept without semantic repair',()=>{
  assert.equal(p.alternatives[0].formula,'Q');
 });
 
-test('reviewed AI alternatives do not replace the author's original interpretation',()=>{
+test('reviewed AI alternatives do not replace the original author interpretation',()=>{
  const p=interpretations('$P$\nunknown ⊛',[]);
  const q=interpretations('$P$\n$Q$',[]);
  const r=mergeInterpretations(p,q);
