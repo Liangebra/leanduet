@@ -22,12 +22,13 @@ partial def shape (e : Expr) : Expr :=
 
 def sameShape (a b : Expr) : Bool := Expr.equal (shape a) (shape b)
 
-def localScope : MetaM (Array Json) := do
+def localScope (goal : Expr) (editable : Bool) : MetaM (Array Json) := do
   let mut entries := #[]
   for d in (← getLCtx) do
     if !d.isImplementationDetail then
+      let matches ← if editable then isDefEq d.type goal else pure false
       entries := entries.push (Json.mkObj [
-        ("name", toJson d.userName.toString),
+        ("matchesGoal", toJson matches), ("name", toJson d.userName.toString),
         ("type", toJson (← ppExpr d.type).pretty)])
   return entries
 
@@ -36,7 +37,7 @@ partial def inspect (e : Expr) (fuel : Nat) (path : String := "root") : MetaM Js
   let ty ← inferType e
   let typ := (← ppExpr ty).pretty
   let editable ← isProp ty
-  let scope ← localScope
+  let scope ← localScope ty editable
   if fuel == 0 then return node path editable scope "opaque" term typ
   match e with
   | .lam n t b bi =>

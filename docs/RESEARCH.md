@@ -40,3 +40,7 @@ Scope is deliberately limited to one theorem with imports only and no universe p
 ### Structural fidelity after export
 
 Definitional equality of proof terms is too weak (proof irrelevance). The exporter now checks reconstructed and re-elaborated expressions for structural equality after stripping metadata and alpha-renaming binders, retaining de Bruijn indices, applications, constants, types and binder information. If the pretty-printer and elaborator do not round-trip this shape, the preview is rejected. A structural no-op returns the original source byte-for-byte rather than reformatting the theorem. This is a deliberately conservative partial update, not an assertion that all Lean terms can round-trip. The local proof scope is included in the inspector. Tests distinguish two hypotheses of the same proposition, and exercise the typed replacement UI.
+
+### Type-directed local alternatives
+
+For proof-valued nodes the extractor compares each local declaration type to the node's inferred proposition using Lean's definitional equality. The editor offers unambiguous local names as guided replacement candidates. It still elaborates, checks, reconstructs and round-trips the chosen proof; this is local assumption selection, not a general proof search or a free-language parser.

@@ -116,7 +116,18 @@ function openPatch(node){
   if(!clean()||!typedRoot)return;
   patchNode=node;patchCandidate=null;$('typedPatch').hidden=false;$('applyPatch').disabled=true;
   $('patchTarget').textContent=node.path+' · '+node.type;$('patchTerm').value=node.term||'';
-  $('patchScope').replaceChildren();for(const d of node.scope||[]){const row=element('div',undefined,'scopeRow');row.append(element('strong',d.name),element('code',d.type));$('patchScope').append(row);}
+  $('patchScope').replaceChildren();$('patchChoices').replaceChildren();
+  const scope=node.scope||[];
+  for(const d of scope){
+    const row=element('div',undefined,'scopeRow');row.append(element('strong',d.name),element('code',d.type));$('patchScope').append(row);
+    // Only offer unambiguous simple names; the actual term must still pass Lean.
+    if(d.matchesGoal&&/^[A-Za-z_][A-Za-z0-9_']*$/.test(d.name)&&scope.filter(x=>x.name===d.name).length===1){
+      const button=element('button',($('typedLanguage').value==='zh'?'使用假设 ':'Use hypothesis ')+d.name,'suggestion');
+      button.onclick=()=>{$('patchTerm').value=d.name;$('patchTerm').dispatchEvent(new Event('input'));$('patchTerm').focus();};
+      $('patchChoices').append(button);
+    }
+  }
+  $('patchSuggestions').hidden=!$('patchChoices').children.length;
   $('patchPreview').textContent='';$('patchStatus').textContent='Edit the local proof term. Lean will check its type and the entire exported theorem.';
   $('typedPatch').scrollIntoView({block:'nearest'});$('patchTerm').focus();
 }

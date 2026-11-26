@@ -30,7 +30,8 @@ target=next(n for n in walk(tree) if n["kind"]=="apply" and n.get("reference")==
 assert target["editable"] and target["path"].startswith("root/"), target
 r=patch(source2,target["path"],"hq")
 assert r["statementDefEq"] and r["proofShapePreserved"] and r["status"]=="checked",r
-assert any(d["name"]=="hq" and d["type"]=="Q" for d in target["scope"]), target
+assert any(d["name"]=="hq" and d["type"]=="Q" and d["matchesGoal"] for d in target["scope"]), target
+assert not any(d["name"]=="hp" and d["matchesGoal"] for d in target["scope"]), target
 noop=patch(source2,target["path"],"hpq hp")
 assert noop["unchanged"] and noop["source"]==source2,noop
 assert "hqr hq" in r["source"],r
