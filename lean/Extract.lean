@@ -299,6 +299,120 @@ partial def withNodeAt {α : Type} (e : Expr) (path : List String)
       withNodeAt args[i]! rest k
     | _ => throwError "Invalid expression path"
 
+
+/-- Structural names preserve numeric components and dots inside individual
+    components; display strings alone do not suffice for serialization. -/
+def encodeName : Name → Json
+  | .anonymous => Json.arr #[]
+  | .str p s => Json.arr #[encodeName p, toJson "str", toJson s]
+  | .num p n => Json.arr #[encodeName p, toJson "num", toJson (toString n)]
+
+def encodeLevel : Level → Json
+  | .zero => Json.arr #[toJson "zero"]
+  | .succ u => Json.arr #[toJson "succ", encodeLevel u]
+  | .max u v => Json.arr #[toJson "max", encodeLevel u, encodeLevel v]
+  | .imax u v => Json.arr #[toJson "imax", encodeLevel u, encodeLevel v]
+  | .param n => Json.arr #[toJson "param", encodeName n]
+  | .mvar _ => Json.arr #[toJson "unresolved"]
+
+def binderTag : BinderInfo → String
+  | .default => "explicit"
+  | .implicit => "implicit"
+  | .strictImplicit => "strictImplicit"
+  | .instImplicit => "instance"
+
+-- A separate on-demand representation, not the bounded explanatory tree.
+-- All kernel constructors are preserved except source metadata; unresolved
+-- variables and exhausted budgets are rejected, not represented as proofs.
+partial def encodeExpr (e : Expr) (fuel : Nat := 96) (depth : Nat := 0) :
+    StateT Nat MetaM Json := do
+  let budget ← get
+  if fuel == 0 || budget == 0 then
+    throwError "Semantic IR exceeds the structural inspection limit"
+  set (budget - 1)
+  let next := fuel - 1
+  let tag (s : String) (a : Array Json) := Json.arr (#[toJson s] ++ a)
+  match e with
+  | .bvar i =>
+    unless i < depth do throwError "Loose bound variable in IR"
+    return tag "bound" #[toJson i]
+  | .fvar id =>
+    let d ← getLocalDecl id
+    return tag "local" #[toJson d.index]
+  | .mvar _ => throwError "Unresolved metavariable in IR"
+  | .sort u => return tag "sort" #[encodeLevel u]
+  | .const n us => return tag "const" #[encodeName n, Json.arr (us.toArray.map encodeLevel)]
+  | .app f a => return tag "app" #[← encodeExpr f next depth, ← encodeExpr a next depth]
+  | .lam n t b bi =>
+    return tag "lambda" #[encodeName n, toJson (binderTag bi), ← encodeExpr t next depth,
+      ← encodeExpr b next (depth + 1)]
+  | .forallE n t b bi =>
+    return tag "pi" #[encodeName n, toJson (binderTag bi), ← encodeExpr t next depth,
+      ← encodeExpr b next (depth + 1)]
+  | .letE n t v b nd =>
+    return tag "let" #[encodeName n, ← encodeExpr t next depth, ← encodeExpr v next depth,
+      ← encodeExpr b next (depth + 1), toJson nd]
+  | .lit (.natVal n) => return tag "nat" #[toJson (toString n)]
+  | .lit (.strVal s) => return tag "string" #[toJson s]
+  | .mdata _ b => encodeExpr b next depth
+  | .proj n i b => return tag "projection" #[encodeName n, toJson i, ← encodeExpr b next depth]
+
+def checkedEncode (e : Expr) : StateT Nat MetaM Json := do
+  if e.hasMVar || e.hasLevelMVar then
+    throwError "Unresolved term or universe metavariable in IR"
+  encodeExpr e
+
+def encodeJudgment (e ty : Expr) (proposed : Option Expr) : StateT Nat MetaM Json := do
+  let mut context : Array Json := #[]
+  for d in (← getLCtx) do
+    if context.size >= 128 then throwError "IR context exceeds 128 declarations"
+    let value ← match d.value? with
+      | some v => checkedEncode v
+      | none => pure Json.null
+    context := context.push (Json.mkObj [
+      ("slot", toJson d.index), ("name", encodeName d.userName), ("display", toJson d.userName.toString),
+      ("binder", toJson (binderTag d.binderInfo)), ("internal", toJson d.isImplementationDetail),
+      ("type", ← checkedEncode d.type), ("value", value)])
+  let formula ← match proposed with
+    | none => pure Json.null
+    | some p => do
+      let equal ← isDefEq p ty
+      pure (Json.mkObj [("term", ← checkedEncode p),
+        ("display", toJson (← ppExpr p).pretty), ("matchesGoal", toJson equal)])
+  let kind := if ← isProp ty then "proof" else if ← isProp e then "proposition" else "expression"
+  return Json.mkObj [("context", Json.arr context), ("term", ← checkedEncode e),
+    ("type", ← checkedEncode ty), ("kind", toJson kind), ("formula", formula),
+    ("termDisplay", toJson (← ppExpr e).pretty), ("typeDisplay", toJson (← ppExpr ty).pretty)]
+
+def elaborateProposition (input : String) : TermElabM Expr := do
+  let stx ← match Parser.runParserCategory (← getEnv) `term input with
+    | .ok stx => pure stx
+    | .error err => throwError "{err}"
+  let p ← Term.elabTermEnsuringType stx (some (mkSort Level.zero))
+  Term.synthesizeSyntheticMVarsNoPostponing
+  let p ← instantiateMVars p
+  if p.hasMVar || p.hasLevelMVar then throwError "Formula contains unresolved type information"
+  Lean.Meta.check p
+  return p
+
+elab "#duet_ir " n:ident path:str formula:str : command => do
+  liftTermElabM do
+    let ci ← getConstInfo n.getId
+    match ci with
+    | .thmInfo v =>
+      let parts := path.getString.splitOn "/"
+      unless parts.head? == some "root" do throwError "Invalid root path"
+      let result ← withNodeAt v.value (parts.drop 1) fun e => do
+        let ty ← inferType e
+        let proposed ← if formula.getString.isEmpty then pure none
+          else some <$> elaborateProposition formula.getString
+        let (judgment, _) ← (encodeJudgment e ty proposed).run 12000
+        pure (Json.mkObj [("schema", toJson (1 : Nat)), ("format", toJson "leanduet.kernel-judgment"),
+          ("declaration", encodeName n.getId), ("path", toJson path.getString),
+          ("universes", Json.arr (v.levelParams.toArray.map encodeName)), ("judgment", judgment)])
+      logInfo m!"LEANDUET_JSON:{result.compress}"
+    | _ => throwError "Expected a theorem"
+
 def finishCandidate (goal : Expr) (expected : Expr) (forbidden : Name)
     (label : String) (required : List FVarId) : MetaM (Option Json) := do
   let p ← instantiateMVars goal
@@ -378,14 +492,7 @@ elab "#duet_search " n:ident path:str rule:str required:str formula:str : comman
         let goal ← inferType e
         unless ← isProp goal do throwError "Search requires a proposition"
         if !formula.getString.isEmpty then
-          let stx ← match Parser.runParserCategory (← getEnv) `term formula.getString with
-            | .ok stx => pure stx
-            | .error err => throwError "{err}"
-          let proposed ← Term.elabTermEnsuringType stx (some (mkSort Level.zero))
-          Term.synthesizeSyntheticMVarsNoPostponing
-          let proposed ← instantiateMVars proposed
-          if proposed.hasMVar || proposed.hasLevelMVar then
-            throwError "Formula contains unresolved type information"
+          let proposed ← elaborateProposition formula.getString
           unless ← isDefEq proposed goal do
             throwError "Formula does not match the selected proposition"
         let premises ← resolveRequired required.getString

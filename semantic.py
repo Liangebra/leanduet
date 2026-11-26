@@ -148,6 +148,20 @@ def infer_chain(source, path, steps, project=None):
     return {"term":term,"bindings":bindings,"goal":result["localType"],"status":"inferred",
             "note":"Local elaboration and rebuilt expression checked; export still requires independent validation."}
 
+def inspect_ir(source, path, formula="", project=None):
+    """Export a revision-local typed judgment as structural kernel syntax."""
+    name = _name(source)
+    _safe_proof(source)
+    if not isinstance(path,str) or not re.fullmatch(r"root(?:/(?:body|value|arg[0-9]+)){0,16}",path):
+        raise ValueError("Invalid proof node path.")
+    if not isinstance(formula,str) or len(formula)>4000 or re.search(r"[\r\n;{}]|/-|--|:=|\b(?:by|sorry|admit)\b",formula):
+        raise ValueError("Expected a single formula expression.")
+    args=" ".join(json.dumps(x,ensure_ascii=False) for x in (path,formula))
+    result=_run_lean("import Lean\n"+source.rstrip()+"\n\n"+_adapter()+"\n#duet_ir "+name+" "+args+"\n",project)
+    if result.get("format")!="leanduet.kernel-judgment" or result.get("schema")!=1:
+        raise ValueError("Unexpected semantic IR format.")
+    return result
+
 def search(source, path, rule="", project=None, required=None, formula=""):
     """Discover locally closed proof candidates from Lean's loaded environment."""
     name = _name(source)

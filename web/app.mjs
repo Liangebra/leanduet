@@ -4,6 +4,7 @@ import {authoredNarrative} from './narratives.mjs';
 import {narrate,outlinePaths} from './typed-narrative.mjs';
 import {witnessTerm} from './dependent-edit.mjs';
 import {conceptLabels,parseRuleIntent} from './rule-intent.mjs';
+import {validateJudgment} from './semantic-ir.mjs';
 import {compileFormula} from './math-formula.mjs';
 import {compileChain} from './proof-chain.mjs';
 import {languagePacks,registerPack,customPacks,phrase} from './languages.mjs';
@@ -200,6 +201,7 @@ $('expandProof').onclick=()=>{foldedPaths.clear();showTypedNarrative();};
 function openPatch(node){
   if(!clean()||!typedRoot)return;
   patchNode=node;patchCandidate=null;$('typedPatch').hidden=false;$('applyPatch').disabled=true;
+  $('irOutput').textContent='';$('irStatus').textContent='';$('irInspector').open=false;
   $('patchTarget').textContent=node.path+' · '+node.type;$('patchTerm').value=node.term||'';
   $('chainEditor').hidden=node.kind==='witness';$('chainEditor').open=false;$('chainText').value='';$('chainStatus').textContent='';$('chainBindings').replaceChildren();
   $('ruleSearch').hidden=node.kind==='witness';$('ruleResults').replaceChildren();$('ruleIntent').value='';$('formulaGoal').value='';$('formulaPreview').textContent='';$('ruleStatus').textContent='Leave blank for goal-type search. You can also specify a rule and required premises.';
@@ -240,9 +242,24 @@ function openPatch(node){
   $('patchPreview').textContent='';$('patchStatus').textContent=node.kind==='witness'?'Choose a new witness. Lean will recheck all dependent proof obligations; the unchanged evidence may become invalid.':'Edit the local proof term. Lean will check its type and the entire exported theorem.';
   $('typedPatch').scrollIntoView({block:'nearest'});$('patchTerm').focus();
 }
+$('inspectIR').onclick=async()=>{
+  if(!patchNode||!clean()||!local)return;
+  const node=patchNode,revision=rev,input=$('formulaGoal').value;
+  $('inspectIR').disabled=true;$('irOutput').textContent='';$('irStatus').textContent='Reading structured Lean judgment…';
+  try{
+    const formula=node.kind!=='witness'&&input.trim()?compileFormula(input).lean:'';
+    const ir=validateJudgment(await api('ir',{source:lean.value,path:node.path,formula}));
+    if(revision!==rev||node!==patchNode||input!==$('formulaGoal').value)return;
+    $('irOutput').textContent=JSON.stringify(ir,null,2);
+    const match=ir.judgment.formula;
+    $('irStatus').textContent='Scope and structure validated · '+ir.judgment.context.length+' local declarations'+(match?(match.matchesGoal?' · formula matches goal':' · formula does not match goal'):'');
+  }catch(e){if(revision===rev&&node===patchNode)$('irStatus').textContent=e.message;}
+  finally{$('inspectIR').disabled=false;}
+};
 $('usedContextOnly').onchange=()=>{for(const row of $('patchScope').children)row.hidden=$('usedContextOnly').checked&&row.dataset.needed!=='true';};
 $('ruleIntent').addEventListener('input',()=>{$('ruleResults').replaceChildren();$('ruleStatus').textContent='Query changed. Search again.';});
 $('formulaGoal').addEventListener('input',()=>{
+  $('irOutput').textContent='';$('irStatus').textContent='Formula changed. Inspect again.';
   $('ruleResults').replaceChildren();$('ruleStatus').textContent='Formula changed. Search again.';
   const s=$('formulaGoal').value.trim();
   try{$('formulaPreview').textContent=s?'Lean candidate: '+compileFormula(s).lean:'';}
