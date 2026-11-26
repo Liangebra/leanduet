@@ -9,3 +9,7 @@ A selected typed goal can be copied to exploration as a historical context snaps
 The optional AI assistance is a separate, user-initiated operation. AI explanations append to notes with an unverified label rather than replacing the author's reasoning. A Lean proposal remains unverified until independently checked.
 
 Our typed intermediate language describes the committed formal part of a document, not the limits of mathematical thought. Future work may include free-standing notebooks, multiple simultaneous conjectures, diagrams and local definitions, but none is implied by the current implementation.
+
+## Working-object interface
+
+The optional collection in the existing workspace format records stable local IDs, arbitrary labels, raw expressions, comments, informal references and author-assigned research statuses. Duplicate labels, empty expressions, cycles, dangling references, contradictory or unparseable statements are allowed. `discarded` retains the original attempt; `Try an alternative` creates a new object rather than overwriting it. These records are neither Lean declarations nor hypotheses. They have no inferred types and no automatic dependency resolution. The only mandatory validation is transport shape and storage limits (100 objects, bounded fields). Old workspaces without the optional collection restore to an empty collection. Markdown exports label every object unverified. A future semantic interface may attach a separately checked judgment to an object, without changing its raw expression.
