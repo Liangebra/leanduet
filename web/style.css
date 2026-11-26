@@ -53,3 +53,22 @@ html[data-theme=dark] .tok-keyword{color:#569cd6}html[data-theme=dark] .tok-comm
 .notebook-layout .shell>main{overflow:auto}.notebook-layout .panes{display:flex;flex-direction:column;flex:none;overflow:visible}.notebook-layout .splitter{display:none}.notebook-layout .pane{flex:none;overflow:visible}.notebook-layout .readingView,.notebook-layout .tabbody{overflow:visible;min-height:240px}.notebook-layout .codewrap{flex:none;height:300px}.notebook-layout .diagnostics{max-height:180px}.notebook-layout .inspector{margin-top:0}
 @media(max-width:1100px){.shell{grid-template-columns:172px minmax(0,1fr)}.topname{display:none}.workactions{flex-wrap:wrap}.readingView{padding:17px}.top{gap:8px}}
 @media(max-width:800px){.top{height:auto;min-height:42px;flex-wrap:wrap;padding:6px 8px}.top .actions{margin:0;flex-wrap:wrap;gap:3px}.top .actions button,.iconlink{font-size:11px;padding:5px}.shell{display:block;height:auto;min-height:100vh}.rail{border-right:0;border-bottom:1px solid var(--line);flex-direction:row;flex-wrap:wrap;padding:5px 8px;gap:2px;overflow:visible}.rail-title,.railfoot,.rail .section-label,#outline{display:none}.railbtn{width:auto;padding:5px 6px}.rail #examples{width:100%;display:flex;overflow-x:auto;gap:0}.rail .example{width:auto;flex:0 0 auto;font-size:11px;padding:6px 8px}.shell>main{overflow:visible}.worktop{align-items:flex-start;flex-wrap:wrap}.panes{display:flex;flex-direction:column;overflow:visible;flex:none}.splitter{display:none}.pane{overflow:visible;flex:none}.readingView,.tabbody{min-height:220px;overflow:visible}.codewrap{height:290px;flex:none}.inspector{grid-template-columns:1fr}.shell footer{flex-wrap:wrap}.diagnostics{max-height:180px}.semanticPanel{padding:12px}.focus-reading .readingView{padding:22px 18px}}
+
+/* Keep long mathematical and source content in its own scrollable viewport. */
+.proofDisclosure{font:12px var(--mono);padding:0 5px;vertical-align:baseline;color:var(--muted)}
+.foldCount,.dependencyUse{font:11px/1.5 system-ui,sans-serif;color:var(--muted)}
+.typedTools button{margin:0}
+.scopeRow>div{min-width:0}
+@media(max-width:800px){
+ .shell>main,.panes,.pane,.tabbody,.readingView,.paper,.worktop,.notice,.inspector,.diagnostics,.codebar,.editorSurface{min-width:0;max-width:100%;width:100%}
+ .tabs{max-width:100%;width:100%;overflow-x:auto;flex-wrap:nowrap}
+ .tabs button{flex:0 0 auto}
+ .panelactions,.workactions,.actions{max-width:100%;min-width:0;flex-wrap:wrap}
+ .inspector{grid-template-columns:minmax(0,1fr)}
+ .inspector>*{min-width:0;overflow-wrap:anywhere}
+ .codebar{flex-wrap:wrap}
+ .codebar>*{min-width:0;overflow-wrap:anywhere}
+ .step{max-width:100%;min-width:0}
+ #prose,#prompt{min-width:0;max-width:100%}
+ .statement,.steptext,.derivedStep,.typedType{overflow-x:auto}
+}

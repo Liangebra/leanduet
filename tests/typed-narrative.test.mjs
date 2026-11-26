@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {narrate} from '../web/typed-narrative.mjs';
+import {narrate,outlinePaths} from '../web/typed-narrative.mjs';
 const h={kind:'hypothesis',term:'hp',type:'P',children:[]};
 const q={kind:'apply',reference:'hpq',type:'Q',children:[h]};
 const r={kind:'apply',reference:'hqr',type:'R',children:[q]};
@@ -16,4 +16,26 @@ test('Japanese explanation retains the exact editable occurrence',()=>{
 test('binder display is not falsely treated as a local proof replacement',()=>{
   const row=narrate({kind:'assume',binder:'hp',binderType:'P',path:'root',editable:true,children:[r]})[0];
   assert.equal(row.editable,false);
+});
+
+const leaf={kind:'hypothesis',term:'hp',type:'P',path:'root/arg0/arg0',editable:true,children:[]};
+const mid={kind:'apply',reference:'f',type:'Q',path:'root/arg0',editable:true,children:[leaf]};
+const tree={kind:'apply',reference:'g',type:'R',path:'root',editable:true,children:[mid]};
+test('outline collapses occurrences without changing conclusion or edit identity',()=>{
+  const before=JSON.stringify(tree),folded=outlinePaths(tree);
+  const rows=narrate(tree,'en',{collapsed:folded});
+  assert.equal(rows.length,1);assert.equal(rows[0].path,'root');assert.equal(rows[0].expr,'R');assert.equal(rows[0].hiddenCount,2);assert.equal(rows[0].editable,true);
+  folded.delete('root');
+  assert.deepEqual(narrate(tree,'en',{collapsed:folded}).map(x=>[x.path,x.expr]),[['root/arg0','Q'],['root','R']]);
+  assert.equal(JSON.stringify(tree),before);
+});
+test('folding preserves distinct occurrences even if their types coincide',()=>{
+  const a={...mid,path:'root/arg0',type:'R'},b={...mid,path:'root/arg1',type:'R'};
+  const t={...tree,children:[a,b]};
+  const rows=narrate(t,'en',{collapsed:new Set(['root/arg0'])});
+  assert.equal(rows.find(x=>x.path==='root/arg0').folded,true);
+  assert.equal(rows.find(x=>x.path==='root/arg1').folded,false);
+});
+test('extraction limits are explicit, not conflated with user folding',()=>{
+  const row=narrate({kind:'opaque',type:'P',path:'root',truncated:true})[0];assert.equal(row.truncated,true);
 });

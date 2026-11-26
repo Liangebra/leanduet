@@ -16,10 +16,16 @@ const meanings = {
   'Iff.mp':['Use the forward implication','利用等价命题的正向蕴含','同値の順方向を用いる'],
   'Iff.mpr':['Use the reverse implication','利用等价命题的反向蕴含','同値の逆方向を用いる']
 };
-export function narrate(root,lang='en'){
+export function narrate(root,lang='en',{collapsed=new Set()}={}){
   const ix=lang==='zh'?1:lang==='ja'?2:0,result=[];
   const tr=(en,zh,ja)=>[en,zh,ja][ix];
-  const add=(n,kind,phrase,expr,depth)=>result.push({kind,phrase,expr,depth,path:n.path??null,editable:n.editable===true&&typeof n.path==='string'&&!['introduce','assume','let'].includes(kind)});
+  // Collapse is a projection of the original occurrence tree, not a proof rewrite.
+  const childrenOf=n=>Array.isArray(n?.children)?n.children:[];
+  const rowCount=(n,level=0)=>!n||level>12?0:1+childrenOf(n).reduce((a,c)=>a+rowCount(c,level+1),0);
+  const add=(n,kind,phrase,expr,depth,fold={})=>result.push({
+    kind,phrase,expr,depth,path:n.path??null,editable:n.editable===true&&typeof n.path==='string'&&!['introduce','assume','let'].includes(kind),
+    truncated:n.truncated===true,omittedProofArguments:n.omittedProofArguments||0,...fold
+  });
   function walk(n,d){
     if(!n||d>12)return;
     const children=Array.isArray(n.children)?n.children:[];
@@ -37,11 +43,14 @@ export function narrate(root,lang='en'){
       if(children[1])walk(children[1],d+1);
       return;
     }
-    for(const c of children)walk(c,d);
+    const foldable=n.kind==='apply'&&children.length>0&&typeof n.path==='string';
+    const folded=foldable&&collapsed.has(n.path);
+    const hiddenCount=folded?children.reduce((a,c)=>a+rowCount(c),0):0;
+    if(!folded)for(const c of children)walk(c,d);
     if(n.kind==='apply'){
       const lexical=meanings[n.reference];
       const phrase=lexical?lexical[ix]:tr('Apply ','应用 ','適用する ')+(n.reference||tr('the displayed function','所示函数','表示された関数'));
-      add(n,n.kind,phrase+tr(' to obtain','，得到','、したがって'),n.type,d);
+      add(n,n.kind,phrase+tr(' to obtain','，得到','、したがって'),n.type,d,{foldable,folded,hiddenCount});
     }else if(n.kind==='hypothesis'||n.kind==='reference'){
       add(n,n.kind,tr('Use ','使用 ','用いる ')+(n.reference||n.term),n.type,d);
     }else{
@@ -50,4 +59,21 @@ export function narrate(root,lang='en'){
   }
   walk(root,0);
   return result;
+}
+
+
+// The top-level conclusion of each binder/let region is retained; nested
+// application arguments are hidden behind their conclusion's disclosure.
+export function outlinePaths(root){
+  const paths=new Set();
+  function visit(n){
+    if(!n)return;
+    const children=Array.isArray(n.children)?n.children:[];
+    if(n.kind==='apply'&&children.length&&typeof n.path==='string'){
+      paths.add(n.path);
+      // Include nested applications so opening one level reveals its immediate steps.
+    }
+    for(const c of children)visit(c);
+  }
+  visit(root);return paths;
 }

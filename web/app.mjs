@@ -1,7 +1,7 @@
 import {parseLean,renderLean,renderProse,planSync,sameStatement,stepSentence,sentenceFragment,EXAMPLES} from './core.mjs';
 import {replaceStep,snapshot,restore,lineRange} from './workspace.mjs';
 import {authoredNarrative} from './narratives.mjs';
-import {narrate} from './typed-narrative.mjs';
+import {narrate,outlinePaths} from './typed-narrative.mjs';
 import {witnessTerm} from './dependent-edit.mjs';
 import {concepts,parseRuleIntent} from './rule-intent.mjs';
 import {compileChain} from './proof-chain.mjs';
@@ -10,12 +10,13 @@ const $=id=>document.getElementById(id),lean=$('lean'),prose=$('prose'),notes=$(
 const refreshEditor=mountEditor();
 const KEY='leanduet.workspace.v1',THEME='leanduet.theme';
 let typedRoot=null, patchNode=null, patchCandidate=null;
+let foldedPaths=new Set();
 let ir,base,rev=0,candidate=null,narrative=null,timer,selected=null,name='proof',exampleIndex=null,view='reading';
 const clean=()=>lean.value===base.lean&&prose.value===base.prose;
 const state=(id,label,kind='')=>{$(id).textContent=label;$(id).dataset.state=kind;};
 function notice(s,error=false){$('notice').textContent=s;$('notice').classList.toggle('error',error);}
 function persist(){try{localStorage.setItem(KEY,JSON.stringify(snapshot(base,{lean:lean.value,prose:prose.value},notes.value,name)));state('saveState','Saved locally','pass');}catch{state('saveState','Not saved','dirty');}}
-function invalidate(){rev++;typedRoot=null;patchNode=null;patchCandidate=null;$('typedPatch').hidden=true;$('applyPatch').disabled=true;$('patchPreview').textContent='';$('typedNarrative').replaceChildren();$('typedTree').replaceChildren();$('informathOutput').textContent='';$('typedStatus').textContent='Proof changed or not inspected. Run extraction for this revision.';candidate=null;narrative=null;$('accept').disabled=true;$('useNarrative').disabled=true;$('proposal').textContent='No proposal yet.';$('output').textContent='Run the local checker to see diagnostics for this revision.';state('verifyState','Not checked');if(location.hostname!=='127.0.0.1'&&location.hostname!=='localhost'){state('verifyState','Local server required');$('output').textContent='Browser-only demo. Run python server.py locally for verification.';}}
+function invalidate(){rev++;typedRoot=null;foldedPaths.clear();patchNode=null;patchCandidate=null;$('typedPatch').hidden=true;$('applyPatch').disabled=true;$('patchPreview').textContent='';$('typedNarrative').replaceChildren();$('typedTree').replaceChildren();$('informathOutput').textContent='';$('typedStatus').textContent='Proof changed or not inspected. Run extraction for this revision.';candidate=null;narrative=null;$('accept').disabled=true;$('useNarrative').disabled=true;$('proposal').textContent='No proposal yet.';$('output').textContent='Run the local checker to see diagnostics for this revision.';state('verifyState','Not checked');if(location.hostname!=='127.0.0.1'&&location.hostname!=='localhost'){state('verifyState','Local server required');$('output').textContent='Browser-only demo. Run python server.py locally for verification.';}}
 function dirty(){state('leanDirty',lean.value===base.lean?'Synced':'Edited',lean.value===base.lean?'':'dirty');state('proseDirty',prose.value===base.prose?'Synced':'Edited',prose.value===base.prose?'':'dirty');gutter();}
 function gutter(){refreshEditor();$('gutter').textContent=lean.value.split('\n').map((_,i)=>i+1).join('\n');$('gutter').scrollTop=lean.scrollTop;$('cursor').textContent='Ln '+(lean.value.slice(0,lean.selectionStart).split('\n').length);}
 function element(tag,txt,cls){const e=document.createElement(tag);if(txt!==undefined)e.textContent=txt;if(cls)e.className=cls;return e;}
@@ -117,9 +118,19 @@ function findTypedNode(root,path){
 function showTypedNarrative(){
   const target=$('typedNarrative');target.replaceChildren();if(!typedRoot)return;
   target.append(element('div','DERIVED READING · TYPE-DRIVEN','eyebrow'));
-  for(const row of narrate(typedRoot,$('typedLanguage').value)){
+  for(const row of narrate(typedRoot,$('typedLanguage').value,{collapsed:foldedPaths})){
     const line=element('div',undefined,'derivedStep');line.style.marginLeft=Math.min(row.depth,6)*9+'px';
+    const lang=$('typedLanguage').value;
+    if(row.foldable){
+      const toggle=element('button',row.folded?'▸':'▾','proofDisclosure');
+      toggle.setAttribute('aria-expanded',String(!row.folded));
+      toggle.setAttribute('aria-label',(row.folded?'Expand ':'Collapse ')+row.path);
+      toggle.onclick=()=>{if(row.folded)foldedPaths.delete(row.path);else foldedPaths.add(row.path);showTypedNarrative();};
+      line.append(toggle);
+    }
     line.append(document.createTextNode(row.phrase+' '));formula(line,row.expr);
+    if(row.folded)line.append(element('span',' · '+row.hiddenCount+' '+(lang==='zh'?'个已折叠步骤':lang==='ja'?'件の折りたたまれた推論':'hidden steps'),'foldCount'));
+    if(row.truncated||row.omittedProofArguments)line.append(element('span',lang==='zh'?'（提取未完整展开）':lang==='ja'?'（抽出範囲に制限あり）':' (extraction limited)','foldCount'));
     if(local&&row.editable){
       const node=findTypedNode(typedRoot,row.path);
       if(node){
@@ -134,6 +145,8 @@ function showTypedNarrative(){
   }
 }
 $('typedLanguage').onchange=showTypedNarrative;
+$('collapseProof').onclick=()=>{foldedPaths=outlinePaths(typedRoot);showTypedNarrative();};
+$('expandProof').onclick=()=>{foldedPaths.clear();showTypedNarrative();};
 function openPatch(node){
   if(!clean()||!typedRoot)return;
   patchNode=node;patchCandidate=null;$('typedPatch').hidden=false;$('applyPatch').disabled=true;
@@ -148,7 +161,11 @@ function openPatch(node){
   $('patchScope').replaceChildren();$('patchChoices').replaceChildren();
   const scope=node.scope||[];
   for(const d of scope){
-    const row=element('div',undefined,'scopeRow');row.append(element('strong',d.name),element('code',d.type));$('patchScope').append(row);
+    const row=element('div',undefined,'scopeRow');
+    const info=element('div');info.append(element('code',d.type));
+    const usage=[d.usedInTerm?'term':null,d.usedInType?'type':null].filter(Boolean);
+    if(usage.length)info.append(element('small','Direct occurrence: '+usage.join(' + '),'dependencyUse'));
+    row.append(element('strong',d.name),info);$('patchScope').append(row);
     // Only offer unambiguous simple names; the actual term must still pass Lean.
     if(d.matchesGoal&&/^[A-Za-z_][A-Za-z0-9_']*$/.test(d.name)&&scope.filter(x=>x.name===d.name).length===1){
       const button=element('button',(node.kind==='witness'?($('typedLanguage').value==='zh'?'选取对象 ':'Choose object '):($('typedLanguage').value==='zh'?'使用假设 ':'Use hypothesis '))+d.name,'suggestion');
@@ -256,7 +273,7 @@ async function typedRequest(mode){
   $('extractTerm').disabled=$('informath').disabled=true;
   $('typedStatus').textContent=mode==='structure'?'Elaborating trusted proof locally…':'Running separately installed Informath…';
   try{const r=await api(mode,{source:lean.value});if(snapshotRev!==rev)return;
-    if(mode==='structure'){$('typedTree').replaceChildren();patchNode=null;patchCandidate=null;$('typedPatch').hidden=true;$('applyPatch').disabled=true;typedRoot=r.tree;showTypedNarrative();renderTyped(r.tree,$('typedTree'));$('typedStatus').textContent='Extracted from Lean elaboration. Tree is depth-limited; inspect the original proof separately.';}
+    if(mode==='structure'){$('typedTree').replaceChildren();patchNode=null;patchCandidate=null;$('typedPatch').hidden=true;$('applyPatch').disabled=true;foldedPaths.clear();typedRoot=r.tree;showTypedNarrative();renderTyped(r.tree,$('typedTree'));$('typedStatus').textContent='Extracted from Lean elaboration. Tree is depth-limited; inspect the original proof separately.';}
     else{$('informathOutput').textContent=r.narrative;$('typedStatus').textContent='Informath output · alignment not certified.';}
   }catch(e){if(snapshotRev===rev)$('typedStatus').textContent=e.message;}
   finally{$('extractTerm').disabled=$('informath').disabled=false;}

@@ -82,3 +82,9 @@ The proposition annotation is now optional. A separate local inference endpoint 
 ### Editable narrative occurrences
 
 The typed narrative is now rendered in English, Chinese or Japanese. Every displayed proof inference carries its exact revision-local Expr path; the reading view can open the same checked replacement panel directly, without navigating the raw tree. Binder rows deliberately do not offer a misleading local edit, because their displayed domain is not the whole lambda/let proof type. This is occurrence alignment to the elaborated tree, not original Lean source-range alignment. The existing patch verification and revision guards still apply.
+
+### Hierarchical narrative and direct dependencies
+
+The typed reading view now folds application subtrees by their revision-local expression paths. An outline hides the visible descendants of each application, leaving its actual conclusion and edit interface intact. Opening a level does not rewrite any term. Identical propositions at different paths are not merged. The extractor reports depth truncation and omitted proof arguments separately from user folding. Its application tree still omits most nonproof arguments and cannot claim full semantic coverage.
+
+For every visible local declaration, Lean additionally checks direct syntactic FVarId occurrence in the selected expression and its inferred type. This distinguishes same-proposition hypotheses and reveals the difference between a premise used in the proof term and a variable mentioned in the goal. These flags are not transitive closure, logical indispensability, or a complete theorem dependency graph. The local scope viewer displays them next to the original type. Tests include same-type hypotheses, retained occurrence paths, unfolding, and mobile dirty-draft regression.

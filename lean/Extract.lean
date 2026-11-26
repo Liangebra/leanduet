@@ -22,13 +22,15 @@ partial def shape (e : Expr) : Expr :=
 
 def sameShape (a b : Expr) : Bool := Expr.equal (shape a) (shape b)
 
-def localScope (goal : Expr) (editable : Bool) : MetaM (Array Json) := do
+def localScope (goal : Expr) (editable : Bool) (term : Expr) : MetaM (Array Json) := do
   let mut entries := #[]
   for d in (← getLCtx) do
     if !d.isImplementationDetail then
       let matchesType ← if editable then isDefEq d.type goal else pure false
       entries := entries.push (Json.mkObj [
         ("matchesGoal", toJson matchesType), ("name", toJson d.userName.toString),
+        ("usedInTerm", toJson (term.containsFVar d.fvarId)),
+        ("usedInType", toJson (goal.containsFVar d.fvarId)),
         ("type", toJson (← ppExpr d.type).pretty)])
   return entries
 
@@ -66,8 +68,8 @@ partial def inspect (e : Expr) (fuel : Nat) (path : String := "root") : MetaM Js
   let ty ← inferType e
   let typ := (← ppExpr ty).pretty
   let editable ← isProp ty
-  let scope ← localScope ty editable
-  if fuel == 0 then return node path editable scope "opaque" term typ
+  let scope ← localScope ty editable e
+  if fuel == 0 then return node path editable scope "opaque" term typ #[] [("truncated", toJson true)]
   match e with
   | .lam n t b bi =>
       let binderType := (← ppExpr t).pretty
@@ -89,23 +91,27 @@ partial def inspect (e : Expr) (fuel : Nat) (path : String := "root") : MetaM Js
       let headText := (← ppExpr head).pretty
       let headType := (← ppExpr (← inferType head)).pretty
       let mut children := #[]
+      let mut omittedProofArguments := 0
       let args := e.getAppArgs
       for i in [:args.size] do
         let a := args[i]!
         let argPath := path ++ "/arg" ++ toString i
         if isWitnessArg head i then
           let aType ← inferType a
-          let aScope ← localScope aType true
+          let aScope ← localScope aType true a
           children := children.push (node argPath true aScope "witness"
             (← ppExpr a).pretty (← ppExpr aType).pretty)
         else if ← isProp (← inferType a) then
           if children.size < 8 then
             children := children.push (← inspect a (fuel - 1) argPath)
+          else
+            omittedProofArguments := omittedProofArguments + 1
       let ref := match head with
         | .const n _ => n.toString
         | _ => headText
       return node path editable scope "apply" term typ children
-        [("reference", toJson ref), ("referenceType", toJson headType), ("applications", Json.arr alternatives)]
+        [("reference", toJson ref), ("referenceType", toJson headType), ("applications", Json.arr alternatives), ("argumentCount", toJson args.size),
+          ("omittedProofArguments", toJson omittedProofArguments)]
   | .const n _ => return node path editable scope "reference" term typ #[] [("reference", toJson n.toString)]
   | .fvar _ => return node path editable scope "hypothesis" term typ
   | .mdata _ body => inspect body (fuel - 1) path

@@ -48,6 +48,11 @@ with tempfile.TemporaryDirectory() as tmp:
                 page.goto(url+"?demo=1")
                 assert page.evaluate("document.documentElement.scrollWidth <= innerWidth+1")
                 expect(page.get_by_role("link",name="About",exact=True)).to_be_visible()
+                page.locator("#theme").click()
+                page.locator('[data-view="prose"]').click()
+                page.locator("#prose").fill(page.locator("#prose").input_value()+"draft")
+                page.locator("#lean").fill(page.locator("#lean").input_value()+"  rfl\n")
+                assert page.evaluate("document.documentElement.scrollWidth <= innerWidth+1"), "dirty dark mobile workspace overflow"
                 assert not errors, errors
                 browser.close()
             print("Static Pages workbench, layout controls and three-language introduction passed")

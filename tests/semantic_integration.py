@@ -94,3 +94,14 @@ else:
 r=patch(pair_source,pair_node["path"],"Exists.intro (1 : Nat) rfl")
 assert r["proofShapePreserved"] and r["statementDefEq"] and not r["unchanged"],r
 print("Atomic dependent witness/evidence replacement passed")
+
+
+# Direct syntactic occurrences distinguish hypotheses even when their types coincide.
+dep_source = """theorem dependency_example (P : Prop) (h1 h2 : P) : P := by
+  exact h1
+"""
+dep_node=next(n for n in walk(extract(dep_source)["tree"]) if n["kind"]=="hypothesis" and n["term"]=="h1")
+scope={d["name"]:d for d in dep_node["scope"]}
+assert scope["h1"]["usedInTerm"] and not scope["h2"]["usedInTerm"],scope
+assert scope["P"]["usedInType"] and not scope["h1"]["usedInType"],scope
+print("Direct expression dependencies preserve distinct local hypotheses")
