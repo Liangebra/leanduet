@@ -35,11 +35,30 @@ export function draftProof(input,scope=[],context=new Map()){
  if(lines.length>16)throw Error('Use at most sixteen inference lines.');
  const occupied=new Set(scope),visible=new Set(scope.filter((x,i)=>scope.indexOf(x)===i&&scope.lastIndexOf(x)===i));
  const planned=new Set(lines.map(({raw})=>{try{return parseLine(raw).name;}catch{return null;}}).filter(Boolean));
- let serial=1;const rows=[],steps=[];let blocked=false;
+ let serial=1;const rows=[],steps=[],openNames=new Set();let blocked=false;
+ function makeStep(p,last,application){
+  if(last)return {kind:'conclude',type:p.type,application};
+  let name=p.name;
+  if(name&&occupied.has(name))throw Error('This intermediate name already exists.');
+  if(!name){do{name='duet_h'+serial++;}while(occupied.has(name)||planned.has(name));}
+  occupied.add(name);visible.add(name);facts.set(name,p.type);
+  return {kind:'establish',name,type:p.type,application};
+ }
+ function unresolved(p,raw,line,last,details){
+  blocked=true;
+  const row={...p,raw,line,status:'unresolved',proofStatus:'open',...details};
+  // Keep a recognized proposition as a tentative local object. It is not
+  // an established theorem and no incomplete draft is exported.
+  if(p&&!last&&!p.conclusion&&(!p.name||!occupied.has(p.name))){
+   const step=makeStep(p,false,'?');
+   openNames.add(step.name);steps.push(step);row.step=step;
+  }
+  rows.push(row);
+ }
  for(let i=0;i<lines.length;i++){
-   const {raw,line}=lines[i];
+   const {raw,line}=lines[i],last=i===lines.length-1;let p=null;
    try{
-    const p=parseLine(raw),last=i===lines.length-1;
+    p=parseLine(raw);
     if(p.conclusion&&!last)throw Error('A conclusion must be the last inference.');
     if(last&&p.name)throw Error('The final inference must conclude the goal, not name a fact.');
     let application='?',candidates=[];
@@ -47,8 +66,8 @@ export function draftProof(input,scope=[],context=new Map()){
     if(p.citation||frame){
       const resolution=p.citation?citationCandidates(p.citation,[...visible],facts):{candidates:contextCandidates(p.type,frame.premises,facts),overflow:false};
       candidates=resolution.candidates;
-      if(resolution.overflow){blocked=true;rows.push({...p,line,status:'unresolved',candidates,reason:'Too many matching formula citations; name a specific premise.'});continue;}
-      if(candidates.length!==1){blocked=true;rows.push({...p,line,status:'unresolved',frame,candidates,reason:candidates.length?'Multiple structural interpretations; specify the rule and ordered premises.':'No structural match for these premises. Name a rule or provide context types.'});continue;}
+      if(resolution.overflow){unresolved(p,raw,line,last,{candidates,reason:'Too many matching formula citations; name a specific premise.'});continue;}
+      if(candidates.length!==1){unresolved(p,raw,line,last,{frame,candidates,reason:candidates.length?'Multiple structural interpretations; specify the rule and ordered premises.':'No structural match for these premises. Name a rule or provide context types.'});continue;}
       application=candidates[0].term;
     }else if(p.ruleText&&p.ruleText!=='?'){
       const words=p.ruleText.split(/\s+/);
@@ -59,7 +78,7 @@ export function draftProof(input,scope=[],context=new Map()){
        if((occupied.has(r.rule)||planned.has(r.rule))&&!visible.has(r.rule))throw Error('Ambiguous or forward local rule reference.');
        if(!r.required.length&&(structuralRules.has(r.rule)||visible.has(r.rule))){
          const resolution=implicitCandidates(p.type,[...visible],facts,{rule:r.rule});candidates=resolution.candidates;
-         if(resolution.overflow||candidates.length!==1){blocked=true;rows.push({...p,line,status:'unresolved',candidates,reason:'The named rule needs a unique premise correspondence; choose or specify its premises.'});continue;}
+         if(resolution.overflow||candidates.length!==1){unresolved(p,raw,line,last,{candidates,reason:'The named rule needs a unique premise correspondence; choose or specify its premises.'});continue;}
          application=candidates[0].term;
        }else application=[r.rule,...r.required].join(' ');
       }
@@ -68,20 +87,15 @@ export function draftProof(input,scope=[],context=new Map()){
       // Bare conclusions specify no reasoning. Keep the proof obligation,
       // even when a limited schema finds just one possible proof.
     }
-    let step;
-    if(last)step={kind:'conclude',type:p.type,application};
-    else{
-      let name=p.name;
-      if(name&&occupied.has(name))throw Error('This intermediate name already exists.');
-      if(!name){do{name='duet_h'+serial++;}while(occupied.has(name)||planned.has(name));}
-      occupied.add(name);visible.add(name);facts.set(name,p.type);
-      step={kind:'establish',name,type:p.type,application};
-    }
-    rows.push({...p,line,status:blocked?'provisional':'translated',step,candidates});steps.push(step);
-   }catch(e){blocked=true;rows.push({raw,line,status:'unresolved',reason:e.message});}
+    const dependencies=[...new Set(application.split(/\s+/).filter(name=>openNames.has(name)))];
+    const proofStatus=application==='?'?'open':dependencies.length?'depends-on-open':'candidate';
+    const step=makeStep(p,last,application);
+    if(step.kind==='establish'&&proofStatus!=='candidate')openNames.add(step.name);
+    rows.push({...p,line,status:blocked?'provisional':'translated',proofStatus,dependencies,step,candidates});steps.push(step);
+   }catch(e){unresolved(p,raw,line,last,{reason:e.message});}
  }
  const complete=lines.length>0&&!blocked&&steps.at(-1)?.kind==='conclude';
- return {rows,steps,complete,term:complete?renderChain(steps):null};
+ return {rows,steps,complete,openBindings:[...openNames],term:complete?renderChain(steps):null};
 }
 export function compileNaturalDraft(input,scope,context){
  const r=draftProof(input,scope,context);

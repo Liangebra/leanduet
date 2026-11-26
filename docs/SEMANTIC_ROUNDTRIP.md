@@ -15,3 +15,11 @@ Their common scoped AST supports candidate matching, not definitional equality.
 The Lean syntax subset does not handle tuples, implicit arguments, dependent
 elaboration, coercions or notation extensions. Persistent cross-edit IDs and
 candidate-forest propagation remain research problems.
+
+## Partial drafts
+
+A parsed intermediate proposition with unresolved reasoning remains available
+as a tentative local binding. Subsequent candidate applications expose direct
+and transitive dependence on open obligations. Unresolved prose still blocks
+fragment export; explicit formula-only obligations may be exported as
+`exact?` searches, never as checked proofs.

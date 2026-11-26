@@ -27,3 +27,24 @@ test('automatic naming does not collide with a later explicit binding',()=>{
  assert.equal(d.complete,true);
  assert.equal(d.steps[0].name,'duet_h2');
 });
+
+test('ambiguous proofs retain typed intermediate objects without exporting a proof',()=>{
+ const facts=new Map([['h','P ∧ P'],['f','P → Q'],['g','Q → R']]);
+ const r=draftProof('establish hp : $P$ | from h\nestablish hq : $Q$ | from hp and f\n$R$ | from hq and g',[...facts.keys()],facts);
+ assert.equal(r.complete,false);assert.equal(r.term,null);
+ assert.equal(r.rows[0].status,'unresolved');
+ assert.equal(r.rows[0].step.name,'hp');
+ assert.equal(r.rows[0].candidates.length,2);
+ assert.equal(r.rows[1].step.application,'f hp');
+ assert.equal(r.rows[1].proofStatus,'depends-on-open');
+ assert.deepEqual(r.rows[1].dependencies,['hp']);
+ assert.equal(r.rows[2].step.application,'g hq');
+ assert.deepEqual(r.openBindings,['hp','hq']);
+});
+test('formula-only obligations are distinct from verified proofs',()=>{
+ const r=draftProof('establish hp : $P$\n$Q$ | f hp',['f']);
+ assert.equal(r.complete,true); // structurally exportable for Lean search
+ assert.equal(r.rows[0].proofStatus,'open');
+ assert.equal(r.rows[1].proofStatus,'depends-on-open');
+ assert.match(r.term,/by exact\?/);
+});

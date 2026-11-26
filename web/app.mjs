@@ -155,7 +155,7 @@ function refreshOffline(){
    if(scope.length>128||scope.some(s=>!/^[A-Za-z_][A-Za-z0-9_']{0,63}$/.test(s)))throw Error('Enter up to 128 simple Lean context names.');
    const r=draftProof($('offlineDraft').value,scope);
    for(const row of r.rows){
-     const p=element('div',undefined,'ruleResult');p.append(element('small','Line '+row.line+' · '+row.status),element('span',row.raw));
+     const p=element('div',undefined,'ruleResult');p.append(element('small','Line '+row.line+' · '+row.status+(row.proofStatus?' · '+row.proofStatus:'')),element('span',row.raw));
      if(row.reason)p.append(element('small',row.reason));out.append(p);
    }
    if(r.term){offlineTerm=r.term;out.append(element('p','Candidate fragment · not checked','hint'),element('pre',r.term));$('saveDraftFragment').disabled=false;}
@@ -474,9 +474,10 @@ function previewDraft(){
    const r=draftProof($('chainText').value,(patchNode.scope||[]).map(d=>d.name),factsFromScope(patchNode.scope));
    for(const x of r.rows){
      const d=element('div',undefined,'ruleResult');
-     d.append(element('small','Line '+x.line+' · '+x.status),element('span',x.raw));
+     d.append(element('small','Line '+x.line+' · '+x.status+(x.proofStatus?' · '+x.proofStatus:'')),element('span',x.raw));
      if(x.step)d.append(element('code',x.step.kind==='establish'?'have '+x.step.name+' : '+x.step.type+' := '+x.step.application:'show '+x.step.type+'; '+x.step.application));
-     else d.append(element('small',x.reason));
+     if(x.reason)d.append(element('small',x.reason));
+     if(x.dependencies?.length)d.append(element('small','Depends on open obligations: '+x.dependencies.join(', ')));
      for(const c of x.candidates||[]){d.append(element('code',c.term+' · '+c.schema));if(c.premiseFacts?.length)d.append(element('small',c.premiseFacts.map(p=>p.type+' ['+p.name+']').join(' · ')));}
      target.append(d);
    }
