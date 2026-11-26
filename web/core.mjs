@@ -1,5 +1,5 @@
 const rules = [["intro","Introduce"],["exact","Conclude using"],["apply","Apply"],["rw","Rewrite using"],["simp","Simplify using"],["have","Establish"],["show","Show"],["refine","Refine using"],["change","Change goal to"],["constructor","Construct using"],["cases","Split cases of"],["induction","Induct on"]];
-const atoms = [["rfl","By reflexivity."],["assumption","By assumption."],["simp","Simplify."],["constructor","Construct both components."],["trivial","By triviality."]];
+const atoms = [["rfl","By reflexivity."],["assumption","By assumption."],["simp","Simplify."],["constructor","Apply a constructor."],["trivial","By triviality."]];
 function classify(s){
   const atom=atoms.find(([k])=>k===s);
   if(atom)return {kind:atom[0],label:atom[1],argument:null};
@@ -20,7 +20,7 @@ function parseLean(source){
     const line=lines[i];
     if(line===""){nodes.push({id:`line-${i+1}`,kind:"blank",indent:0,lean:"",leanLine:i+1,parent:null});continue;}
     const m=/^( +)(\S.*)$/.exec(line);
-    if(!m||m[1].length<2||line.includes("\t"))throw Error(`Line ${i+1}: expected a space-indented proof line; multiple declarations are unsupported.`);
+    if(!m||m[1].length<2||m[1].length>256||line.includes("\t"))throw Error(`Line ${i+1}: expected a space-indented proof line; multiple declarations are unsupported.`);
     if(/\/-|-\//.test(m[2]))throw Error(`Line ${i+1}: block comments are not supported.`);
     const indent=m[1].length;
     while(stack.length&&stack.at(-1).indent>=indent)stack.pop();
