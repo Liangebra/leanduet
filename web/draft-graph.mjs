@@ -1,7 +1,7 @@
 // A draft is a revision-local, acyclic semantic graph, not a checked proof.
 // Identity is assigned by introduction occurrence, never by proposition or name.
 import {compileFormula} from './math-formula.mjs';
-export function buildDraftGraph(scope,facts,rows){
+export function buildDraftGraph(scope,facts,rows,{goal=null}={}){
  const nodes=[],bindings=new Map(),counts=new Map();
  for(const name of scope)counts.set(name,(counts.get(name)||0)+1);
  function declare(node){
@@ -33,6 +33,7 @@ export function buildDraftGraph(scope,facts,rows){
   const parsed=formula(type);
   declare({id:'context:'+i,kind:'context',name,type,formula:parsed,dependencies:parsed.refs,ambiguousName:counts.get(name)!==1});
  }
+ const scopeRefs=[];
  for(const row of rows){
   const id='line:'+row.line,step=row.step,parsed=formula(row.type),value=step?.kind==='define'?formula(step.value):null;
   const alternatives=(row.candidates||[]).map((c,i)=>({
@@ -43,10 +44,11 @@ export function buildDraftGraph(scope,facts,rows){
   const proofRefs=application&&application!=='?'?(selected?.dependencies||refs(application.split(/\s+/))):[];
   const node={id,kind:step?.kind||'unresolved',name:step?.name||null,type:row.type||null,raw:row.raw,modifiers:row.modifiers||[],formula:parsed,
    proofStatus:row.proofStatus||'open',status:row.status,application,alternatives,value,
-   selectedCandidate:selected?.id||null,dependencies:[...new Set([...parsed.refs,...(value?.refs||[]),...proofRefs])]};
+   selectedCandidate:selected?.id||null,scopeRefs:[...scopeRefs],dependencies:[...new Set([...scopeRefs,...parsed.refs,...(value?.refs||[]),...proofRefs])]};
   declare(node);
+  if(['introduce','assume'].includes(node.kind))scopeRefs.push(id);
  }
- return {schema:1,identity:'revision-local',nodes};
+ return {schema:1,identity:'revision-local',goal,nodes};
 }
 export function dependentNodes(graph,ids,{includeAlternatives=true}={}){
  const affected=new Set(ids);

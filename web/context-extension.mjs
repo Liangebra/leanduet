@@ -21,8 +21,8 @@ export function extendGoal(goal,{kind,name,type}){
  const ast=compileFormula(goal,{syntax:'lean'}).ast;
  const domain=compileFormula(type,{syntax:'lean'}).scoped;
  if(kind==='introduce'){
-  if(ast.kind!=='binder'||ast.op!=='∀'||!ast.domain||!same(scopedFormula(ast.domain),domain))
-   throw Error('The current goal is not a matching explicitly typed universal.');
+  if(ast.kind!=='binder'||ast.op!=='∀'||(ast.domain&&!same(scopedFormula(ast.domain),domain)))
+   throw Error('The current goal is not a matching universal.');
   if(name!==ast.name&&containsName(ast.body,name))throw Error('Introduction name may capture an existing occurrence; choose a fresh name.');
   return renderFormula(rename(ast.body,ast.name,name));
  }

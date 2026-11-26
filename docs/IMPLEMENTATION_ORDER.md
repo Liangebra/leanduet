@@ -125,3 +125,11 @@ and emits intro followed by change at the local declaration, so Lean checks
 the annotation. Absent or unsupported goals block translation. This is a
 single nested scope, not case splitting, implicit binder inference or
 arbitrary goal elaboration.
+
+The goal reader additionally accepts single parenthesized Lean binders and
+untyped universal syntax when the author explicitly supplies a domain
+annotation. Lean, not the browser, decides the inferred domain. The graph
+stores initial goal and scope-introduction dependencies even if a later
+proof does not use the binder. Structured chain validation accepts bounded
+nested named applications emitted by the quantifier translator. Added
+actual JavaScript-to-Lean tests for both kinds of context extension.

@@ -103,6 +103,41 @@ def patch(source, path, replacement, project=None):
 _SIMPLE = r"[A-Za-z_][A-Za-z0-9_']{0,63}"
 _RULE = r"[A-Za-z_][A-Za-z0-9_'.]{0,159}"
 
+def _ordered_application(app):
+    """Restricted named applications with bounded parenthesized arguments."""
+    if not isinstance(app, str) or len(app) > 2000:
+        return False
+    if app == "?":
+        return True
+    tokens = re.findall(r"[A-Za-z_][A-Za-z0-9_'.]*|[()]|[ \t]+", app)
+    if "".join(tokens) != app:
+        return False
+    tokens = [t for t in tokens if not t.isspace()]
+    if len(tokens) > 80:
+        return False
+    pos = 0
+    def parse(depth):
+        nonlocal pos
+        if depth > 8 or pos >= len(tokens) or not re.fullmatch(_RULE, tokens[pos]):
+            return False
+        pos += 1
+        argc = 0
+        while pos < len(tokens) and tokens[pos] != ")":
+            argc += 1
+            if argc > 8:
+                return False
+            if tokens[pos] == "(":
+                pos += 1
+                if not parse(depth + 1) or pos >= len(tokens) or tokens[pos] != ")":
+                    return False
+                pos += 1
+            elif re.fullmatch(_SIMPLE, tokens[pos]):
+                pos += 1
+            else:
+                return False
+        return True
+    return parse(0) and pos == len(tokens)
+
 def infer_chain(source, path, steps, project=None):
     """Elaborate an ordered chain at the selected occurrence; never edit source."""
     name = _name(source)
@@ -144,7 +179,7 @@ def infer_chain(source, path, steps, project=None):
             traced.extend([line,"  duet_trace "+h])
             continue
         app = step.get("application")
-        if not isinstance(app,str) or (app!='?' and not re.fullmatch(_RULE + r"(?: " + _SIMPLE + r"){0,8}",app)):
+        if not _ordered_application(app):
             raise ValueError("Expected an ordered application of a named rule.")
         if step.get("kind")=="conclude" and i==len(steps)-1:
             ty=step.get("type")

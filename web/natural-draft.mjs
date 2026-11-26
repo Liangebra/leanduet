@@ -195,7 +195,7 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
  }
  if(cache)cache.previous={key,signatures,rows,serials};
  const complete=lines.length>0&&!blocked&&steps.at(-1)?.kind==='conclude';
- return {rows,steps,complete,reusedRows,remainingGoal,openBindings:[...openNames],graph:buildDraftGraph(scope,context,rows),term:complete?renderChain(steps):null};
+ return {rows,steps,complete,reusedRows,remainingGoal,openBindings:[...openNames],graph:buildDraftGraph(scope,context,rows,{goal}),term:complete?renderChain(steps):null};
 }
 export function createDraftSession(){
  const cache={};

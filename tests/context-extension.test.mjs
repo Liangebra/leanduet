@@ -31,3 +31,15 @@ test('incremental replay restores the consumed goal',()=>{
  assert.deepEqual(r.rows,draftProof(edited,scope,facts,{goal}).rows);
  assert.equal(s.evaluate(edited,scope,facts,{goal:'P a'}).reusedRows,0);
 });
+
+test('Lean pretty-printed binders and inferred domains accept explicit user annotations',()=>{
+ const r=draftProof('任取 x : $Nat$\n假设 hx : $x ∈ s$\n$x ∈ s$ | hx',['s'],new Map(),{goal:'∀ z, z ∈ s → z ∈ s'});
+ assert.equal(r.complete,true);
+ assert.equal(r.remainingGoal,'(x ∈ s)');
+ assert.equal(extendGoal('∀ (z : Nat), P z',{kind:'introduce',name:'x',type:'Nat'}),'(P x)');
+});
+test('scope dependencies exist even when a proof does not mention its binder',()=>{
+ const r=draftProof('任取 x : $Nat$\n$P$ | p',['P','p'],new Map([['p','P']]),{goal:'∀ z : Nat, P'});
+ assert.deepEqual(r.graph.nodes.at(-1).scopeRefs,['line:1']);
+ assert.ok(r.graph.nodes.at(-1).dependencies.includes('line:1'));
+});
