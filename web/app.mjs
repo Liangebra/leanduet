@@ -1,5 +1,6 @@
 import {parseLean,renderLean,renderProse,planSync,sameStatement,EXAMPLES} from './core.mjs';
 import {replaceStep,snapshot,restore,lineRange} from './workspace.mjs';
+import {authoredNarrative} from './narratives.mjs';
 const $=id=>document.getElementById(id),lean=$('lean'),prose=$('prose'),notes=$('prompt');
 const KEY='leanduet.workspace.v1',THEME='leanduet.theme';
 let ir,base,rev=0,candidate=null,narrative=null,timer,selected=null,name='proof',exampleIndex=null,view='reading';
@@ -7,7 +8,7 @@ const clean=()=>lean.value===base.lean&&prose.value===base.prose;
 const state=(id,label,kind='')=>{$(id).textContent=label;$(id).dataset.state=kind;};
 function notice(s,error=false){$('notice').textContent=s;$('notice').classList.toggle('error',error);}
 function persist(){try{localStorage.setItem(KEY,JSON.stringify(snapshot(base,{lean:lean.value,prose:prose.value},notes.value,name)));state('saveState','Saved locally','pass');}catch{state('saveState','Not saved','dirty');}}
-function invalidate(){rev++;candidate=null;narrative=null;$('accept').disabled=true;$('useNarrative').disabled=true;$('proposal').textContent='No proposal yet.';$('output').textContent='Run the local checker to see diagnostics for this revision.';state('verifyState','Not checked');}
+function invalidate(){rev++;candidate=null;narrative=null;$('accept').disabled=true;$('useNarrative').disabled=true;$('proposal').textContent='No proposal yet.';$('output').textContent='Run the local checker to see diagnostics for this revision.';state('verifyState','Not checked');if(location.hostname!=='127.0.0.1'&&location.hostname!=='localhost'){state('verifyState','Local server required');$('output').textContent='Browser-only demo. Run python server.py locally for verification.';}}
 function dirty(){state('leanDirty',lean.value===base.lean?'Synced':'Edited',lean.value===base.lean?'':'dirty');state('proseDirty',prose.value===base.prose?'Synced':'Edited',prose.value===base.prose?'':'dirty');gutter();}
 function gutter(){$('gutter').textContent=lean.value.split('\n').map((_,i)=>i+1).join('\n');$('gutter').scrollTop=lean.scrollTop;$('cursor').textContent='Ln '+(lean.value.slice(0,lean.selectionStart).split('\n').length);}
 function element(tag,txt,cls){const e=document.createElement(tag);if(txt!==undefined)e.textContent=txt;if(cls)e.className=cls;return e;}
@@ -21,6 +22,7 @@ function formula(parent,source){
     child.textContent=token;m.append(child);
   }parent.append(m);
 }
+function appendNarrative(parent,parts){for(const part of parts){if(typeof part==='string')parent.append(document.createTextNode(part));else formula(parent,part.math);}}
 function describe(n){
   const labels={intro:'Introduce',exact:'Conclude using',have:'Establish',apply:'Apply',rw:'Rewrite using',simp:'Simplify',show:'Show',refine:'Refine using',change:'Change the goal to',cases:'Split into cases on',induction:'Proceed by induction on',opaque:'Formal step'};
   return labels[n.kind]||n.label;
@@ -39,9 +41,9 @@ function startEdit(){if(!selected||!clean()){notice('Select a synchronized proof
 function reading(){
   const title=/^(?:theorem|lemma)\s+(\S+)/.exec(ir.header)?.[1]||'Proof';
   $('theoremName').textContent=title.replaceAll('_',' ');$('docname').textContent=name;$('theoremMeta').textContent=ir.nodes.filter(n=>n.kind!=='blank').length+' proof steps · '+(ir.prelude.filter(x=>x.startsWith('import ')).length)+' imports';
-  const h=$('statement');h.replaceChildren();const statement=ir.header.replace(/^(?:theorem|lemma)\s+\S+\s*/,'').replace(/\s*:= by$/,'');formula(h,statement);
+  const h=$('statement');h.replaceChildren();const statement=ir.header.replace(/^(?:theorem|lemma)\s+\S+\s*/,'').replace(/\s*:= by$/,'');const authored=authoredNarrative(renderLean(ir));if(authored)appendNarrative(h,authored.statement);else formula(h,statement);$('narrativeStatus').textContent=authored?'Authored example · alignment not formally certified':'Structural view · not a mathematical narrative';
   const box=$('reading'),outline=$('outline');box.replaceChildren();outline.replaceChildren();$('stepCount').textContent=ir.nodes.filter(n=>n.kind!=='blank').length;
-  for(const n of ir.nodes){if(n.kind==='blank')continue;const b=element('button',undefined,'step');b.dataset.node=n.id;b.style.marginLeft=Math.min(n.indent-2,8)*5+'px';b.style.width='calc(100% - '+Math.min(n.indent-2,8)*5+'px)';b.append(element('span',String(n.leanLine),'line'));const content=element('span',undefined,'steptext');content.append(document.createTextNode(describe(n)+(n.argument===null?'':' ')));if(n.argument!==null)formula(content,n.argument);b.append(content);b.onclick=()=>selection(n.id,true);b.ondblclick=()=>{selection(n.id);startEdit();};box.append(b);
+  for(const n of ir.nodes){if(n.kind==='blank')continue;const b=element('button',undefined,'step');b.dataset.node=n.id;b.style.marginLeft=Math.min(n.indent-2,8)*5+'px';b.style.width='calc(100% - '+Math.min(n.indent-2,8)*5+'px)';b.append(element('span',String(n.leanLine),'line'));const content=element('span',undefined,'steptext');if(authored?.steps[n.leanLine])appendNarrative(content,authored.steps[n.leanLine]);else{content.append(document.createTextNode(describe(n)+(n.argument===null?'':' ')));if(n.argument!==null)formula(content,n.argument);}b.append(content);b.onclick=()=>selection(n.id,true);b.ondblclick=()=>{selection(n.id);startEdit();};box.append(b);
     const item=element('button',n.leanLine+'  '+n.lean,'outlineItem');item.dataset.node=n.id;item.style.paddingLeft=(10+Math.min(n.indent-2,8)*4)+'px';item.onclick=()=>{setView('reading');selection(n.id,true);};outline.append(item);}
   selected=null;$('stepEditor').hidden=true;$('editStep').disabled=true;$('inspectName').textContent='No step selected';$('inspectCode').textContent='';$('inspectParent').textContent='—';
 }
@@ -56,7 +58,7 @@ $('editStep').onclick=startEdit;$('cancelStep').onclick=()=>{$('stepEditor').hid
 $('applyStep').onclick=()=>{if(!clean()){notice('Synchronize changes first.',true);return;}try{install(replaceStep(lean.value,selected,$('stepInput').value));}catch(e){notice(e.message,true);}};
 for(const [id,el,key] of [['revertLean',lean,'lean'],['revertProse',prose,'prose']])$(id).onclick=()=>{clearTimeout(timer);if(el.value!==base[key]&&!confirm('Discard unsynchronized changes on this side?'))return;el.value=base[key];invalidate();dirty();persist();notice('Reverted this side.');};
 $('adopt').onclick=()=>{try{const next=parseLean(lean.value);if(!confirm('Adopt this Lean source as a new baseline? This replaces the controlled-text draft. Export your workspace first if needed.'))return;install(next);}catch(e){notice(e.message,true);}};
-function mayReplace(){return (clean()&&!notes.value)||confirm('Replace current workspace? Export it first to preserve both drafts and notes.');}
+function mayReplace(){return (clean()&&!notes.value&&authoredNarrative(base.lean)!==null)||confirm('Replace current workspace? Export it first to preserve both drafts and notes.');}
 EXAMPLES.forEach((e,i)=>{const b=element('button',e.name,'example');b.onclick=()=>{if(!mayReplace())return;name=e.name;notes.value='';exampleIndex=i;install(parseLean(e.source));document.querySelectorAll('.example').forEach((x,j)=>x.classList.toggle('active',j===i));};$('examples').append(b);});
 function loadWorkspace(data){const r=restore(data);name=r.name;notes.value=r.notes;install(r.ir,{save:false});lean.value=r.drafts.lean;prose.value=r.drafts.prose;dirty();if(!clean())notice('Restored unsynchronized drafts. Synchronize from the edited side.');persist();}
 $('open').onclick=()=>$('file').click();
@@ -73,5 +75,7 @@ function theme(t){document.documentElement.dataset.theme=t;$('theme').textConten
 $('theme').onclick=()=>theme(document.documentElement.dataset.theme==='dark'?'light':'dark');
 try{theme(localStorage.getItem(THEME)||'light');}catch{theme('light');}
 try{const saved=localStorage.getItem(KEY);if(saved)loadWorkspace(JSON.parse(saved));else{name=EXAMPLES[0].name;install(parseLean(EXAMPLES[0].source));}}catch(e){name=EXAMPLES[0].name;install(parseLean(EXAMPLES[0].source),{save:false});notice('Saved workspace could not be restored: '+e.message+'. Original storage retained until the next edit.',true);}
-$('envState').textContent=location.hostname==='127.0.0.1'||location.hostname==='localhost'?'Local workspace':'Static demo · checker and AI require local server';
+const local=location.hostname==='127.0.0.1'||location.hostname==='localhost';
+$('envState').textContent=local?'Local workspace':'Static demo · checker and AI require local server';
+if(!local){for(const id of ['check','propose','explain']){$(id).disabled=true;$(id).title='Start the local Python server to use this feature.';}$('output').textContent='Browser-only demo. To verify in Lean or use AI, clone the repository and run python server.py.';state('verifyState','Local server required');}
 document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='s'){e.preventDefault();persist();notice('Workspace saved locally. Export for a portable backup.');}});
