@@ -656,9 +656,9 @@ elab "#duet_abstract " n:ident path:str : command => do
         let (term, statement, deps) ← abstractProof e
         if mentions term n.getId || mentions statement n.getId || mentions term `sorryAx then
           throwError "Abstraction relies on the original theorem or an incomplete proof"
-        let typeText ← withOptions (fun o => o.setBool `pp.fullNames true |>.setBool `pp.funBinderTypes true |>.setBool `pp.piBinderTypes true |>.setBool `pp.explicit true |>.setBool `pp.notation false) do
+        let typeText ← withOptions (fun o => o.setBool `pp.fullNames true |>.setBool `pp.funBinderTypes true |>.setBool `pp.piBinderTypes true |>.setBool `pp.explicit true |>.setBool `pp.notation false |>.setBool `pp.universes true |>.setBool `pp.coercions true |>.setBool `pp.proofs true |>.setBool `pp.numericTypes true) do
           pure (← ppExpr statement).pretty
-        let termText ← withOptions (fun o => o.setBool `pp.fullNames true) do
+        let termText ← withOptions (fun o => o.setBool `pp.fullNames true |>.setBool `pp.funBinderTypes true |>.setBool `pp.piBinderTypes true |>.setBool `pp.explicit true |>.setBool `pp.notation false |>.setBool `pp.universes true |>.setBool `pp.coercions true |>.setBool `pp.proofs true |>.setBool `pp.numericTypes true) do
           pure (← ppExpr term).pretty
         let ctx := deps.map fun d => Json.mkObj [("slot", toJson d.index),
           ("name", toJson d.userName.toString), ("isLet", toJson d.value?.isSome),
@@ -679,7 +679,8 @@ elab "#duet_compare_abstraction " n:ident m:ident path:str : command => do
       withNodeAt v.value (parts.drop 1) fun e => do
         let (term, statement, _) ← abstractProof e
         unless ← isDefEq candidate.type statement do throwError "Abstracted theorem type changed on export"
-        unless sameShape term candidate.value do throwError "Abstracted theorem proof changed on export"
+        unless sameShape term candidate.value do
+          throwError "Abstracted theorem proof changed on export\nExpected: {repr (shape term)}\nActual: {repr (shape candidate.value)}"
         logInfo "LEANDUET_ABSTRACTION_MATCH"
     | _, _ => throwError "Expected two theorems"
 
@@ -751,9 +752,9 @@ elab "#duet_factor " n:ident lemma:ident path:str : command => do
     Lean.Meta.check proof
     unless ← isDefEq (← inferType proof) v.type do throwError "Factored proof changes theorem type"
     if mentions proof n.getId || mentions proof `sorryAx then throwError "Invalid factored proof"
-    let typeText ← withOptions (fun o => o.setBool `pp.fullNames true |>.setBool `pp.funBinderTypes true |>.setBool `pp.piBinderTypes true |>.setBool `pp.explicit true |>.setBool `pp.notation false) do
+    let typeText ← withOptions (fun o => o.setBool `pp.fullNames true |>.setBool `pp.funBinderTypes true |>.setBool `pp.piBinderTypes true |>.setBool `pp.explicit true |>.setBool `pp.notation false |>.setBool `pp.universes true |>.setBool `pp.coercions true |>.setBool `pp.proofs true |>.setBool `pp.numericTypes true) do
       pure (← ppExpr v.type).pretty
-    let termText ← withOptions (fun o => o.setBool `pp.fullNames true) do
+    let termText ← withOptions (fun o => o.setBool `pp.fullNames true |>.setBool `pp.funBinderTypes true |>.setBool `pp.piBinderTypes true |>.setBool `pp.explicit true |>.setBool `pp.notation false |>.setBool `pp.universes true |>.setBool `pp.coercions true |>.setBool `pp.proofs true |>.setBool `pp.numericTypes true) do
       pure (← ppExpr proof).pretty
     logInfo m!"LEANDUET_JSON:{(Json.mkObj [("type", toJson typeText), ("term", toJson termText)]).compress}"
 
@@ -765,7 +766,8 @@ elab "#duet_compare_factor " n:ident m:ident lemma:ident path:str : command => d
       unless parts.head? == some "root" do throwError "Invalid root path"
       let expected ← factorProof v.value (parts.drop 1) lemma.getId
       unless ← isDefEq v.type candidate.type do throwError "Factored export changed the statement"
-      unless sameShape expected candidate.value do throwError "Factored export changed the proof complement or call"
+      unless sameShape expected candidate.value do
+        throwError "Factored export changed the proof complement or call\nExpected: {repr (shape expected)}\nActual: {repr (shape candidate.value)}"
       logInfo "LEANDUET_FACTOR_MATCH"
     | _, _ => throwError "Expected two theorems"
 
