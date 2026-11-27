@@ -147,3 +147,63 @@ test('a typed open hole can provisionally supply a later projection source',()=>
  assert.equal(r.rows[1].proofStatus,'depends-on-open');
  assert.equal(r.rows[2].proofStatus,'depends-on-open');
 });
+
+test('a later projection has a domain conditional on an earlier unknown type',()=>{
+ const ctx=new Map([['h','(P ∧ Q) ∧ (R ∧ S)'],['f','R → T']]);
+ const text='建立 hu : $?$,由 h\n建立 hv : $?$,由 hu\n由 hv 与 f 得到 $T$';
+ const r=draftProof(text,[...ctx.keys()],ctx);
+ assert.equal(r.complete,true);
+ assert.equal(r.rows[0].step.application,'And.right h');
+ assert.equal(r.rows[1].step.application,'And.left hu');
+ assert.equal(r.rows[1].step.type,'R');
+ assert.equal(r.rows[1].domain.length,4);
+ assert.equal(r.graph.constraintGroups[0].assignments.length,1);
+ assert.equal(r.graph.constraintGroups[0].relations[0].kind,'domain');
+});
+test('identical projection terms at distinct types retain distinct choice keys',()=>{
+ const ctx=new Map([['h','(P ∧ Q) ∧ (R ∧ S)']]);
+ const text='建立 hu : $?$,由 h\n建立 hv : $?$,由 hu\n$T$';
+ const r=draftProof(text,[...ctx.keys()],ctx);
+ const candidates=r.rows[1].candidates;
+ assert.equal(candidates.length,4);
+ assert.equal(new Set(candidates.map(c=>c.choice)).size,4);
+ assert.equal(candidates.filter(c=>c.term==='And.left hu').length,2);
+ const right=candidates.find(c=>c.type==='R');
+ const selected=draftProof(text,[...ctx.keys()],ctx,{choices:new Map([[2,right.choice]])});
+ assert.equal(selected.rows[0].step.application,'And.right h');
+ assert.equal(selected.rows[1].step.type,'R');
+ const ambiguous=draftProof(text,[...ctx.keys()],ctx,{choices:new Map([[2,'And.left hu']])});
+ assert.equal(ambiguous.term,null);
+ assert.equal(ambiguous.graph.constraintGroups[0].status,'contradiction');
+});
+test('a conditional projection cannot use an incompatible parent type',()=>{
+ const ctx=new Map([['h','(P ∧ Q) ∧ R']]);
+ const text='建立 hu : $?$,由 h\n建立 hv : $?$,由 hu\n$P$';
+ const r=draftProof(text,[...ctx.keys()],ctx);
+ assert.equal(r.rows[0].step.application,'And.left h');
+ assert.equal(r.rows[1].candidates.length,2);
+ const bad=draftProof(text,[...ctx.keys()],ctx,{choices:new Map([[1,'And.right h']])});
+ assert.equal(bad.graph.constraintGroups[0].status,'contradiction');
+ assert.equal(bad.term,null);
+});
+test('a uniquely typed child cannot claim a proof while its source type is unknown',()=>{
+ const ctx=new Map([['h','(P ∧ Q) ∧ (P ∧ R)']]);
+ const text='建立 hu : $?$,由 h\n建立 hv : $?$,由 hu\n由 hv 得到 $P$';
+ const r=draftProof(text,[...ctx.keys()],ctx);
+ assert.equal(r.term,null);
+ assert.equal(r.rows[0].step,undefined);
+ assert.equal(r.rows[1].step.type,'P');assert.equal(r.rows[1].step.application,'?');
+ assert.equal(r.rows[2].proofStatus,'depends-on-open');
+ assert.ok(r.graph.nodes.find(n=>n.id==='line:2').typeDomain.every(c=>c.dependencies.includes('line:1')));
+});
+test('dependent candidate choice migrates across source insertions',async()=>{
+ const {reconcileDraftIdentity,migrateDraftChoices}=await import('../web/draft-identity.mjs');
+ const ctx=new Map([['h','(P ∧ Q) ∧ (R ∧ S)']]);
+ const text='建立 hu : $?$,由 h\n建立 hv : $?$,由 hu\n$T$';
+ const scope=[...ctx.keys()];
+ const key=draftProof(text,scope,ctx).rows[1].candidates.find(c=>c.type==='R').choice;
+ const choices=new Map([[2,key]]);
+ const old=reconcileDraftIdentity(null,draftProof(text,scope,ctx,{choices}).graph);
+ const current=reconcileDraftIdentity(old,draftProof('\n'+text,scope,ctx).graph);
+ assert.deepEqual([...migrateDraftChoices(old,current,choices)],[[3,key]]);
+});

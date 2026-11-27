@@ -75,11 +75,11 @@ export function migrateDraftChoices(previous,current,choices){
   if(!oldId||!n.id.startsWith('line:'))continue;
   const selected=choices.get(Number(oldId.slice(5)));if(!selected)continue;
   const p=oldById.get(oldId);
-  const oldCandidates=p?.alternatives.filter(c=>c.term===selected)||[];
+  const oldCandidates=p?.alternatives.filter(c=>(c.choice??c.term)===selected)||[];
   if(oldCandidates.length!==1)continue;
   const key=candidateKey(oldCandidates[0],previous.ids);if(!key)continue;
   const compatible=n.alternatives.filter(c=>candidateKey(c,current.ids)===key);
-  if(compatible.length===1)result.set(Number(n.id.slice(5)),compatible[0].term);
+  if(compatible.length===1)result.set(Number(n.id.slice(5)),compatible[0].choice??compatible[0].term);
  }
  return result;
 }

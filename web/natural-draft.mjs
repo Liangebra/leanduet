@@ -1,7 +1,7 @@
 import {compileFormula} from './math-formula.mjs';
 import {buildDraftGraph} from './draft-graph.mjs';
 import {extendGoal} from './context-extension.mjs';
-import {constrainPropositions} from './proposition-constraints.mjs';
+import {constrainPropositions,candidateChoice} from './proposition-constraints.mjs';
 import {discourseFrame,discourseCandidates} from './discourse.mjs';
 import {parseRuleIntent} from './rule-intent.mjs';
 import {renderChain} from './proof-chain.mjs';
@@ -136,7 +136,7 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
      }
      const result=constraintResults.get(line);
      const {domain,candidates,constraints,group}=result;
-     const picked=result.overflow?null:choices.has(line)?candidates.find(c=>c.term===choices.get(line)):candidates.length===1?candidates[0]:null;
+     const picked=result.overflow?null:choices.has(line)?candidates.find(c=>candidateChoice(c)===choices.get(line)):candidates.length===1?candidates[0]:null;
      if(!picked){
       const details={candidates,domain,constraints,constraintGroup:group,reason:result.reason||(choices.has(line)?'Selected proposition candidate is no longer compatible.':'Intermediate proposition is ambiguous; choose a candidate or add a structural constraint.')};
       // A type can be known even when the proof is not. Preserve a typed
@@ -157,6 +157,11 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
       continue;
      }
      p={...p,type:picked.type};
+     if(unavailable(p.type))throw Error('The inferred proposition refers to an unavailable local object.');
+     if(!visible.has(p.source)){
+      const step=makeStep(p,false,'?');openNames.add(step.name);steps.push(step);
+      unresolved(p,raw,line,last,{step,candidates,domain,constraints,constraintGroup:group,dependencies:[p.source],reason:'The proposition type is determined, but its projection source is still unresolved.'});continue;
+     }
      const dependencies=[...new Set([...picked.premises,...freeNames(picked.type)].filter(n=>openNames.has(n)))];
      const proofStatus=dependencies.length?'depends-on-open':'candidate';
      const step=makeStep(p,false,picked.term);

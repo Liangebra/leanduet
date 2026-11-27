@@ -518,7 +518,7 @@ function previewDraft({edited=false}={}){
        details.append(element('summary','Joint constraints · '+group.variables.map(v=>v.name).join(', ')+' · '+(group.status==='overflow'?'search incomplete':group.assignments.length+' compatible assignments')));
        for(const assignment of group.assignments.slice(0,8)){
         const item=element('div',undefined,'ruleResult');
-        item.append(element('code',assignment.map((term,i)=>group.variables[i].name+' := '+term).join(' · ')));
+        item.append(element('code',assignment.map((key,i)=>{const v=group.variables[i],candidate=v.domain?.find(c=>c.key===key);return v.name+' : '+(candidate?.type||'?')+' := '+(candidate?.term||key);}).join(' · ')));
         const use=element('button','Use this assignment');use.type='button';
         use.onclick=()=>{if(!patchNode||!clean())return;group.variables.forEach((v,i)=>draftChoices.set(v.line,assignment[i]));refreshChoice();};
         item.append(use);details.append(item);
@@ -536,11 +536,11 @@ function previewDraft({edited=false}={}){
      for(const c of x.candidates||[]){
       d.append(element('code',(c.type?c.type+' ← ':'')+c.term+' · '+c.schema));
       if(c.premiseFacts?.length)d.append(element('small',c.premiseFacts.map(p=>p.type+' ['+p.name+']').join(' · ')));
-      const selected=draftChoices.get(x.line)===c.term;
+      const key=c.choice??c.term,selected=draftChoices.get(x.line)===key;
       const b=element('button',selected?'Clear choice':'Use this candidate');b.type='button';
       b.onclick=()=>{
        if(!patchNode||!clean())return;
-       if(selected)draftChoices.delete(x.line);else draftChoices.set(x.line,c.term);
+       if(selected)draftChoices.delete(x.line);else draftChoices.set(x.line,key);
        refreshChoice();
       };
       d.append(b);

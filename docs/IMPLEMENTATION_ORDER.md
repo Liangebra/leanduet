@@ -188,3 +188,16 @@ the intermediate binding is retained as a typed open proof obligation. Later
 steps may depend on it but no complete fragment is exported until the proof
 choice is resolved. The workbench displays shared compatible assignments
 and supports atomic selection or clearing of a joint assignment.
+
+## Dependent finite candidate domains
+
+A projection hole may cite an earlier projection hole whose type is unknown.
+Its candidate domain is the union of the projections supported by each source
+type, with an explicit source-to-child support relation. Candidates with the
+same Lean term but distinct scoped types receive distinct choice keys. A
+subsequent inference can constrain the entire chain; a selected projection
+cannot be exported if its source type remains unresolved. The graph retains
+symbolic dependencies on unresolved holes. Relation construction is bounded
+independently of assignment enumeration and reports overflow without treating
+partial tuples as exhaustive. This is conditional finite projection inference,
+not a general dependent type elaborator or Sigma-type implementation.
