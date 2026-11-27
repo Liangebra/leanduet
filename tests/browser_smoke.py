@@ -258,7 +258,7 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
             operation_page.locator('[data-view="typed"]').click()
             operation_page.locator("#extractTerm").click()
             expect(operation_page.locator("#typedStatus")).to_contain_text("Extracted from Lean elaboration",timeout=60000)
-            operation_page.locator("#typedTree .typedEdit").first.click()
+            operation_page.locator("#typedTree .typedEdit").last.click()
             expect(operation_page.locator("#patchTarget")).to_contain_text("∀")
             operation_page.locator("#chainEditor summary").click()
             operation_page.locator("#chainFormat").select_option("natural")
@@ -270,14 +270,7 @@ cases h, establish hp : $P(x)$
     $P(x)$ | hall x
 $P(x)$ | hp"""
             operation_page.locator("#chainText").fill(operation_text)
-            operation_rows=operation_page.locator("#draftTranslation .ruleResult")
-            assert operation_rows.count()>0, (
-                "Element-operation preview produced no rendered rows. "
-                f"status={operation_page.locator('#chainStatus').inner_text()!r}; "
-                f"preview={operation_page.locator('#draftTranslation').inner_text()!r}; "
-                f"target={operation_page.locator('#patchTarget').inner_text()!r}"
-            )
-            operation_row=operation_rows.first
+            operation_row=operation_page.locator("#draftTranslation .ruleResult").first
             expect(operation_row).to_contain_text("universal-variable introduction")
             expect(operation_row).to_contain_text("existential witness extraction")
             operation_row.get_by_role("button",name="Use this candidate").first.click()
