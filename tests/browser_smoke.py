@@ -273,7 +273,9 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
             operation_page.on("pageerror",lambda error:errors.append(str(error)))
             operation_page.goto(url)
             operation_source="""theorem operation_choice_demo (P : Nat → Prop) (hall : ∀ x : Nat, P x)
-    (he : ∃ y : Nat, P y) (h : True ∨ True) : ∀ x : Nat, P x := by
+    (h : True ∨ True) : ∀ x : Nat, P x := by
+  have he : ∃ y : Nat, P y := by
+    exact ⟨0, hall 0⟩
   intro x
   exact hall x
 """
