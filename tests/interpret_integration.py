@@ -140,26 +140,6 @@ with TemporaryDirectory() as tmp:
     subprocess.run(["lean",str(target)],cwd=root,check=True)
 print("Implicit introductions and existential elimination accepted by Lean")
 
-operation_script = """
-import {compileNaturalDraft} from './web/natural-draft.mjs';
-const propositionFacts=new Map([['hall','∀ x : Nat, P x'],['he','∃ y : Nat, P y']]);
-const arbitrary=compileNaturalDraft('take an element x satisfying $P(x)$\\n$P(x)$ | hall x',
- ['hall','he'],propositionFacts,{goal:'∀ x : Nat, P x'});
-const existentialFacts=new Map([['he','∃ y : Nat, P y'],['hq','Q']]);
-const witness=compileNaturalDraft('take an element x satisfying $P(x)$ from he\\n$Q$ | hq',
- ['he','hq'],existentialFacts,{goal:'Q'});
-console.log(JSON.stringify([arbitrary.term,witness.term]));
-"""
-arbitrary_term, witness_term = json.loads(subprocess.run(["node", "--input-type=module"], input=operation_script, text=True, cwd=root, check=True, capture_output=True).stdout)
-with TemporaryDirectory() as tmp:
-    target = Path(tmp) / "ElementOperations.lean"
-    target.write_text(
-        "theorem arbitrary_element (P : Nat → Prop) (hall : ∀ x : Nat, P x) (he : ∃ y : Nat, P y) : ∀ x : Nat, P x := " + arbitrary_term + "\n"
-        "theorem extract_element (P : Nat → Prop) (Q : Prop) (he : ∃ y : Nat, P y) (hq : Q) : Q := " + witness_term + "\n",
-        encoding="utf-8")
-    subprocess.run(["lean", str(target)], cwd=root, check=True)
-print("Selected universal and existential readings of an element request accepted by Lean")
-
 # Exercise the structured backend as well as standalone rendered Lean.
 from semantic import infer_chain,patch
 obtain_source="theorem backend_obtain (P : Nat → Prop) (R : Prop) (h : ∃ z : Nat, P z) (f : ∀ z : Nat, P z → R) : R := by\n  exact Exists.elim h f\n"

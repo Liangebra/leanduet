@@ -72,18 +72,6 @@ const conjunction=`split conjunction\n  first goal\n    $P$ | hp\n  second goal\
 const conjunctionEdit=conjunction.replace('$Q$ | hq','$Q$ | hq2');
 const conjunctionSession=createDraftSession();
 
-const elementFacts=new Map([['hall','∀ x : Nat, P x'],['he','∃ y : Nat, P y']]);
-for(let i=0;i<48;i++)elementFacts.set('unrelated'+i,'Type'+i);
-const elementScope=[...elementFacts.keys()];
-const elementRequest='take an element x satisfying $P(x)$';
-const elementRequestEdit=elementRequest.replace('P(x)','Q(x)');
-const elementSession=createDraftSession();
-const fullElementDraft=text=>createDraftSession().evaluate(text,elementScope,elementFacts,{goal:'∀ x : Nat, P x',continuation:true});
-const elementContextEdit=[...elementScope,'he2'];
-const elementContextEditFacts=new Map([...elementFacts,['he2','∃ z : Nat, P z']]);
-const elementContextSession=createDraftSession();
-const fullElementContextDraft=text=>createDraftSession().evaluate(text,elementContextEdit,elementContextEditFacts,{goal:'∀ x : Nat, P x',continuation:true});
-
 const results=[
  measure({name:'cold full evaluation · 16 proof lines / 62 typed locals',evaluate:cold.evaluate,reference:cold.reference,inputAt:()=>lastH14}),
  measure({name:'warm exact replay · 16 proof lines / 62 typed locals',evaluate:text=>warm.evaluate(text,scope,facts),reference:cold.reference,inputAt:()=>lastH14,expectedReuse:16}),
@@ -95,11 +83,7 @@ const results=[
  measure({name:'interleaved sequence · cold / 2 case blocks',evaluate:text=>compileNaturalDraft(text,sequenceScope,sequenceFacts,{goal:'T'}),reference:text=>compileNaturalDraft(text,sequenceScope,sequenceFacts,{goal:'T'}),inputAt:()=>interleaved}),
  measure({name:'interleaved sequence · replay and terminal edit',evaluate:text=>sequenceSession.evaluate(text,sequenceScope,sequenceFacts,{goal:'T'}),reference:text=>compileNaturalDraft(text,sequenceScope,sequenceFacts,{goal:'T'}),inputAt:()=>interleavedEdit,beforeSample:()=>{sequenceSession.reset();sequenceSession.evaluate(interleaved,sequenceScope,sequenceFacts,{goal:'T'});}}),
  measure({name:'conjunction child goals · cold',evaluate:text=>compileNaturalDraft(text,conjunctionScope,conjunctionFacts,{goal:'P ∧ Q'}),reference:text=>compileNaturalDraft(text,conjunctionScope,conjunctionFacts,{goal:'P ∧ Q'}),inputAt:()=>conjunction}),
- measure({name:'conjunction child goals · second-goal edit',evaluate:text=>conjunctionSession.evaluate(text,conjunctionScope,conjunctionFacts,{goal:'P ∧ Q'}),reference:text=>compileNaturalDraft(text,conjunctionScope,conjunctionFacts,{goal:'P ∧ Q'}),inputAt:()=>conjunctionEdit,beforeSample:()=>{conjunctionSession.reset();conjunctionSession.evaluate(conjunction,conjunctionScope,conjunctionFacts,{goal:'P ∧ Q'});}}),
- measure({name:'structural element candidates · cold / 50 typed locals',evaluate:text=>createDraftSession().evaluate(text,elementScope,elementFacts,{goal:'∀ x : Nat, P x',continuation:true}),reference:fullElementDraft,inputAt:()=>elementRequest}),
- measure({name:'structural element candidates · exact replay',evaluate:text=>elementSession.evaluate(text,elementScope,elementFacts,{goal:'∀ x : Nat, P x',continuation:true}),reference:fullElementDraft,inputAt:()=>elementRequest}),
- measure({name:'structural element candidates · property edit',evaluate:text=>elementSession.evaluate(text,elementScope,elementFacts,{goal:'∀ x : Nat, P x',continuation:true}),reference:fullElementDraft,inputAt:()=>elementRequestEdit,beforeSample:()=>{elementSession.reset();elementSession.evaluate(elementRequest,elementScope,elementFacts,{goal:'∀ x : Nat, P x',continuation:true});}}),
- measure({name:'structural element candidates · new existential premise',evaluate:text=>elementContextSession.evaluate(text,elementContextEdit,elementContextEditFacts,{goal:'∀ x : Nat, P x',continuation:true}),reference:fullElementContextDraft,inputAt:()=>elementRequest,beforeSample:()=>{elementContextSession.reset();elementContextSession.evaluate(elementRequest,elementScope,elementFacts,{goal:'∀ x : Nat, P x',continuation:true});}})
+ measure({name:'conjunction child goals · second-goal edit',evaluate:text=>conjunctionSession.evaluate(text,conjunctionScope,conjunctionFacts,{goal:'P ∧ Q'}),reference:text=>compileNaturalDraft(text,conjunctionScope,conjunctionFacts,{goal:'P ∧ Q'}),inputAt:()=>conjunctionEdit,beforeSample:()=>{conjunctionSession.reset();conjunctionSession.evaluate(conjunction,conjunctionScope,conjunctionFacts,{goal:'P ∧ Q'});}})
 ];
 
 textOutput({node:process.version,platform:process.platform,architecture:process.arch,warmup,samples,results});
