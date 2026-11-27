@@ -37,6 +37,13 @@ export function buildDraftGraph(scope,facts,rows,{goal=null}={}){
  const scopeRefs=[],constraintGroups=new Map();
  for(const row of rows){
   const id='line:'+row.line,step=row.step,parsed=formula(row.type),value=step?.kind==='define'?formula(step.value):null;
+  if(step?.kind==='obtain'){
+   const sourceRefs=refs([step.source]);
+   declare({id,kind:'witness',name:step.name,type:step.type,raw:row.raw,modifiers:row.modifiers||[],formula:parsed,proofStatus:row.proofStatus,status:row.status,alternatives:[],scopeRefs:[...scopeRefs],dependencies:[...new Set([...scopeRefs,...sourceRefs,...parsed.refs])]});
+   const evidenceId=id+':evidence',evidence=formula(step.evidenceType);
+   declare({id:evidenceId,kind:'evidence',name:step.evidenceName,type:step.evidenceType,raw:row.raw,formula:evidence,proofStatus:row.proofStatus,status:row.status,alternatives:[],scopeRefs:[...scopeRefs,id],dependencies:[...new Set([...scopeRefs,id,...sourceRefs,...evidence.refs])]});
+   scopeRefs.push(id,evidenceId);continue;
+  }
   function alternative(c){
    const candidateFormula=c.type?formula(c.type):null;
    return {schema:c.schema,term:c.term,...(c.choice?{choice:c.choice}:{}),...(c.type?{type:c.type,formula:candidateFormula}:{}),
@@ -47,7 +54,7 @@ export function buildDraftGraph(scope,facts,rows,{goal=null}={}){
   if(group)constraintGroups.set(group.id,group);
   const constraintRefs=[...new Set([...(row.constraints||[]).filter(c=>c.line!==row.line).map(c=>'line:'+c.line),...(group?.variables||[]).filter(v=>v.line!==row.line).map(v=>'line:'+v.line),...(group?.relations||[]).filter(r=>r.line!==row.line).map(r=>'line:'+r.line)])];
   const application=step?.application||null;
-  const selected=application&&application!=='?'?alternatives.find(c=>c.term===application):null;
+  const selected=application&&application!=='?'?alternatives.find(c=>c.term===application&&(!c.type||c.type===row.type)):null;
   const proofRefs=application&&application!=='?'?(selected?.dependencies||refs(application.split(/\s+/))):[];
   const node={id,kind:step?.kind||'unresolved',name:step?.name||(row.kind==='infer-proposition'?row.name:null),type:row.type||null,raw:row.raw,modifiers:row.modifiers||[],formula:parsed,
    proofStatus:row.proofStatus||'open',status:row.status,application,alternatives,value,...(row.domain?{origin:'infer-proposition',typeDomain:row.domain.map(alternative),constraints:row.constraints,constraintRefs,constraintGroup:group?.id||null}:{}),

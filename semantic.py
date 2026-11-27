@@ -151,6 +151,25 @@ def infer_chain(source, path, steps, project=None):
     for i,step in enumerate(steps):
         if not isinstance(step,dict):
             raise ValueError("Expected a structured proof step.")
+        if step.get("kind") == "obtain" and i < len(steps)-1:
+            h, evidence, copy, premise = (step.get(k) for k in ("name","evidenceName","copy","source"))
+            if any(not isinstance(n,str) or not re.fullmatch(_SIMPLE,n) for n in (h,evidence,copy,premise)):
+                raise ValueError("Expected simple existential binding names.")
+            if len({h,evidence,copy,premise}) != 4 or any(n in names for n in (h,evidence,copy)):
+                raise ValueError("Existential binding names must be fresh and distinct.")
+            ty, evidence_ty = step.get("type"), step.get("evidenceType")
+            for annotation in (ty,evidence_ty):
+                if (not isinstance(annotation,str) or not annotation.strip() or len(annotation)>2000 or
+                    re.search(r"[\r\n;{}]|/-|--|:=|\b(?:by|sorry|admit|sorryAx)\b",annotation)):
+                    raise ValueError("Expected restricted existential binding annotations.")
+            block = ["  have "+copy+" := "+premise,
+                     "  rcases "+copy+" with ⟨"+h+", "+evidence+"⟩",
+                     "  change "+ty+" at "+h,
+                     "  change "+evidence_ty+" at "+evidence]
+            names.extend([h,evidence])
+            lines.extend(block)
+            traced.extend(block+["  duet_trace "+h,"  duet_trace "+evidence])
+            continue
         if step.get("kind") in ("introduce","assume") and i < len(steps)-1:
             h, ty = step.get("name"), step.get("type")
             if not isinstance(h,str) or not re.fullmatch(_SIMPLE,h) or h in names:

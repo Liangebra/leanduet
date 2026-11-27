@@ -43,3 +43,47 @@ test('scope dependencies exist even when a proof does not mention its binder',()
  assert.deepEqual(r.graph.nodes.at(-1).scopeRefs,['line:1']);
  assert.ok(r.graph.nodes.at(-1).dependencies.includes('line:1'));
 });
+
+test('implicit introductions are determined by the current goal, never by guessing',()=>{
+ const r=draftProof('任取 x\n假设 hx\n$P(x)$ | hx',['P'],new Map(),{goal:'∀ z : Nat, P z → P z'});
+ assert.equal(r.complete,true);assert.equal(r.rows[0].step.type,'Nat');
+ assert.equal(r.rows[1].step.type,'(P x)');
+ assert.equal(draftProof('任取 x\n$P(x)$',['P'],new Map(),{goal:'∀ z, P z'}).term,null);
+});
+test('existential elimination creates distinct witness and evidence objects',()=>{
+ const ctx=new Map([['h','∃ z : Nat, P z'],['f','∀ z : Nat, P z → R']]);
+ const text='由 h 取 x，记 hx\n由 f、x、hx 得到 $R$';
+ const r=draftProof(text,['P','R',...ctx.keys()],ctx);
+ assert.equal(r.complete,true);
+ assert.equal(r.rows[0].step.type,'Nat');assert.equal(r.rows[0].step.evidenceType,'(P x)');
+ const witness=r.graph.nodes.find(n=>n.kind==='witness'),evidence=r.graph.nodes.find(n=>n.kind==='evidence');
+ assert.notEqual(witness.id,evidence.id);assert.ok(evidence.dependencies.includes(witness.id));
+ assert.ok(r.graph.nodes.at(-1).dependencies.includes(evidence.id));
+ assert.match(r.term,/rcases duet_exists_x with ⟨x, hx⟩/);
+});
+test('existential elimination rejects nonexistentials, collisions and capture',()=>{
+ for(const [type,phrase] of [['P','由 h 取 x，记 hx'],['∃ z : Nat, P z','由 h 取 x，记 x'],['∃ z : Nat, P x','由 h 取 x，记 hx'],['∃ z, P z','由 h 取 x，记 hx']]){
+  const r=draftProof(phrase+'\n$R$',['h'],new Map([['h',type]]));
+  assert.equal(r.term,null);assert.equal(r.rows[0].step,undefined);
+ }
+});
+test('explicit witness annotation handles an implicit existential domain',()=>{
+ const r=draftProof('由 h 取 x : $Nat$，记 hx\n$P(x)$ | hx',['P','h'],new Map([['h','∃ z, P z']]));
+ assert.equal(r.rows[0].step.evidenceType,'(P x)');
+ assert.equal(r.complete,true);
+});
+test('existential scope replay restores both bindings and preserves the original premise',()=>{
+ const ctx=new Map([['h','∃ z : Nat, P z']]),scope=['P','h'];
+ const input='由 h 取 x，记 hx\n$P(x)$ | hx',session=createDraftSession();
+ session.evaluate(input,scope,ctx);
+ const edited=input.replace('| hx','| from hx');
+ const r=session.evaluate(edited,scope,ctx);
+ assert.equal(r.reusedRows,1);assert.deepEqual(r.rows,draftProof(edited,scope,ctx).rows);
+ const original=draftProof('由 h 取 x，记 hx\n$∃ z : Nat, P(z)$ | h',scope,ctx);
+ assert.equal(original.complete,true);assert.match(original.term,/exact h$/);
+});
+test('an existential witness inherits the open source dependency',()=>{
+ const r=draftProof('建立 h : $∃ z : Nat, P(z)$\n由 h 取 x，记 hx\n$P(x)$ | hx',['P']);
+ assert.equal(r.rows[1].proofStatus,'depends-on-open');
+ assert.equal(r.rows[2].proofStatus,'depends-on-open');
+});

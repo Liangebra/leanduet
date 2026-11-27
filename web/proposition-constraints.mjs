@@ -100,7 +100,7 @@ export function constrainPropositions(first,scope,facts,future,choices=new Map()
  for(const row of future){
   const p=row.parsed;
   if(!p)continue;
-  if(['introduce','assume','define'].includes(p.kind))break;
+  if(['introduce','assume','define','obtain'].includes(p.kind))break;
   if(p.kind==='infer-proposition'){
    if(!used.has(p.name)&&!excludedLines.has(row.line)){
     const parent=byName.get(p.source);

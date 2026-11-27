@@ -206,3 +206,18 @@ The integration suite compiles the same conditional projection expression
 under both possible source types, and checks that an incompatible source
 choice cannot export a proof. Regression coverage includes three dependent
 domains and incremental replay after changing the terminal constraint.
+
+## Quantified context operations
+
+Goal-directed implicit introductions recover a domain or antecedent only from
+a supported explicit goal constructor. Existential elimination from a named
+local premise introduces two separate semantic objects: a witness and its
+proof of the instantiated predicate. The original premise is retained via a
+fresh internal copy. The graph records both introductions and their scope
+edges; cache replay restores both bindings. Conditional projection lookahead
+stops at this scope boundary. The structured backend checks the annotations
+with Lean. This is a linear existential scope extension, not full branching
+proof syntax, arbitrary dependent pattern matching or implicit type inference.
+
+See [research methods](RESEARCH_METHODS.md) for references mapped to this
+unchanged eight-stage plan.

@@ -121,3 +121,21 @@ with TemporaryDirectory() as tmp:
     target.write_text("theorem dependent_left"+signature+dep_left+"\n"+"theorem dependent_right"+signature+dep_right+"\n",encoding="utf-8")
     subprocess.run(["lean",str(target)],cwd=root,check=True)
 print("Both conditional projection types accepted by Lean; incompatible source not exported")
+
+quantified_script = """
+import {compileNaturalDraft} from './web/natural-draft.mjs';
+const a=compileNaturalDraft('任取 x\\n假设 hx\\n$P(x)$ | hx',['P'],new Map(),{goal:'∀ z : Nat, P z → P z'});
+const facts=new Map([['h','∃ z : Nat, P z'],['f','∀ z : Nat, P z → R']]);
+const b=compileNaturalDraft('由 h 取 x，记 hx\\n由 f、x、hx 得到 $R$',['P','R',...facts.keys()],facts);
+const c=compileNaturalDraft('由 h 取 x，记 hx\\n$∃ z : Nat, P(z)$ | h',['P','h'],new Map([['h','∃ z : Nat, P z']]));
+console.log(JSON.stringify([a.term,b.term,c.term]));
+"""
+implicit_term, obtain_term, preserve_term=json.loads(subprocess.run(["node","--input-type=module"],input=quantified_script,text=True,cwd=root,check=True,capture_output=True).stdout)
+with TemporaryDirectory() as tmp:
+    target=Path(tmp)/"QuantifiedContext.lean"
+    target.write_text("import Lean\n"
+        +"theorem implicit_intro (P : Nat → Prop) : ∀ z : Nat, P z → P z := "+implicit_term+"\n"
+        +"theorem obtain_demo (P : Nat → Prop) (R : Prop) (h : ∃ z : Nat, P z) (f : ∀ z : Nat, P z → R) : R := "+obtain_term+"\n"
+        +"theorem preserve_exists (P : Nat → Prop) (h : ∃ z : Nat, P z) : ∃ z : Nat, P z := "+preserve_term+"\n",encoding="utf-8")
+    subprocess.run(["lean",str(target)],cwd=root,check=True)
+print("Implicit introductions and existential elimination accepted by Lean")

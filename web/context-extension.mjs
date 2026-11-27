@@ -33,3 +33,21 @@ export function extendGoal(goal,{kind,name,type}){
  }
  throw Error('Unknown context extension.');
 }
+
+export function inferIntroduction(goal,kind){
+ if(!goal)throw Error('An introduction needs the current goal.');
+ const ast=compileFormula(goal,{syntax:'lean'}).ast;
+ if(kind==='introduce'&&ast.kind==='binder'&&ast.op==='∀'&&ast.domain)return renderFormula(ast.domain);
+ if(kind==='assume'&&ast.kind==='binary'&&ast.op==='→')return renderFormula(ast.left);
+ throw Error('The current goal does not determine a supported introduction type; supply an annotation.');
+}
+export function existentialBindings(sourceType,{name,type=null}){
+ if(!sourceType)throw Error('The cited existential premise has no known type.');
+ const ast=compileFormula(sourceType,{syntax:'lean'}).ast;
+ if(ast.kind!=='binder'||ast.op!=='∃')throw Error('The cited premise is not a supported existential.');
+ if(ast.domain&&type&&!same(scopedFormula(ast.domain),compileFormula(type,{syntax:'lean'}).scoped))throw Error('Witness type does not match the existential domain.');
+ const domain=type||(ast.domain?renderFormula(ast.domain):null);
+ if(!domain)throw Error('Supply the witness type for an existential with an implicit domain.');
+ if(name!==ast.name&&containsName(ast.body,name))throw Error('Witness name may capture an existing occurrence; choose a fresh name.');
+ return {type:domain,evidenceType:renderFormula(rename(ast.body,ast.name,name))};
+}

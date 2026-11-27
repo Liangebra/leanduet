@@ -74,6 +74,7 @@ export function renderChain(steps){
   const lines=['by'];
   for(const s of steps){
     if(['introduce','assume'].includes(s.kind))lines.push('  intro '+s.name,'  change '+s.type+' at '+s.name);
+    else if(s.kind==='obtain')lines.push('  have '+s.copy+' := '+s.source,'  rcases '+s.copy+' with ⟨'+s.name+', '+s.evidenceName+'⟩','  change '+s.type+' at '+s.name,'  change '+s.evidenceType+' at '+s.evidenceName);
     else if(s.kind==='define')lines.push('  let '+s.name+' : '+s.type+' := '+s.value);
     else if(s.kind==='establish')lines.push('  have '+s.name+(s.type===null?'':' : '+s.type)+' := '+(s.application==='?'?'by exact?':s.application));
     else {
