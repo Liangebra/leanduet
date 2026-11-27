@@ -16,6 +16,11 @@ function rename(ast,oldName,newName){
  }
  return ast;
 }
+function negationBody(ast){
+ if(ast.kind==='unary'&&ast.op==='¬')return ast.body;
+ if(ast.kind==='call'&&ast.fn?.kind==='id'&&ast.fn.value==='Not'&&ast.args.length===1)return ast.args[0];
+ return null;
+}
 export function extendGoal(goal,{kind,name,type}){
  if(!goal)throw Error('An introduction needs the current goal.');
  const ast=compileFormula(goal,{syntax:'lean'}).ast;
@@ -27,9 +32,10 @@ export function extendGoal(goal,{kind,name,type}){
   return renderFormula(rename(ast.body,ast.name,name));
  }
  if(kind==='assume'){
-  if(ast.kind!=='binary'||ast.op!=='→'||!same(scopedFormula(ast.left),domain))
-   throw Error('The current goal is not a matching implication.');
-  return renderFormula(ast.right);
+  if(ast.kind==='binary'&&ast.op==='→'&&same(scopedFormula(ast.left),domain))return renderFormula(ast.right);
+  const negative=negationBody(ast);
+  if(negative&&same(scopedFormula(negative),domain))return 'False';
+  throw Error('The current goal is not a matching implication or negation.');
  }
  throw Error('Unknown context extension.');
 }
@@ -39,6 +45,8 @@ export function inferIntroduction(goal,kind){
  const ast=compileFormula(goal,{syntax:'lean'}).ast;
  if(kind==='introduce'&&ast.kind==='binder'&&ast.op==='∀'&&ast.domain)return renderFormula(ast.domain);
  if(kind==='assume'&&ast.kind==='binary'&&ast.op==='→')return renderFormula(ast.left);
+ const negative=kind==='assume'?negationBody(ast):null;
+ if(negative)return renderFormula(negative);
  throw Error('The current goal does not determine a supported introduction type; supply an annotation.');
 }
 export function existentialBindings(sourceType,{name,type=null}){
