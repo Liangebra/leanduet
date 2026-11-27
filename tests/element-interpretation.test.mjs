@@ -193,7 +193,8 @@ test('an element choice keeps its root identity when a later scoped block extend
  const restored=session.evaluate(expanded,scope,facts,{goal,choices:migrated});
  assert.equal(restored.rows[0].step.kind,'introduce');
  assert.equal(restored.rows[0].selectedChoice,choice);
- const cold=compileNaturalDraft(expanded,scope,facts,{goal,choices:migrated});
+ const cold=draftProof(expanded,scope,facts,{goal,choices:migrated});
+ assert.equal(cold.complete,false,'the unrelated case result does not close the remaining P x obligation');
  const {reusedRows,...actual}=restored,{reusedRows:coldReuse,...expected}=cold;
  assert.equal(coldReuse,0);
  assert.deepEqual(actual,expected);
