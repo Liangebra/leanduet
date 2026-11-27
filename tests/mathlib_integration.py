@@ -100,3 +100,31 @@ with TemporaryDirectory() as tmp:
     target.write_text(local_declaration,encoding="utf-8")
     subprocess.run(["lake","env","lean",str(target)],cwd=project,check=True)
 print("Mathlib topology: browser and backend local-lemma candidates compile with scoped dependencies")
+
+# This second corpus case crosses from topology to abstract algebra. The prose
+# names the subgroup closure rule and supplies its two membership premises;
+# the goal, data dependencies, and theorem application are checked separately.
+subgroup_case=next(case for case in mathlib_cases if case["id"]=="subgroup-multiplication-closure")
+subgroup_script=r"""
+import {compileNaturalDraft} from './web/natural-draft.mjs';
+const example="""+json.dumps(subgroup_case,ensure_ascii=False)+r""";
+const result=compileNaturalDraft(example.naturalDraft,example.scope,new Map(Object.entries(example.context)),{goal:example.goal});
+if(!result.complete||result.steps.at(-1)?.application!=="Subgroup.mul_mem H hx hy")throw new Error(JSON.stringify(result));
+console.log(JSON.stringify(result.term));
+"""
+subgroup_term=json.loads(subprocess.run(["node","--input-type=module"],input=subgroup_script,text=True,cwd=root,check=True,capture_output=True).stdout)
+subgroup_source=subgroup_case["leanImport"]+"\n\n"+subgroup_case["leanTheoremHeader"].replace(
+    "subgroup_mul_closure_example","subgroup_mul_closure_from_natural")+" := "+subgroup_term+"\n"
+with TemporaryDirectory() as tmp:
+    target=Path(tmp)/"SubgroupMulClosure.lean"
+    target.write_text(subgroup_source,encoding="utf-8")
+    subprocess.run(["lake","env","lean",str(target)],cwd=project,check=True)
+print("Mathlib algebra: subgroup multiplication candidate accepted by Lean")
+
+subgroup_tree=extract(subgroup_source,project)["tree"]
+subgroup_node=next(n for n in walk(subgroup_tree) if n.get("reference")=="Subgroup.mul_mem")
+subgroup_needed=[d for d in subgroup_node["scope"] if d["neededForContext"]]
+needed_names={d["name"] for d in subgroup_needed}
+assert {"G","H","x","y","hx","hy"}.issubset(needed_names),subgroup_needed
+assert any("Group G" in d["type"] for d in subgroup_needed),subgroup_needed
+print("Mathlib algebra: proof dependency view retains group structure, subgroup, objects, and membership facts")
