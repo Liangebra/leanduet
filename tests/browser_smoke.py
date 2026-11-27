@@ -294,6 +294,8 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
 unsupported ⊛"""
             operation_page.locator("#chainText").fill(operation_text)
             operation_row=operation_page.locator("#draftTranslation .ruleResult").first
+            print("Selected operation target:",operation_page.locator("#patchTarget").inner_text(),flush=True)
+            print("Selected operation tree:",operation_page.locator("#typedTree").inner_text()[:6000],flush=True)
             expect(operation_row).to_contain_text("universal-variable introduction")
             expect(operation_row).to_contain_text("existential witness extraction")
             operation_row.get_by_role("button",name="Use this candidate").first.click()
