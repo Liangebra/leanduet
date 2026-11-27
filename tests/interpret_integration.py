@@ -141,7 +141,7 @@ with TemporaryDirectory() as tmp:
 print("Implicit introductions and existential elimination accepted by Lean")
 
 # Exercise the structured backend as well as standalone rendered Lean.
-from semantic import infer_chain
+from semantic import infer_chain,patch
 obtain_source="theorem backend_obtain (P : Nat → Prop) (R : Prop) (h : ∃ z : Nat, P z) (f : ∀ z : Nat, P z → R) : R := by\n  exact Exists.elim h f\n"
 # Select the proof occurrence by its actual elaborated local goal and scope.
 nodes=list(walk(extract(obtain_source)["tree"]))
@@ -175,6 +175,8 @@ case_backend=infer_chain(case_source,case_node["path"],case_steps)
 assert [b["name"] for b in case_backend["bindings"]]==["hR"],case_backend
 assert "hpR" not in [b["name"] for b in case_backend["bindings"]]
 assert "cases j with" in case_backend["term"] and "exact hR" in case_backend["term"]
+case_preview=patch(case_source,case_node["path"],case_backend["term"])
+assert case_preview["status"]=="checked" and case_preview["proofShapePreserved"]
 try:
     infer_chain(case_source,case_node["path"],[case_steps[0],{"kind":"conclude","type":"R","application":"hp"}])
     raise AssertionError("a branch-local hypothesis escaped its case scope")
