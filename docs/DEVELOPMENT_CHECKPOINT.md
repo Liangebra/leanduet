@@ -26,10 +26,8 @@ accepts it. Tests run `46016046831` passed unit, Lean model and backend
 integration steps; browser smoke is still running. Mathlib run `46016046804`
 passed. PR #37 still needs its base refreshed after #36 is integrated.
 
-PR #38 (`ac24373`) publishes the next layer on top of #37. Its Tests workflow
-`46017119145` has passed unit tests and Lean model compilation; backend and
-browser integration are still running. It remains stacked until #36 and #37
-are merged.
+PR #38 publishes the next layer on top of #37. It must pass the full Tests
+workflow on its current head and remains stacked until #36 and #37 are merged.
 
 ## Mathematical contract and current capabilities
 
@@ -79,8 +77,8 @@ not a general shared parse forest, type elaborator, or natural-language parser.
    passes, including Lean integration and browser smoke.
 2. Let #37's latest Tests and Mathlib workflows finish; repair any concrete
    failure, then retarget it to `main` after #36 merges and rerun CI there.
-3. Let #38's latest CI validate the generated bounded Lean terms and browser
-   selection path. Keep the local carrier check explicitly partial.
+3. Require #38's current CI to validate the generated bounded Lean terms and
+   browser selection path. Keep the local carrier check explicitly partial.
 4. Continue stage 2 with local-lemma return and classical reductio only after
    keeping intuitionistic negation introduction distinct. Continue stage 3
    with shared structural candidates and bounded constraint propagation.
