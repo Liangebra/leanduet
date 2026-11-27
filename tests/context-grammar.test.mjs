@@ -28,7 +28,9 @@ test('a typed False premise offers constructive ex-falso but not double-negation
 
 test('an unsupported type-level local does not suppress a supported premise candidate',()=>{
  const facts=new Map([['P','Prop'],['hFalse','False']]);
- assert.deepEqual(contextCandidates('Q',['P','hFalse'],facts).map(candidate=>candidate.term),['False.elim hFalse']);
+ const candidates=contextCandidates('Q',['P','hFalse'],facts);
+ assert.deepEqual(candidates.map(candidate=>candidate.term),['False.elim hFalse']);
+ assert.deepEqual(candidates[0].premises,['hFalse'],'irrelevant type-level locals are not semantic proof dependencies');
  assert.equal(implicitCandidates('Q',['P','hFalse'],facts).candidates[0].term,'False.elim hFalse');
 });
 
