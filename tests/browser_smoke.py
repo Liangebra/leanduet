@@ -290,7 +290,7 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
             expect(operation_page.locator("#patchTarget")).to_contain_text("∀")
             operation_page.locator("#chainEditor summary").click()
             operation_page.locator("#chainFormat").select_option("natural")
-            operation_text="""take an element x : $Nat$ satisfying $P$
+            operation_text="""take an element z : $Nat$ satisfying $P$
 unsupported ⊛"""
             operation_page.locator("#chainText").fill(operation_text)
             operation_row=operation_page.locator("#draftTranslation .ruleResult").first
