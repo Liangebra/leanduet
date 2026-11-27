@@ -39,12 +39,15 @@ function specialize(tree,witness,depth=0){
 export function contextCandidates(goal,names,facts){
  const target=parse(goal),out=[],seen=new Set();
  if(!target||!Array.isArray(names)||names.length<1||names.length>4||names.some(n=>!simple.test(n)))return out;
- const classified=names.map(name=>({name,raw:facts.get(name)||'',type:parse(facts.get(name)||'')}));
- // Known Lean sorts describe types, not propositions, so they cannot be a
- // premise for a proof rule. Other unparsed local types keep this search
- // conservative because they may hide an additional supported reading.
- if(classified.some(entry=>!entry.type&&!isTypeLevelSort(entry.raw)))return out;
- const entries=classified.filter(entry=>entry.type);
+ const classified=names.map(name=>{
+  const raw=facts.get(name)||'';
+  return {name,raw,type:parse(raw),isSort:isTypeLevelSort(raw)};
+ });
+ // Lean sorts describe types, even when the surface formula parser can read
+ // the sort name as a free token. They are context declarations, not proof
+ // premises. Other unparsed local types keep this search conservative.
+ if(classified.some(entry=>!entry.type&&!entry.isSort))return out;
+ const entries=classified.filter(entry=>entry.type&&!entry.isSort);
  if(!entries.length)return out;
  function add(schema,rule,args){
   const term=[rule,...args].join(' ');
