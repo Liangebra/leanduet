@@ -8,7 +8,7 @@ const commands={land:'∧',wedge:'∧',lor:'∨',vee:'∨',neg:'¬',lnot:'¬',to
 const bin={'↔':[10,11],'→':[20,20],'∨':[30,31],'∧':[40,41],'=':[50,51],'≠':[50,51],'<':[50,51],'>':[50,51],'≤':[50,51],'≥':[50,51],'∈':[50,51],'⊆':[50,51],'∪':[65,66],'+':[65,66],'-':[65,66],'∩':[70,71],'*':[70,71],'/':[70,71],"''":[80,81],'^':[80,80]};
 const relation=new Set(['=','≠','<','>','≤','≥','∈','⊆','↔']);
 const reserved=new Set('by fun match let in if then else do have show from where theorem lemma def import namespace end section set_option sorry admit sorryAx true false Type Prop'.split(' '));
-function tokenize(s){
+function tokenize(s,{syntax='math'}={}){
  if(typeof s!=='string'||s.length>3000)throw Error('Formula exceeds 3000 characters.');
  s=s.trim();
  if(s.startsWith('$')&&s.endsWith('$')&&!s.startsWith('$$'))s=s.slice(1,-1);
@@ -33,7 +33,16 @@ function tokenize(s){
    const v=commands[cmd];push(bin[v]||'¬∀∃'.includes(v)?'op':'id',v,pos);continue;
   }
   const name=/^[\p{L}][\p{L}\p{N}_']*/u.exec(s.slice(i));
-  if(name){if(reserved.has(name[0]))throw Error('Unsupported identifier '+name[0]);push('id',name[0],pos);i+=name[0].length;continue;}
+  if(name){
+   // Lean's elaborated targets often contain predicate-valued binders such
+   // as `(P : Nat → Prop)`. Prop (and universe sort Type) is a sort in that
+   // domain, not an ordinary mathematical variable. Accept these two tokens
+   // only in Lean syntax; the presentation grammar still rejects raw Lean
+   // declarations.
+   const leanSort=syntax==='lean'&&['Prop','Type'].includes(name[0]);
+   if(reserved.has(name[0])&&!leanSort)throw Error('Unsupported identifier '+name[0]);
+   push('id',name[0],pos);i+=name[0].length;continue;
+  }
   const n=/^\d+(?:\.\d+)?/.exec(s.slice(i));if(n){push('number',n[0],pos);i+=n[0].length;continue;}
   if(Object.hasOwn(bin,c)||'¬∀∃'.includes(c)){push('op',c,pos);i++;continue;}
   if('(){}:,'.includes(c)){push(c,c,pos);i++;continue;}
@@ -44,7 +53,7 @@ function tokenize(s){
 function hasFreeName(ast,name){return ast?.kind==='free'&&ast.name===name||Object.values(ast||{}).some(x=>Array.isArray(x)?x.some(v=>v&&typeof v==='object'&&hasFreeName(v,name)):x&&typeof x==='object'&&hasFreeName(x,name));}
 export function parseFormula(input,{syntax='math'}={}){
  if(!['math','lean'].includes(syntax))throw Error('Unknown formula syntax.');
- const tokens=tokenize(input);let i=0;
+ const tokens=tokenize(input,{syntax});let i=0;
  const peek=()=>tokens[i];
  function take(k,v){const t=peek();if(t.kind!==k||(v!==undefined&&t.value!==v))throw Error('Expected '+(v??k)+' at '+t.pos);i++;return t;}
  function group(open,close,depth){take(open);const x=expr(0,depth+1);take(close);return x;}
