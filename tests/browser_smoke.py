@@ -295,6 +295,7 @@ unsupported ⊛"""
             expect(operation_row).to_contain_text("universal-variable introduction")
             expect(operation_row).to_contain_text("existential witness extraction")
             operation_row.get_by_role("button",name="Use this candidate").first.click()
+            expect(operation_page.locator("#chainStatus")).to_contain_text("Candidate choice changed")
             expect(operation_row).to_contain_text("Clear choice")
             operation_text=operation_text.replace("unsupported ⊛", """cases h, establish hp : $P(x)$
   left case hleft
