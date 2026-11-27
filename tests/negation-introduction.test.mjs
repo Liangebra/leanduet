@@ -20,5 +20,12 @@ test('negation introduction rejects an unrelated assumption and never changes a 
  const invalid=draftProof('假设 hp\n$False$ | hp',['P'],new Map(),{goal:'¬ P'});
  assert.equal(invalid.complete,false);
  assert.equal(invalid.term,null);
- assert.match(invalid.rows.at(-1).reason,/Known local premise hp has type P, not False/);
+ assert.match(invalid.rows.at(-1).reason,/Surface type of local premise hp .* differs structurally .* Lean definitional equality has not been checked/);
+});
+
+test('a local proof of Not P remains usable for a syntactically negated goal',()=>{
+ const result=draftProof('$¬ P$ | hnot',['hnot'],new Map([['hnot','Not P']]),{goal:'¬ P'});
+ assert.equal(result.complete,true);
+ assert.equal(result.rows.at(-1).proofStatus,'candidate');
+ assert.match(result.term,/exact hnot/);
 });

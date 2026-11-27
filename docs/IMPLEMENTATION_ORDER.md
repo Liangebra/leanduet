@@ -218,8 +218,10 @@ edges; cache replay restores both bindings. Conditional projection lookahead
 stops at this scope boundary. An assumption can also consume a matching
 negated goal, leaving `False` as the residual obligation. This is intuitionistic:
 classical double-negation elimination is never inserted. A bare local reference
-whose type is known is compared structurally with its stated conclusion;
-nontrivial applications still require Lean's independent check. From `False`,
+whose type is known is compared in the scoped surface grammar, including the
+built-in equivalence between `Not P` and `¬ P`; other structural mismatches
+remain unresolved and explicitly state that Lean definitional equality was not
+checked. Nontrivial applications still require Lean's independent check. From `False`,
 users can apply an explicit rule such as `False.elim`. The structured backend
 checks the annotations with Lean. Existential elimination remains a linear scope extension; it is
 not arbitrary dependent pattern matching or implicit type inference.

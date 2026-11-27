@@ -120,6 +120,11 @@ export function scopedFormula(ast,scope=[]){
   case 'unary':return {kind:'unary',op:ast.op,body:scopedFormula(ast.body,scope)};
   case 'binary':return {kind:'binary',op:ast.op,left:scopedFormula(ast.left,scope),right:scopedFormula(ast.right,scope)};
   case 'call':{
+   // In Lean's proposition language, `Not P` and `¬ P` are the same
+   // built-in connective. Normalize this exact unary spelling in the scoped
+   // view while keeping the authored AST/rendering untouched.
+   if(ast.fn?.kind==='id'&&ast.fn.value==='Not'&&ast.args.length===1)
+    return {kind:'unary',op:'¬',body:scopedFormula(ast.args[0],scope)};
    const fn=scopedFormula(ast.fn,scope),args=ast.args.map(a=>scopedFormula(a,scope));
    return fn.kind==='call'?{kind:'call',fn:fn.fn,args:[...fn.args,...args]}:{kind:'call',fn,args};
   }
