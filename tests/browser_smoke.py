@@ -415,7 +415,7 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
             false_page.locator("#extractTerm").click()
             expect(false_page.locator("#typedStatus")).to_contain_text("Extracted from Lean elaboration",timeout=60000)
             false_page.locator("#typedTree").evaluate("(root) => root.querySelectorAll('details.typedNode').forEach(x=>x.open=true)")
-            false_node=false_page.locator(".typedNode").filter(has=false_page.locator("summary").filter(has_text=__import__("re").compile(r"^Apply False\\.elim$"))).last
+            false_node=false_page.locator(".typedNode").filter(has=false_page.locator("summary").filter(has_text=__import__("re").compile(r"^Apply False\.elim$"))).last
             false_node.locator(":scope > button.typedEdit").click()
             expect(false_page.locator("#patchTarget")).to_contain_text("P")
             expect(false_page.locator("#patchScope")).to_contain_text("P")
