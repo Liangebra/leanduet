@@ -8,6 +8,7 @@ import threading
 from playwright.sync_api import sync_playwright, expect
 
 ROOT=Path(__file__).resolve().parents[1]
+HAS_CACHE=(ROOT/"web"/"demo-proof-trees.json").is_file()
 with tempfile.TemporaryDirectory() as tmp:
     shutil.copytree(ROOT/"web",Path(tmp)/"leanduet")
     handler=functools.partial(http.server.SimpleHTTPRequestHandler,directory=tmp)
@@ -35,15 +36,22 @@ with tempfile.TemporaryDirectory() as tmp:
                 page.locator("#typedLanguage").select_option("zh")
                 expect(page.locator("#statement")).to_contain_text("设 P、Q、R 为命题")
                 page.locator('[data-view="typed"]').click()
-                expect(page.locator("#typedNarrative")).to_contain_text("人工示例")
-                expect(page.locator("#typedNarrative")).to_contain_text("得到")
-                expect(page.locator("#typedStatus")).to_contain_text("并非 elaboration 得到的证明树")
+                if HAS_CACHE:
+                    expect(page.locator("#typedNarrative")).to_contain_text("构建时 Lean 提取")
+                    expect(page.locator("#typedNarrative")).to_contain_text("假设")
+                    expect(page.locator("#typedTree .typedNode").first).to_be_visible()
+                    expect(page.locator("#typedStatus")).to_contain_text("非实时验证")
+                    expect(page.locator("#typedTree .typedEdit")).to_have_count(0)
+                else:
+                    expect(page.locator("#typedNarrative")).to_contain_text("人工示例")
+                    expect(page.locator("#typedNarrative")).to_contain_text("得到")
+                    expect(page.locator("#typedStatus")).to_contain_text("并非 elaboration 得到的证明树")
                 expect(page.locator("#extractTerm")).to_be_disabled()
                 page.locator("#interfaceLanguage").select_option("ja")
                 expect(page.locator("html")).to_have_attribute("lang","ja")
                 expect(page.locator("#typedLanguage")).to_have_value("zh")
                 page.locator("#typedLanguage").select_option("ja")
-                expect(page.locator("#typedNarrative")).to_contain_text("命題とする")
+                expect(page.locator("#typedNarrative")).to_contain_text("仮定する" if HAS_CACHE else "命題とする")
                 page.reload()
                 expect(page.locator("#interfaceLanguage")).to_have_value("ja")
                 expect(page.locator("#typedLanguage")).to_have_value("ja")
@@ -123,6 +131,7 @@ with tempfile.TemporaryDirectory() as tmp:
                 assert page.evaluate("document.documentElement.scrollWidth <= innerWidth+1"), "dirty dark mobile workspace overflow"
                 page.locator('[data-view="typed"]').click()
                 expect(page.locator("#typedNarrative")).to_be_empty()
+                expect(page.locator("#typedTree")).to_be_empty()
                 expect(page.locator("#typedStatus")).to_contain_text("arbitrary proof extraction requires local Lean")
                 assert not errors, errors
                 browser.close()
