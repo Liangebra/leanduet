@@ -40,6 +40,7 @@ function matchingContent(a,b,oldIds,newIds){
  const oldScope=(a.scopeRefs||[]).map(x=>oldIds.get(x));
  const newScope=(b.scopeRefs||[]).map(x=>newIds.get(x));
  if(oldScope.includes(undefined)||newScope.includes(undefined)||!same(oldScope,newScope))return false;
+ if(a.origin==='element-request'&&b.origin===a.origin)return a.raw===b.raw;
  if(a.origin==='infer-proposition'&&b.origin===a.origin){
   // The hole is the introduction; resolving its type is not a new
   // introduction. Require the entire original candidate domain to match.

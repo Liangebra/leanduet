@@ -27,6 +27,27 @@ test('the built-in Lean negation spelling has one scoped form',()=>{
  assert.equal(sameScopedFormula('P','False'),false);
 });
 
+test('Lean quantifier groups become nested binders with stable object references',()=>{
+ const text='∀ (A : List Nat) (P : Nat → Prop), ∀ (x : Nat), x ∈ A → P x';
+ const target=compileFormula(text,{syntax:'lean'});
+ assert.equal(target.scoped.kind,'binder');
+ assert.equal(target.scoped.body.kind,'binder');
+ assert.equal(target.scoped.body.body.kind,'binder');
+ const body=target.scoped.body.body.body;
+ assert.equal(body.left.left.index,0,'x refers to the innermost binder');
+ assert.equal(body.left.right.index,2,'A refers across x and P to the outer binder');
+ assert.equal(body.right.fn.index,1,'P keeps a distinct binder identity from A and x');
+ assert.deepEqual(compileFormula(target.lean,{syntax:'lean'}).scoped,target.scoped);
+ assert.throws(()=>compileFormula(text),/(Expected|Unsupported)/,'presentation syntax does not accept Lean binder groups');
+ const groupedNames=compileFormula('∀ (x y : Nat), R x y',{syntax:'lean'});
+ assert.equal(groupedNames.scoped.body.kind,'binder');
+ assert.equal(groupedNames.scoped.body.body.args[0].index,1);
+ assert.equal(groupedNames.scoped.body.body.args[1].index,0);
+ assert.throws(()=>compileFormula('∀ (x y : x), R x y',{syntax:'lean'}),/capture/);
+ const untyped=compileFormula('∀ x y, R x y',{syntax:'lean'});
+ assert.equal(untyped.scoped.body.body.args[0].index,1);
+ assert.equal(untyped.scoped.body.body.args[1].index,0);
+});
 test('Lean targets accept Prop and Type as binder sorts without widening math input',()=>{
  const target=compileFormula('∀ (P : Nat → Prop), ∀ (x : Nat), P x',{syntax:'lean'});
  assert.equal(target.lean,'(∀ P : (Nat → Prop), (∀ x : Nat, (P x)))');

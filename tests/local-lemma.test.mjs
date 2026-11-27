@@ -39,6 +39,20 @@ test('an unfinished local lemma keeps a typed open dependency and later context'
  assert.deepEqual(result.openBindings,['hq']);
 });
 
+test('a renderable proof hole inside a local lemma is not exported as complete',()=>{
+ const input=['local lemma hq : $Q$','  proof','    $Q$ | ?','$R$ | gr hq'].join('\n');
+ const result=createDraftSession().evaluate(input,['gr'],new Map([['gr','Q → R']]),{goal:'R'});
+ const lemma=result.rows.find(row=>row.kind==='local-lemma');
+ const child=result.rows.find(row=>row.raw==='$Q$ | ?');
+ assert.equal(lemma.proofStatus,'open');
+ assert.equal(lemma.resolutionStatus,'open-obligation');
+ assert.equal(child.status,'translated','the syntax can render even though the proof step remains open');
+ assert.equal(child.proofStatus,'open');
+ assert.equal(result.rows.at(-1).proofStatus,'depends-on-open');
+ assert.equal(result.complete,false);
+ assert.equal(result.term,null);
+});
+
 test('a completed local lemma propagates dependencies on open parent facts',()=>{
  const input=['local lemma hP : $P$','  proof','    $P$ | hp','$Q$ | g hP'].join('\n');
  const result=createDraftSession().evaluate(input,['hp','g'],new Map([['hp','P'],['g','P → Q']]),{goal:'Q',openBindings:['hp']});
@@ -77,6 +91,32 @@ test('local lemma children stay isolated inside each disjunction branch',()=>{
  const branches=result.graph.nodes.find(node=>node.kind==='cases').branches;
  assert.ok(branches[0].graph.nodes.some(node=>node.kind==='local-lemma'));
  assert.ok(!branches[1].graph.nodes.some(node=>node.name==='hq'));
+});
+
+test('sibling scopes may reuse a displayed lemma name while keeping distinct identities',()=>{
+ const input=[
+  'cases h, establish hR : $R$',
+  '  left case hq0',
+  '    local lemma same : $R$',
+  '      proof',
+  '        $R$ | f hq0',
+  '    $R$ | same',
+  '  right case ht',
+  '    local lemma same : $R$',
+  '      proof',
+  '        $R$ | g ht',
+  '    $R$ | same',
+  '$R$ | hR'
+ ].join('\n');
+ const facts=new Map([['h','Q ∨ T'],['f','Q → R'],['g','T → R']]);
+ const result=compileNaturalDraft(input,[...facts.keys()],facts,{goal:'R'});
+ assert.equal(result.complete,true);
+ const branches=result.graph.nodes.find(node=>node.kind==='cases').branches;
+ const lemmas=branches.map(branch=>branch.graph.nodes.find(node=>node.kind==='local-lemma'));
+ assert.deepEqual(lemmas.map(lemma=>lemma.name),['same','same']);
+ assert.notEqual(lemmas[0].id,lemmas[1].id,'equal labels in disjoint child scopes are distinct proof objects');
+ assert.deepEqual(branches.map(branch=>branch.status),['complete','complete']);
+ assert.match(result.term,/have same : R := by[\s\S]*exact same[\s\S]*have same : R := by[\s\S]*exact same/);
 });
 
 test('a lemma name from one branch cannot resolve in its sibling',()=>{

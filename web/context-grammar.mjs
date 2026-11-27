@@ -16,6 +16,7 @@ const parse=s=>{
  if(parsedTypes.size>=256)parsedTypes.delete(parsedTypes.keys().next().value);
  parsedTypes.set(s,result);return result;
 };
+const isTypeLevelSort=raw=>/^(?:Prop|Type(?:\s+[A-Za-z0-9_'.]+)?|Sort(?:\s+[A-Za-z0-9_'.]+)?)$/.test(String(raw||'').trim());
 export function premiseFrame(text,scope){
  const m=/^(?:由|根据|利用|使用|from\s+|using\s+)(.+)$/iu.exec(text.trim());
  if(!m)return null;
@@ -38,12 +39,22 @@ function specialize(tree,witness,depth=0){
 export function contextCandidates(goal,names,facts){
  const target=parse(goal),out=[],seen=new Set();
  if(!target||!Array.isArray(names)||names.length<1||names.length>4||names.some(n=>!simple.test(n)))return out;
- const entries=names.map(name=>({name,type:parse(facts.get(name)||'')}));
- if(entries.some(e=>!e.type))return out;
+ const classified=names.map(name=>{
+  const raw=facts.get(name)||'';
+  return {name,raw,type:parse(raw),isSort:isTypeLevelSort(raw)};
+ });
+ // Lean sorts describe types, even when the surface formula parser can read
+ // the sort name as a free token. They are context declarations, not proof
+ // premises. Other unparsed local types keep this search conservative.
+ if(classified.some(entry=>!entry.type&&!entry.isSort))return out;
+ const entries=classified.filter(entry=>entry.type&&!entry.isSort);
+ if(!entries.length)return out;
  function add(schema,rule,args){
   const term=[rule,...args].join(' ');
   if(seen.has(term))return;
-  seen.add(term);out.push({schema,term,premises:[...names],arguments:args,rule});
+  const referenced=new Set([rule,...args].flatMap(part=>String(part).match(/[A-Za-z_][A-Za-z0-9_']*/g)||[]));
+  const premises=names.filter(name=>referenced.has(name));
+  seen.add(term);out.push({schema,term,premises,arguments:args,rule});
  }
  if(entries.length===1){
   const {name,type:t}=entries[0];
@@ -53,6 +64,7 @@ export function contextCandidates(goal,names,facts){
    if(equal(t.right,target))add('right conjunction elimination','And.right',[name]);
   }
   if(binary(t,'=')&&binary(target,'=')&&equal(t.left,target.right)&&equal(t.right,target.left))add('equality symmetry','Eq.symm',[name]);
+  if(equal(t,parse('False')))add('false elimination','False.elim',[name]);
  }
  if(entries.length===2){
   for(const [a,b] of [entries,[entries[1],entries[0]]]){
@@ -220,4 +232,4 @@ export function implicitCandidates(goal,scope,facts,{rule='',limit=8}={}){
  }
  return {candidates:out,overflow};
 }
-export const structuralRules=new Set(['And.left','And.right','And.intro','Eq.symm','Eq.trans','Iff.mp','Iff.mpr','le_trans','lt_trans','Exists.intro']);
+export const structuralRules=new Set(['And.left','And.right','And.intro','Eq.symm','Eq.trans','Iff.mp','Iff.mpr','le_trans','lt_trans','Exists.intro','False.elim']);

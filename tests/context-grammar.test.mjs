@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {contextCandidates,factsFromScope,formulaPremiseSentence,citationCandidates,implicitCandidates} from '../web/context-grammar.mjs';
-import {draftProof} from '../web/natural-draft.mjs';
+import {createDraftSession,draftProof} from '../web/natural-draft.mjs';
 import {interpretations} from '../web/interpretations.mjs';
 test('context determines rule and argument order without a Lean invocation',()=>{
  const facts=new Map([['hab','a = b'],['hbc','b = c']]);
@@ -11,6 +11,38 @@ test('context determines rule and argument order without a Lean invocation',()=>
  const p=interpretations('$a=c$，由 hbc 与 hab',['hab','hbc'],facts);
  assert.equal(p.alternatives[0].term,'Eq.trans hab hbc');
  assert.deepEqual(p.alternatives[0].required,['hbc','hab']);
+});
+test('a typed False premise offers constructive ex-falso but not double-negation elimination',()=>{
+ const facts=new Map([['hFalse','False']]);
+ const candidates=contextCandidates('P',['hFalse'],facts);
+ assert.deepEqual(candidates.map(candidate=>candidate.term),['False.elim hFalse']);
+ assert.equal(candidates[0].schema,'false elimination');
+ assert.equal(implicitCandidates('P',['hFalse'],facts).candidates[0].term,'False.elim hFalse');
+ const draft=draftProof('From hFalse, we obtain $P$',['hFalse'],facts,{goal:'P'});
+ assert.equal(draft.complete,true);
+ assert.ok(draft.term.includes('False.elim hFalse'));
+ const doubleNegationFacts=new Map([['hnn','¬¬ P']]);
+ assert.equal(contextCandidates('P',['hnn'],doubleNegationFacts).length,0);
+ assert.equal(implicitCandidates('P',['hnn'],doubleNegationFacts).candidates.length,0);
+});
+
+test('a known Lean sort is ignored while other unknown local types stay unresolved',()=>{
+ const facts=new Map([['P','Prop'],['hFalse','False']]);
+ const candidates=contextCandidates('Q',['P','hFalse'],facts);
+ assert.deepEqual(candidates.map(candidate=>candidate.term),['False.elim hFalse']);
+ assert.deepEqual(candidates[0].premises,['hFalse'],'irrelevant type-level locals are not semantic proof dependencies');
+ assert.equal(implicitCandidates('Q',['P','hFalse'],facts).candidates[0].term,'False.elim hFalse');
+ const unknownFacts=new Map([['hUnknown','P ∧'],['hFalse','False']]);
+ assert.deepEqual(contextCandidates('Q',['hUnknown','hFalse'],unknownFacts),[],
+  'an unparsed non-sort local is not silently discarded when assessing candidate completeness');
+});
+
+test('natural draft retains a type-level parameter beside a contradiction premise',()=>{
+ const facts=new Map([['P','Prop'],['hFalse','False']]);
+ const result=createDraftSession().evaluate('From hFalse, we obtain $P$',['P','hFalse'],facts,{goal:'P'});
+ assert.equal(result.complete,true);
+ assert.ok(result.term.includes('False.elim hFalse'));
+ assert.deepEqual(result.rows[0].candidates[0].premises,['hFalse']);
 });
 test('ambiguous identical conjuncts remain distinct candidate proofs',()=>{
  const facts=new Map([['h','P ∧ P']]);

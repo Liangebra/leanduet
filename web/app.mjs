@@ -50,6 +50,7 @@ const resolutionLabels={
  'needs-context':'Needs more context',
  'needs-type-annotation':'Needs an explicit element type',
  'incompatible-type':'Element type conflicts with the known carrier',
+ 'ambiguous-context':'Set restriction names more than one local object',
  'needs-choice':'A candidate is available · choose how to proceed',
  'ambiguous':'Multiple supported interpretations remain',
  'budget-exhausted':'Candidate search budget exhausted',
@@ -550,15 +551,15 @@ $('suggestInterpretations').onclick=async()=>{
 function parseChainInput(text,scope){const mode=$('chainFormat').value;return mode==='formula'?compileFormulaSequence(text,scope):mode==='natural'?draftSession.compile(text,scope,factsFromScope(patchNode?.scope),{choices:draftChoices,goal:patchNode?.type}):compileChain(text,scope);}
 $('chainFormat').onchange=()=>{$('chainText').placeholder=$('chainFormat').value==='formula'?'$Q$\n$R$':$('chainFormat').value==='natural'?'建立 hq : $Q$，由 f，使用 p\n因此 $R$，由 g，使用 hq\n\n分情况讨论 h，建立 hR : $R$\n  左支 hp\n    $R$ | f hp\n  右支 hq\n    $R$ | g hq\n$R$ | hR':'Establish hq | f using p\nConclude | g using hq';$('chainText').dispatchEvent(new Event('input'));};
 $('chainText').addEventListener('input',()=>{draftChoiceVersion++;if($('chainFormat').value!=='natural')clearDraftChoices();$('chainBindings').replaceChildren();$('patchTerm').value='';$('patchTerm').dispatchEvent(new Event('input'));$('chainStatus').textContent='Narrative changed. Stage the new candidate.';previewDraft({edited:true});});
-function previewDraft({edited=false}={}){
+function previewDraft({edited=false,choices=draftChoices}={}){
  const target=$('draftTranslation');target.replaceChildren();
  if($('chainFormat').value!=='natural'||!patchNode)return;
  try{
    const input=$('chainText').value,scope=(patchNode.scope||[]).map(d=>d.name),facts=factsFromScope(patchNode.scope);
-    if(edited&&draftChoices.size){
+    if(edited&&choices.size){
      // Earlier restored choices can reveal later candidate domains. Replay
      // until the choice map stabilizes; abandon migration on nonconvergence.
-     const original=new Map(draftChoices);let migrated=new Map(),stable=false;
+     const original=new Map(choices);let migrated=new Map(),stable=false;
      for(let pass=0;pass<=original.size+1;pass++){
       const probe=draftSession.evaluate(input,scope,facts,{goal:patchNode.type,choices:migrated});
       const correspondence=reconcileDraftIdentity(draftIdentity,probe.graph);
@@ -566,12 +567,12 @@ function previewDraft({edited=false}={}){
       if(JSON.stringify([...next])===JSON.stringify([...migrated])){stable=true;break;}
       migrated=next;
      }
-     draftChoices.clear();if(stable)for(const [line,term] of migrated)draftChoices.set(line,term);
+     choices.clear();if(stable)for(const [line,term] of migrated)choices.set(line,term);
     }
-    const r=draftSession.evaluate(input,scope,facts,{choices:draftChoices,goal:patchNode.type});
+    const r=draftSession.evaluate(input,scope,facts,{choices,goal:patchNode.type});
     draftIdentity=reconcileDraftIdentity(draftIdentity,r.graph);
    const shownGroups=new Set();
-   function refreshChoice(){draftChoiceVersion++;$('chainBindings').replaceChildren();$('patchTerm').value='';$('patchTerm').dispatchEvent(new Event('input'));$('chainStatus').textContent='Candidate choice changed. Stage and check again.';previewDraft();}
+   function refreshChoice(line=null,key=null){draftChoiceVersion++;$('chainBindings').replaceChildren();$('patchTerm').value='';$('patchTerm').dispatchEvent(new Event('input'));if(line!==null){if(key===null)draftChoices.delete(line);else draftChoices.set(line,key);} $('chainStatus').textContent='Candidate choice changed. Stage and check again.';previewDraft({choices:new Map(draftChoices)});}
    for(const x of r.rows){
      const d=element('div',undefined,'ruleResult');
      d.dataset.objectId=draftIdentity.ids.get(x.graphId||'line:'+x.line)||'';
@@ -627,12 +628,11 @@ function previewDraft({edited=false}={}){
       if(c.evidenceType)d.append(element('small',c.evidenceName+' : '+c.evidenceType));
       if(c.constraints?.length)d.append(element('small','Compatible with the remaining goal at line '+c.constraints.at(-1).line));
       if(c.premiseFacts?.length)d.append(element('small',c.premiseFacts.map(p=>p.type+' ['+p.name+']').join(' · ')));
-      const key=c.choice??c.term,selected=draftChoices.get(x.line)===key;
+      const key=c.choice??c.term,selected=choices.get(x.line)===key;
       const b=element('button',selected?'Clear choice':'Use this candidate');b.type='button';
       b.onclick=()=>{
        if(!patchNode||!clean())return;
-       if(selected)draftChoices.delete(x.line);else draftChoices.set(x.line,key);
-       refreshChoice();
+       refreshChoice(x.line,selected?null:key);
       };
       d.append(b);
      }
