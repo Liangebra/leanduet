@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 9981)
-Total output lines: 553
-
 """Real browser regression checks. Run after installing playwright + Chromium."""
 import os
 import subprocess
@@ -226,7 +223,125 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
             partial_case_text="分情况讨论 h，建立 hT : $True$\n  左支 hp\n    unsupported ⊛\n  右支 hq\n    $True$ | k hq\nestablish ht : $True$ | hT\ncases j, establish jT : $True$\n  left case hu\n    $True$ | l hu\n  right case hv\n    $True$ | m hv\n$True$ | jT"
             case_page.locator("#chainText").fill(partial_case_text)
             expect(case_page.locator("#draftTranslation")).to_contain_text("inl hp : True ⊢ True · open")
-            expect(case_page.locator("#draftTranslation…1981 tokens truncated…0})
+            expect(case_page.locator("#draftTranslation")).to_contain_text("cases j")
+            expect(case_page.locator("#draftTranslation")).to_contain_text("Line 6 · translated · depends-on-open")
+            assert case_page.locator("#patchTerm").input_value()=="", "an open branch must not stage a Lean candidate"
+            case_page.locator("#chainText").fill(case_text)
+            expect(case_page.locator("#draftTranslation")).to_contain_text("cases h into inl hp: True / inr hq: True")
+            case_page.locator("#inferChain").click()
+            expect(case_page.locator("#chainBindings")).to_contain_text("hT",timeout=120000)
+            expect(case_page.locator("#chainBindings")).not_to_contain_text("hp")
+            expect(case_page.locator("#chainBindings")).not_to_contain_text("hq")
+            assert "cases h with" in case_page.locator("#patchTerm").input_value()
+            assert "cases j with" in case_page.locator("#patchTerm").input_value()
+            case_page.locator("#checkPatch").click()
+            expect(case_page.locator("#applyPatch")).to_be_enabled(timeout=120000)
+            case_page.once("dialog",lambda d:d.accept())
+            case_page.locator("#applyPatch").click()
+            case_page.locator("#check").click()
+            expect(case_page.locator("#verifyState")).to_have_text("Lean passed",timeout=120000)
+            # The browser's controlled editor deliberately accepts one theorem
+            # plus imports. Keep this UI fixture within that supported source
+            # shape; the set-intersection-specific Lean prelude is compiled in
+            # tests/interpret_integration.py instead.
+            set_source="""theorem predicate_intersection_left {α : Type} (A B : α → Prop) :
+    ∀ x : α, A x ∧ B x → A x := by
+  intro x
+  intro hx
+  exact And.left hx
+"""
+            case_page.locator("#lean").fill(set_source)
+            case_page.once("dialog",lambda d:d.accept())
+            case_page.locator("#adopt").click()
+            case_page.locator('[data-view="typed"]').click()
+            case_page.locator("#extractTerm").click()
+            expect(case_page.locator("#typedStatus")).to_contain_text("Extracted from Lean elaboration",timeout=60000)
+            case_page.locator("#typedTree").evaluate("(root) => root.querySelectorAll('details.typedNode').forEach(x=>x.open=true)")
+            set_projection=case_page.locator(".typedNode").filter(has=case_page.locator("summary").filter(has_text=__import__("re").compile("^Apply And\\.left$"))).last
+            set_projection.locator(":scope > .typedEdit").click()
+            case_page.locator("#chainEditor summary").click()
+            case_page.locator("#chainFormat").select_option("natural")
+            case_page.locator("#chainText").fill("因此 $A(x)$，由 And.left，使用 hx")
+            case_page.locator("#inferChain").click()
+            expect(case_page.locator("#draftTranslation")).to_contain_text("exact And.left hx")
+            case_page.locator("#compileChain").click()
+            expect(case_page.locator("#patchTerm")).to_have_value(__import__("re").compile(r"exact And\.left hx"))
+            case_page.locator("#checkPatch").click()
+            expect(case_page.locator("#applyPatch")).to_be_enabled(timeout=120000)
+            case_page.close()
+            operation_page=browser.new_page(viewport={"width":1440,"height":900})
+            operation_page.on("pageerror",lambda error:errors.append(str(error)))
+            operation_page.goto(url)
+            operation_source="""theorem operation_choice_demo (P : Nat → Prop) (hall : ∀ x : Nat, P x)
+    (he : ∃ y : Nat, P y) (h : True ∨ True) : ∀ x : Nat, P x := by
+  exact hall
+"""
+            operation_page.locator("#lean").fill(operation_source)
+            operation_page.once("dialog",lambda d:d.accept())
+            operation_page.locator("#adopt").click()
+            operation_page.locator('[data-view="typed"]').click()
+            operation_page.locator("#extractTerm").click()
+            expect(operation_page.locator("#typedStatus")).to_contain_text("Extracted from Lean elaboration",timeout=60000)
+            select_typed_edit(operation_page,includes=("∀","P x"),summary="Use hypothesis",term="hall")
+            expect(operation_page.locator("#patchTarget")).to_contain_text("∀")
+            operation_page.locator("#chainEditor summary").click()
+            operation_page.locator("#chainFormat").select_option("natural")
+            operation_text="""take an element x satisfying $P(x)$
+cases h, establish hp : $P(x)$
+  left case hleft
+    $P(x)$ | hall x
+  right case hright
+    $P(x)$ | hall x
+$P(x)$ | hp"""
+            operation_page.locator("#chainText").fill(operation_text)
+            operation_row=operation_page.locator("#draftTranslation .ruleResult").first
+            expect(operation_row).to_contain_text("universal-variable introduction")
+            expect(operation_row).to_contain_text("existential witness extraction")
+            operation_row.get_by_role("button",name="Use this candidate").first.click()
+            expect(operation_row).to_contain_text("Clear choice")
+            operation_page.locator("#compileChain").click()
+            expect(operation_page.locator("#patchTerm")).to_have_value(__import__("re").compile(r"intro x[\s\S]*cases h with[\s\S]*exact hall x[\s\S]*exact hp"))
+            operation_page.locator("#checkPatch").click()
+            expect(operation_page.locator("#applyPatch")).to_be_enabled(timeout=120000)
+            operation_page.once("dialog",lambda d:d.accept())
+            operation_page.locator("#applyPatch").click()
+            operation_page.locator("#check").click()
+            expect(operation_page.locator("#verifyState")).to_have_text("Lean passed",timeout=120000)
+            operation_page.close()
+            lemma_page=browser.new_page(viewport={"width":1440,"height":900})
+            lemma_page.on("pageerror",lambda error:errors.append(str(error)))
+            lemma_page.goto(url)
+            lemma_page.locator("#lean").fill("""theorem local_lemma_demo (Q R : Prop) (hq : Q) (gr : Q → R) : R := by
+  have localQ : Q := hq
+  exact gr localQ
+""")
+            lemma_page.once("dialog",lambda d:d.accept())
+            lemma_page.locator("#adopt").click()
+            lemma_page.locator('[data-view="typed"]').click()
+            lemma_page.locator("#extractTerm").click()
+            expect(lemma_page.locator("#typedStatus")).to_contain_text("Extracted from Lean elaboration",timeout=60000)
+            select_typed_edit(lemma_page,exact_type="R",summary="Establish local binding localQ")
+            expect(lemma_page.locator("#patchTarget")).to_contain_text("R")
+            lemma_page.locator("#chainEditor summary").click()
+            lemma_page.locator("#chainFormat").select_option("natural")
+            lemma_text="""local lemma localQ : $Q$
+  proof
+    $Q$ | hq
+$R$ | gr localQ"""
+            lemma_page.locator("#chainText").fill(lemma_text)
+            lemma_row=lemma_page.locator("#draftTranslation .ruleResult").first
+            expect(lemma_row).to_contain_text("local lemma")
+            lemma_page.locator("#inferChain").click()
+            expect(lemma_page.locator("#chainStatus")).to_contain_text("Intermediate propositions inferred by Lean",timeout=120000)
+            expect(lemma_page.locator("#patchTerm")).to_have_value(__import__("re").compile(r"have localQ : Q := by[\s\S]*exact hq[\s\S]*exact gr localQ"))
+            lemma_page.locator("#checkPatch").click()
+            expect(lemma_page.locator("#applyPatch")).to_be_enabled(timeout=120000)
+            lemma_page.once("dialog",lambda d:d.accept())
+            lemma_page.locator("#applyPatch").click()
+            lemma_page.locator("#check").click()
+            expect(lemma_page.locator("#verifyState")).to_have_text("Lean passed",timeout=120000)
+            lemma_page.close()
+            restricted_page=browser.new_page(viewport={"width":1440,"height":900})
             restricted_page.on("pageerror",lambda error:errors.append(str(error)))
             restricted_page.goto(url)
             restricted_page.locator("#lean").fill("""theorem restricted_forall_demo (A : List Nat) (P : Nat → Prop)
