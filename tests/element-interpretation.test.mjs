@@ -174,7 +174,7 @@ test('an element-operation choice survives unrelated text edits after selection'
 test('an element choice keeps its root identity when a later scoped block extends the draft',()=>{
  const session=createDraftSession(),goal='∀ x : Nat, P x',scope=['hall','he','h'];
  const facts=new Map([['hall','∀ x : Nat, P x'],['he','∃ y : Nat, P y'],['h','True ∨ True']]);
- const initial='take an element x : $Nat$ satisfying $P(x)$\\nunsupported ⊛';
+ const initial='take an element x : $Nat$ satisfying $P(x)$\nunsupported ⊛';
  const first=session.evaluate(initial,scope,facts,{goal});
  const candidate=first.rows[0].candidates.find(value=>value.operation==='universal-introduction');
  assert.ok(candidate);
@@ -182,7 +182,7 @@ test('an element choice keeps its root identity when a later scoped block extend
  const selected=session.evaluate(initial,scope,facts,{goal,choices});
  const previous=reconcileDraftIdentity(null,selected.graph);
  const expanded=initial.replace('unsupported ⊛',
-  'cases h, establish hT : $True$\\n  left case ht\\n    $True$ | ht\\n  right case hu\\n    $True$ | hu\\n$True$ | hT');
+  'cases h, establish hT : $True$\n  left case ht\n    $True$ | ht\n  right case hu\n    $True$ | hu\n$True$ | hT');
  const probe=session.evaluate(expanded,scope,facts,{goal});
  assert.equal(probe.graph.goal,goal,'the full draft graph is anchored to the originally selected target');
  assert.deepEqual(probe.graph.nodes.filter(node=>node.kind==='context').map(node=>node.name),scope,
