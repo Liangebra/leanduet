@@ -171,6 +171,33 @@ test('an element-operation choice survives unrelated text edits after selection'
  assert.deepEqual([...migrateDraftChoices(previous,current,choices)],[[1,candidate.choice]]);
 });
 
+test('an element choice keeps its root identity when a later scoped block extends the draft',()=>{
+ const session=createDraftSession(),goal='∀ x : Nat, P x',scope=['hall','he','h'];
+ const facts=new Map([['hall','∀ x : Nat, P x'],['he','∃ y : Nat, P y'],['h','True ∨ True']]);
+ const initial='take an element x : $Nat$ satisfying $P(x)$\\nunsupported ⊛';
+ const first=session.evaluate(initial,scope,facts,{goal});
+ const candidate=first.rows[0].candidates.find(value=>value.operation==='universal-introduction');
+ assert.ok(candidate);
+ const choice=candidate.choice,choices=new Map([[1,choice]]);
+ const selected=session.evaluate(initial,scope,facts,{goal,choices});
+ const previous=reconcileDraftIdentity(null,selected.graph);
+ const expanded=initial.replace('unsupported ⊛',
+  'cases h, establish hT : $True$\\n  left case ht\\n    $True$ | ht\\n  right case hu\\n    $True$ | hu\\n$True$ | hT');
+ const probe=session.evaluate(expanded,scope,facts,{goal});
+ assert.equal(probe.graph.goal,goal,'the full draft graph is anchored to the originally selected target');
+ assert.deepEqual(probe.graph.nodes.filter(node=>node.kind==='context').map(node=>node.name),scope,
+  'suffix locals remain proof nodes instead of becoming root context entries');
+ const current=reconcileDraftIdentity(previous,probe.graph);
+ const migrated=migrateDraftChoices(previous,current,choices);
+ assert.deepEqual([...migrated],[[1,choice]]);
+ const restored=session.evaluate(expanded,scope,facts,{goal,choices:migrated});
+ assert.equal(restored.rows[0].step.kind,'introduce');
+ assert.equal(restored.rows[0].selectedChoice,choice);
+ const cold=compileNaturalDraft(expanded,scope,facts,{goal,choices:migrated});
+ const {reusedRows,...actual}=restored,{reusedRows:coldReuse,...expected}=cold;
+ assert.equal(coldReuse,0);
+ assert.deepEqual(actual,expected);
+});
 test('stale operation choices are rejected after context edits',()=>{
  const session=createDraftSession();
  const input='take an element x satisfying $P(x)$ from he\n$Q$ | hq';
