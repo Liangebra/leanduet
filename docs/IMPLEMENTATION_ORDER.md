@@ -215,9 +215,12 @@ local premise introduces two separate semantic objects: a witness and its
 proof of the instantiated predicate. The original premise is retained via a
 fresh internal copy. The graph records both introductions and their scope
 edges; cache replay restores both bindings. Conditional projection lookahead
-stops at this scope boundary. The structured backend checks the annotations
-with Lean. Existential elimination remains a linear scope extension; it is
-not arbitrary dependent pattern matching or implicit type inference.
+stops at this scope boundary. An assumption can also consume a matching
+negated goal, leaving `False` as the residual obligation. This is intuitionistic:
+classical double-negation elimination is never inserted. From `False`, users can
+apply an explicit rule such as `False.elim`. The structured backend checks the
+annotations with Lean. Existential elimination remains a linear scope extension;
+it is not arbitrary dependent pattern matching or implicit type inference.
 
 ## Branch-local disjunction elimination
 
