@@ -139,6 +139,8 @@ const rows = [
 ["Static example · authored reading, not an elaborated proof tree.","静态示例 · 人工编写的叙述，并非 elaboration 得到的证明树。","静的な例 · 人手による叙述であり、精緻化された証明木ではありません。"],
 ["Static demo: select a built-in example for multilingual reading; arbitrary proof extraction requires local Lean.","静态演示：请选择内置示例体验多语言阅读；任意证明的提取需要本地 Lean。","静的デモ：組み込み例で多言語読解を試せます。任意の証明の抽出にはローカル Lean が必要です。"],
 ["Authored example · English fallback for this language pack.","人工示例 · 此语言包暂用英文叙述。","人手による例 · この言語パックでは英語にフォールバックします。"],
+["Build-time Lean extraction · exact built-in source · no live checking.","构建时由 Lean 提取 · 与内置源码完全一致 · 非实时验证。","ビルド時に Lean で抽出 · 組み込みソースと完全一致 · ライブ検証ではありません。"],
+["BUILD-TIME LEAN EXTRACTION · READ-ONLY","构建时 Lean 提取 · 只读","ビルド時の Lean 抽出 · 読み取り専用"],
 ["AUTHORED EXAMPLE · NOT VERIFIED","人工示例 · 未验证","人手による例 · 未検証"],
 ["Implication composition","蕴含的复合","含意の合成"],
 ["Conjunction symmetry","合取的对称性","連言の対称性"],
@@ -173,7 +175,7 @@ export function mountInterface(onChange){
     const n=walker.currentNode;
     if(dictionaries.has(n.data.trim())&&!n.parentElement.closest('script,style,textarea, #interfaceLanguage, #typedLanguage'))bindings.push([n,n.data]);
   }
-  const dynamicIds=['theme','focusMode','toggleLayout','saveState','leanDirty','proseDirty','verifyState','notice','envState','output','typedStatus','narrativeStatus','inspectName','proposal'];
+  const dynamicIds=['theme','focusMode','toggleLayout','saveState','leanDirty','proseDirty','verifyState','notice','envState','output','typedStatus','narrativeStatus','inspectName'];
   const dynamic=new Map();
   const reverse=new Map(rows.flatMap(([en,zh,ja])=>[[en,en],[zh,en],[ja,en]]));
   for(const id of dynamicIds){
@@ -187,6 +189,7 @@ export function mountInterface(onChange){
   }
   function apply(){
     document.documentElement.lang=({en:'en',zh:'zh-CN',ja:'ja'})[lang];
+    selector.setAttribute('aria-label',translate('Interface language',lang));selector.title=translate('Interface language',lang);
     selector.value=lang;
     for(const [node,original] of bindings)if(node.isConnected)node.data=translate(original,lang);
     for(const [el,original] of dynamic)el.textContent=translate(original,lang);
