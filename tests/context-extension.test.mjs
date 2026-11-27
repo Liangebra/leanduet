@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {draftProof,createDraftSession,compileNaturalDraft} from '../web/natural-draft.mjs';
 import {extendGoal} from '../web/context-extension.mjs';
 import {dependentNodes} from '../web/draft-graph.mjs';
+import {forkProofScope,proofScopeFacts,proofScopeNames,resolveProofName,rootProofScope} from '../web/proof-scope.mjs';
 const scope=['P'],facts=new Map();
 const input='任取 x : $Nat$\n假设 hp : $P(x)$\n$P(x)$ | hp';
 const goal='∀ z : Nat, P z → P z';
@@ -127,6 +128,38 @@ test('sibling branches may reuse display names without sharing object identity',
  assert.equal(r.complete,true);
  assert.equal(branches[0].name,branches[1].name);
  assert.notEqual(branches[0].binding.id,branches[1].binding.id);
+});
+
+test('a branch-local name shadows only inside its child scope',()=>{
+ const facts=new Map([['P','Prop'],['Q','Prop'],['R','Prop'],['h','P ∨ Q'],['hp','Q'],['f','P → R'],['g','Q → R']]);
+ const input='cases h, establish hR : $R$\n  left case hp\n    $R$ | f hp\n  right case hp\n    $R$ | g hp\n$Q$ | hp';
+ const result=compileNaturalDraft(input,[...facts.keys()],facts,{goal:'Q'});
+ const node=result.graph.nodes.find(n=>n.kind==='cases');
+ const [left,right]=node.branches;
+ assert.equal(result.complete,true);
+ assert.equal(left.name,'hp');assert.equal(right.name,'hp');
+ assert.notEqual(left.binding.id,right.binding.id);
+ assert.notEqual(left.binding.id,'context:4');assert.notEqual(right.binding.id,'context:4');
+ assert.ok(left.graph.nodes.some(n=>n.id===left.binding.id&&n.type==='P'));
+ assert.ok(right.graph.nodes.some(n=>n.id===right.binding.id&&n.type==='Q'));
+ assert.ok(result.graph.nodes.find(n=>n.kind==='conclude').dependencies.includes('context:4'),
+  'the parent continuation resolves the original hp after both branches close');
+});
+
+test('root duplicates remain ambiguous but a child may shadow their spelling',()=>{
+ const root=rootProofScope(['h','h'],new Map([['h','P']]));
+ assert.equal(resolveProofName(root,'h').status,'ambiguous');
+ const child=forkProofScope(root,{id:'branch',goal:'Q',binding:{id:'branch:hp',name:'h',type:'Q'},allowShadow:true});
+ assert.equal(resolveProofName(root,'h').status,'ambiguous','the child must not mutate its parent context');
+ assert.equal(resolveProofName(child,'h').binding.id,'branch:hp');
+ assert.deepEqual(proofScopeNames(child),['h']);
+ assert.equal(proofScopeFacts(child).get('h'),'Q');
+});
+
+test('branch shadowing rejects parent references that the bounded formula view cannot capture safely',()=>{
+ const facts=new Map([['P','Nat → Prop'],['Q','Prop'],['h','P z ∨ Q'],['z','Nat'],['f','P z']]);
+ const input='cases h, establish hz : $P(z)$\n  left case z\n    $P(z)$ | f\n  right case hq\n    $P(z)$ | f';
+ assert.throws(()=>compileNaturalDraft(input,[...facts.keys()],facts,{goal:'P(z)'}),/would capture a parent reference/);
 });
 
 test('a branch-local hypothesis cannot leak to a sibling or parent continuation',()=>{

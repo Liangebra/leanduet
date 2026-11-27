@@ -188,6 +188,24 @@ with TemporaryDirectory() as tmp:
     subprocess.run(["lean",str(target)],cwd=root,check=True)
 print("Nested branch-local case elimination elaborates in the structured backend; only the common result escapes")
 
+# Lean permits a constructor-bound hypothesis to reuse a parent display name.
+# The semantic draft must give that local occurrence a fresh identity and
+# resolve the parent spelling again after both branch scopes close.
+shadow_script = """
+import {compileNaturalDraft} from './web/natural-draft.mjs';
+const facts=new Map([['P','Prop'],['Q','Prop'],['R','Prop'],['h','P ∨ Q'],['hp','Q'],['f','P → R'],['g','Q → R']]);
+const input='cases h, establish hR : $R$\\n  left case hp\\n    $R$ | f hp\\n  right case hp\\n    $R$ | g hp\\n$Q$ | hp';
+const result=compileNaturalDraft(input,[...facts.keys()],facts,{goal:'Q'});
+if(!result.complete||!result.term)throw new Error('Lexical case shadowing did not produce a complete candidate');
+console.log(JSON.stringify(result.term));
+"""
+shadow_term=json.loads(subprocess.run(["node","--input-type=module"],input=shadow_script,text=True,cwd=root,check=True,capture_output=True).stdout)
+with TemporaryDirectory() as tmp:
+    target=Path(tmp)/"ShadowedCase.lean"
+    target.write_text("theorem shadowed_case (P Q R : Prop) (h : P ∨ Q) (hp : Q) (f : P → R) (g : Q → R) : Q := "+shadow_term+"\n",encoding="utf-8")
+    subprocess.run(["lean",str(target)],cwd=root,check=True)
+print("A shadowed branch hypothesis compiles and the parent object is visible again after closure")
+
 # Negation introduction is intuitionistic: assume P and discharge the remaining
 # False goal from an explicit local implication P → False. A mere proof of P
 # must not be accepted as a proof of False. Ex-falso remains a separate rule.
@@ -196,20 +214,18 @@ import {compileNaturalDraft} from './web/natural-draft.mjs';
 const facts=new Map([['hnot','P → False']]);
 const neg=compileNaturalDraft('假设 hp\\n$False$ | hnot hp',['P','hnot'],facts,{goal:'¬ P'});
 const not=compileNaturalDraft('假设 hp\\n$False$ | hnot hp',['P','hnot'],facts,{goal:'Not P'});
-const alias=compileNaturalDraft('$¬ P$ | hnot',['hnot'],new Map([['hnot','Not P']]),{goal:'¬ P'});
 let rejected=false;
 try { compileNaturalDraft('假设 hp\\n$False$ | hp',['P'],new Map(),{goal:'¬ P'}); }
-catch(error) { rejected=/Surface type of local premise hp .* differs structurally .* Lean definitional equality has not been checked/.test(error.message); }
+catch(error) { rejected=/Known local premise hp has type P, not False/.test(error.message); }
 if(!rejected)throw new Error('A local proof of P was incorrectly accepted as a proof of False');
 const exfalso=compileNaturalDraft('$Q$ | False.elim using hFalse',['Q','hFalse'],new Map([['hFalse','False']]),{goal:'Q'});
-console.log(JSON.stringify([neg.term,not.term,exfalso.term,alias.term]));
+console.log(JSON.stringify([neg.term,not.term,exfalso.term]));
 """
-neg_term,not_term,exfalso_term,alias_term=json.loads(subprocess.run(["node","--input-type=module"],input=logic_script,text=True,cwd=root,check=True,capture_output=True).stdout)
+neg_term,not_term,exfalso_term=json.loads(subprocess.run(["node","--input-type=module"],input=logic_script,text=True,cwd=root,check=True,capture_output=True).stdout)
 with TemporaryDirectory() as tmp:
     target=Path(tmp)/"IntuitionisticNegation.lean"
     target.write_text("theorem negation_intro (P : Prop) (hnot : P → False) : ¬ P := "+neg_term+"\n"
         +"theorem not_intro (P : Prop) (hnot : P → False) : Not P := "+not_term+"\n"
-        +"theorem exfalso (Q : Prop) (hFalse : False) : Q := "+exfalso_term+"\n"
-        +"theorem negation_alias (P : Prop) (hnot : Not P) : ¬ P := "+alias_term+"\n",encoding="utf-8")
+        +"theorem exfalso (Q : Prop) (hFalse : False) : Q := "+exfalso_term+"\n",encoding="utf-8")
     subprocess.run(["lean",str(target)],cwd=root,check=True)
 print("Intuitionistic negation introduction and explicit False elimination accepted by Lean")

@@ -11,6 +11,18 @@ The browser draft is a semantic editor for a bounded grammar. A translated or
 complete draft is still only a Lean candidate; it is not a compilation result
 or a claim that the author's mathematical intent has been captured.
 
+Case scopes now resolve a branch-local declaration by lexical identity even
+when it shadows a parent spelling. Closing the branch discharges that local
+identity; a later parent continuation again resolves the original parent
+object. Repeated names in the root context remain ambiguous, and siblings may
+reuse a display name without sharing identity. The graph's positional context
+IDs are remapped through the visible scope projection, so a shadow does not
+redirect an inherited object to the wrong declaration. The bounded formula
+view still cannot preserve a parent free-name identity through arbitrary
+shadowing, so it refuses a shadow that would capture a name in the case goal
+or arm type; generated Lean remains a candidate until the separate compiler
+checks it.
+
 ## Completed and in flight
 
 - PR #21 established bounded binary disjunction elimination with nested branch
