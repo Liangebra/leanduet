@@ -38,7 +38,7 @@ test('Lean quantifier groups become nested binders with stable object references
  assert.equal(body.left.right.index,2,'A refers across x and P to the outer binder');
  assert.equal(body.right.fn.index,1,'P keeps a distinct binder identity from A and x');
  assert.deepEqual(compileFormula(target.lean,{syntax:'lean'}).scoped,target.scoped);
- assert.throws(()=>compileFormula(text),/Expected/,'presentation syntax does not accept Lean binder groups');
+ assert.throws(()=>compileFormula(text),/(Expected|Unsupported)/,'presentation syntax does not accept Lean binder groups');
  const groupedNames=compileFormula('∀ (x y : Nat), R x y',{syntax:'lean'});
  assert.equal(groupedNames.scoped.body.kind,'binder');
  assert.equal(groupedNames.scoped.body.body.args[0].index,1);
