@@ -126,18 +126,74 @@ export function reconcileDraftIdentity(previous,graph){
   }
   const oldRows=oldNodes.filter(n=>n.kind!=='context'&&n.kind!=='case-branch');
   const newRows=newNodes.filter(n=>n.kind!=='context'&&n.kind!=='case-branch');
-  const oldLines=groups(oldRows,lineKey),newLines=groups(newRows,lineKey);
-  for(const node of newRows){
-   let prior=null;
-   if(compatible){
-    const a=oldLines.get(lineKey(node))||[],b=newLines.get(lineKey(node))||[];
-    if(a.length===1&&b.length===1){
-     try{if(matchingContent(a[0],node,previous.ids,ids))prior=a[0];}catch{}
-    }
+  const matched=new Map(),usedOld=new Set();
+
+  // Stable, structurally matched rows act as anchors. Repeated source rows
+  // are paired only when a monotone interval between such anchors contains
+  // exactly one occurrence on each side; ambiguous edits stay unmatched.
+  function uniquePairs(oldStart,oldEnd,newStart,newEnd){
+   const oldGroups=groups(oldRows.slice(oldStart,oldEnd),lineKey);
+   const newGroups=groups(newRows.slice(newStart,newEnd),lineKey);
+   const pairs=[];
+   for(const [key,oldGroup] of oldGroups){
+    const newGroup=newGroups.get(key)||[];
+    if(oldGroup.length!==1||newGroup.length!==1)continue;
+    pairs.push([oldRows.indexOf(oldGroup[0]),newRows.indexOf(newGroup[0])]);
    }
-   mapToPrior(node.id,prior?.id);
+   return pairs;
+  }
+  function inOrder(pairs){
+   const sorted=[...pairs].sort((a,b)=>a[0]-b[0]);
+   return sorted.every((pair,index)=>index===0||pair[1]>sorted[index-1][1]);
+  }
+  function connectChildren(prior,node){
    if(node.kind==='cases')pairBranches(prior,node,!!prior&&compatible);
    if(node.subgoals?.length)pairSubgoals(prior,node,!!prior&&compatible);
+  }
+  function tryPairs(pairs){
+   let changed=false;
+   for(const [oldIndex,newIndex] of [...pairs].sort((a,b)=>a[1]-b[1])){
+    if(matched.has(newIndex)||usedOld.has(oldIndex))continue;
+    const prior=oldRows[oldIndex],node=newRows[newIndex];
+    if(!previous?.ids.has(prior.id))continue;
+    let contentMatches=false;
+    if(compatible){
+     try{contentMatches=matchingContent(prior,node,previous.ids,ids);}catch{}
+    }
+    if(!contentMatches)continue;
+    if(!mapToPrior(node.id,prior.id))continue;
+    matched.set(newIndex,oldIndex);usedOld.add(oldIndex);
+    connectChildren(prior,node);changed=true;
+   }
+   return changed;
+  }
+
+  if(compatible){
+   const globalPairs=uniquePairs(0,oldRows.length,0,newRows.length);
+   // First retain globally unique rows, preserving the existing behavior.
+   // Repeat after local matches because a dependent row may become comparable
+   // only after its earlier local object has been reconciled.
+   let changed=true;
+   while(changed){
+    changed=tryPairs(globalPairs);
+    const anchors=[...matched].map(([newIndex,oldIndex])=>[oldIndex,newIndex]).sort((a,b)=>a[0]-b[0]);
+    if(!inOrder(anchors))continue;
+    const boundaries=[[-1,-1],...anchors,[oldRows.length,newRows.length]];
+    for(let i=0;i<boundaries.length-1;i++){
+     const [oldBefore,newBefore]=boundaries[i], [oldAfter,newAfter]=boundaries[i+1];
+     const localPairs=uniquePairs(oldBefore+1,oldAfter,newBefore+1,newAfter);
+     if(inOrder(localPairs))changed=tryPairs(localPairs)||changed;
+    }
+   }
+  }
+
+  // Unmatched rows get new identities only after all safe matches have been
+  // considered. Their child scopes are also fresh when the parent row changed.
+  for(let index=0;index<newRows.length;index++){
+   if(matched.has(index))continue;
+   const node=newRows[index];
+   mapToPrior(node.id,null);
+   connectChildren(null,node);
   }
  }
  reconcileScope(previous?.graph,graph,sameRootContext);
