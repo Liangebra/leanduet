@@ -57,6 +57,33 @@ did not show a speedup. These measurements are workload-specific, not a
 general latency guarantee. The structured backend integration compiles a
 generated interleaved sequence with Lean in CI.
 
+## Child-goal operations
+
+The browser describes universal introduction, implication introduction,
+intuitionistic negation introduction, disjunction elimination, and conjunction
+introduction with one bounded goal-operation record. Each record states the
+parent goal, child goal(s), local context additions, logical mode, and closure
+form. `cases` uses the same plan as the earlier explicit binary-`Or` parser;
+splitting `P ∧ Q` opens sibling goals `P` and `Q`, each in a child scope that
+inherits parent identities but receives no sibling declarations. The two child
+proofs return only after their own target is structurally matched. Nested
+scopes may use parent bindings; local assumptions and declarations are
+discharged at closure and cannot escape. Case and conjunction scopes share an
+eight-level nesting budget.
+
+The bounded syntax is `split conjunction`, followed by `first goal` and
+`second goal` blocks indented by two and four spaces. Blank source lines keep
+their physical addresses. An incomplete child remains represented alongside
+the other child's graph. Structural renderability is distinct from proof
+closure: a child containing `exact?` can still render, but its proof status is
+`open-obligation`; it is not described as verified or semantically faithful.
+Lean elaboration and the existing local patch check remain separate. The
+current operation set does not yet include existential goal construction,
+arbitrary local lemma blocks, classical reductio, or general inductive
+elimination. JavaScript tests compare edited child blocks with cold results;
+generated terms and the browser interaction require CI because Lean and
+Chromium are not installed in the local workspace.
+
 ## First graph implementation
 
 The natural draft returns a versioned revision-local graph. Context ordinals

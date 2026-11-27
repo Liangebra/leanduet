@@ -575,11 +575,16 @@ function previewDraft({edited=false}={}){
      d.dataset.objectId=draftIdentity.ids.get(x.graphId||'line:'+x.line)||'';
      d.append(element('small','Line '+x.line+' · '+x.status+(x.proofStatus?' · '+x.proofStatus:'')),element('span',x.raw));
      appendResolutionStatus(d,x);
-     if(x.step)d.append(element('code',['introduce','assume'].includes(x.step.kind)?'intro '+x.step.name:x.step.kind==='obtain'?'obtain ⟨'+x.step.name+', '+x.step.evidenceName+'⟩ from '+x.step.source+' : '+x.step.type+'; '+x.step.evidenceType:x.step.kind==='define'?'let '+x.step.name+' : '+x.step.type+' := '+x.step.value:x.step.kind==='establish'?'have '+x.step.name+' : '+x.step.type+' := '+x.step.application:x.step.kind==='cases'?'cases '+x.step.source+' into '+x.step.branches.map(b=>b.constructor+' '+b.name+': '+b.type).join(' / ')+'; establish '+x.step.name+' : '+x.step.type:'show '+x.step.type+'; '+x.step.application));
+     if(x.step)d.append(element('code',['introduce','assume'].includes(x.step.kind)?'intro '+x.step.name:x.step.kind==='obtain'?'obtain ⟨'+x.step.name+', '+x.step.evidenceName+'⟩ from '+x.step.source+' : '+x.step.type+'; '+x.step.evidenceType:x.step.kind==='define'?'let '+x.step.name+' : '+x.step.type+' := '+x.step.value:x.step.kind==='establish'?'have '+x.step.name+' : '+x.step.type+' := '+x.step.application:x.step.kind==='cases'?'cases '+x.step.source+' into '+x.step.branches.map(b=>b.constructor+' '+b.name+': '+b.type).join(' / ')+'; establish '+x.step.name+' : '+x.step.type:x.step.kind==='and-intro'?'split conjunction into '+x.step.subgoals.map(g=>g.id+': '+g.goal).join(' and '):'show '+x.step.type+'; '+x.step.application));
      if((x.step?.kind==='cases'||x.kind==='cases')&&x.branches?.length){
       const branches=element('details');branches.append(element('summary','Branch-local assumptions · common result '+(x.step?.name||x.name)+' : '+x.type));
       for(const branch of x.branches)branches.append(element('small',branch.constructor+' '+branch.name+' : '+branch.type+' ⊢ '+(branch.goal||x.type)+' · '+(branch.status||'open')));
       d.append(branches);
+     }
+     if((x.step?.kind==='and-intro'||x.kind==='and-intro')&&x.subgoals?.length){
+      const subgoals=element('details');subgoals.append(element('summary','Child goals · '+x.type));
+      for(const subgoal of x.subgoals)subgoals.append(element('small',subgoal.id+' · '+subgoal.goal+' · '+(subgoal.status||'open')));
+      d.append(subgoals);
      }
      if(x.reason)d.append(element('small',x.reason));
      if(x.constraints?.length)d.append(element('small','Later structural constraints: '+x.constraints.map(c=>'line '+c.line+' ('+c.status+')').join(', ')));

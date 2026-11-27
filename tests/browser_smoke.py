@@ -322,6 +322,36 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
             expect(about.locator("article#zh")).to_be_hidden()
             assert about.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1"),"about mobile overflow"
             about.close()
+            subgoal_page=browser.new_page(viewport={"width":1440,"height":900})
+            subgoal_page.on("pageerror",lambda error:errors.append(str(error)))
+            subgoal_page.goto(url)
+            pair_source="""theorem conjunction_demo (P Q : Prop) (hp : P) (hq : Q) : P ∧ Q := by
+  exact And.intro hp hq
+"""
+            subgoal_page.locator("#lean").fill(pair_source)
+            subgoal_page.once("dialog",lambda d:d.accept())
+            subgoal_page.locator("#adopt").click()
+            subgoal_page.locator('[data-view="typed"]').click()
+            subgoal_page.locator("#extractTerm").click()
+            expect(subgoal_page.locator("#typedStatus")).to_contain_text("Extracted from Lean elaboration",timeout=60000)
+            subgoal_page.locator("#typedTree").evaluate("(root) => root.querySelectorAll('details.typedNode').forEach(x=>x.open=true)")
+            pair_node=subgoal_page.locator(".typedNode").filter(has=subgoal_page.locator("summary").filter(has_text=__import__("re").compile("^Apply And\\.intro$"))).last
+            pair_node.locator(":scope > button.typedEdit").click()
+            subgoal_page.locator("#chainEditor summary").click()
+            subgoal_page.locator("#chainFormat").select_option("natural")
+            subgoal_page.locator("#chainText").fill("split conjunction\n  first goal\n    $P$ | hp\n  second goal\n    $Q$ | hq")
+            expect(subgoal_page.locator("#draftTranslation")).to_contain_text("split conjunction into first: P and second: Q")
+            expect(subgoal_page.locator("#draftTranslation")).to_contain_text("first · P · complete")
+            expect(subgoal_page.locator("#draftTranslation")).to_contain_text("second · Q · complete")
+            subgoal_page.locator("#compileChain").click()
+            expect(subgoal_page.locator("#patchTerm")).to_have_value("by\n  constructor\n  ·\n    show P\n    exact hp\n  ·\n    show Q\n    exact hq")
+            subgoal_page.locator("#checkPatch").click()
+            expect(subgoal_page.locator("#applyPatch")).to_be_enabled(timeout=120000)
+            subgoal_page.once("dialog",lambda d:d.accept())
+            subgoal_page.locator("#applyPatch").click()
+            subgoal_page.locator("#check").click()
+            expect(subgoal_page.locator("#verifyState")).to_have_text("Lean passed",timeout=120000)
+            subgoal_page.close()
             assert not errors, errors
             browser.close()
         print("Browser smoke test passed")

@@ -1,6 +1,7 @@
 import {compileFormula,renderFormula,sameScopedFormula} from './math-formula.mjs';
 import {buildDraftGraph} from './draft-graph.mjs';
-import {closeProofScope,extendProofScope,forkProofScope,proofScopeBindings,proofScopeFacts,proofScopeNames,resolveProofName} from './proof-scope.mjs';
+import {closeProofScope,extendProofScope,forkProofScope,proofDraftClosesGoal,proofScopeBindings,proofScopeFacts,proofScopeNames,resolveProofName} from './proof-scope.mjs';
+import {planGoalOperation} from './context-extension.mjs';
 import {renderChain} from './proof-chain.mjs';
 
 const ident='[A-Za-z_][A-Za-z0-9_\']{0,63}';
@@ -10,13 +11,6 @@ const branchPattern=new RegExp('^  (左支|右支|left case|right case)\\s+('+id
 export function hasCaseSplitHeader(text){
  const first=String(text||'').split(/\r?\n/).find(line=>line.trim());
  return !!first&&headerPattern.test(first);
-}
-
-function disjunction(sourceType){
- const ast=compileFormula(sourceType,{syntax:'lean'}).ast;
- if(ast.kind==='binary'&&ast.op==='∨')return [ast.left,ast.right];
- if(ast.kind==='call'&&ast.fn?.kind==='id'&&ast.fn.value==='Or'&&ast.args.length===2)return ast.args;
- throw Error('The cited local premise must have a supported disjunction type P ∨ Q.');
 }
 
 function hasFreeName(text,name){
@@ -90,7 +84,7 @@ function remapNode(node,frame){
    return value;
   }
   const out={};
-  for(const [k,v] of Object.entries(value))out[k]=k==='branches'?v:map(v,k);
+  for(const [k,v] of Object.entries(value))out[k]=['branches','subgoals'].includes(k)?v:map(v,k);
   return out;
  };
  return map(node);
@@ -101,19 +95,20 @@ export function remapProofGraph(graph,frame){
   constraintGroups:(graph.constraintGroups||[]).map(group=>({...group,id:mapId(group.id,frame)}))};
 }
 
-function graphNodes(graph){
+export function graphNodes(graph){
  const rows=[];
  for(const node of graph?.nodes||[]){
   rows.push(node);
   for(const branch of node.branches||[]){rows.push(branch);rows.push(...graphNodes(branch.graph));}
+  for(const subgoal of node.subgoals||[]){rows.push(subgoal);rows.push(...graphNodes(subgoal.graph));}
  }
  return rows;
 }
-function proofResultId(graph){
+export function proofResultId(graph){
  return [...(graph?.nodes||[])].reverse().find(node=>node.kind!=='context')?.id||null;
 }
 
-function proofContextDependencies(graph){
+export function proofContextDependencies(graph){
  const nodes=graphNodes(graph),byId=new Map(nodes.map(node=>[node.id,node]));
  const contexts=new Set(nodes.filter(node=>node.kind==='context').map(node=>node.id));
  const end=[...(graph?.nodes||[])].reverse().find(node=>node.kind!=='context');
@@ -133,7 +128,8 @@ function incomplete(input,parsed,branchResults,frame,{goal,choices,closedNames=[
  const line=parsed.head.line;
  const branches=branchResults.map(({branch,child,result,closed})=>({
   id:child.id,bindingId:child.localBindingIds[0],constructor:branch.constructor,name:branch.name,type:branch.type,goal:parsed.type,
-  resultId:proofResultId(result?.graph),dependencies:closed?.dependencies||[],graph:result?.graph||null,status:result?.complete?'complete':'open'
+  resultId:proofResultId(result?.graph),dependencies:closed?.dependencies||[],graph:result?.graph||null,
+  status:!closed?'open':proofDraftClosesGoal(result)?'complete':'open-obligation'
  }));
  const branchProofIds=branches.map(branch=>branch.resultId).filter(Boolean);
  const row={kind:'cases',raw:parsed.head.raw.trim(),line,status:'unresolved',proofStatus:'open',resolutionStatus,reason,
@@ -170,11 +166,13 @@ function incomplete(input,parsed,branchResults,frame,{goal,choices,closedNames=[
  * is elaborated in a forked identity context; only the common result returns.
  */
 export function compileCaseProgram(input,frame,{goal=null,choices=new Map(),lineOffset=0,closedNames=[],openBindings=[],incompleteContext=false,cache=null}={},compileSegment){
- if((frame.id.match(/\/case:/g)||[]).length>=8)throw Error('Nested disjunction scope is limited to eight levels.');
+ if((frame.id.match(/\/(?:case|subgoal):/g)||[]).length>=8)throw Error('Nested proof scopes are limited to eight levels.');
  const parsed=parseBlock(input,lineOffset),sourceBinding=resolveProofName(frame,parsed.source);
  if(sourceBinding.status!=='resolved'||typeof sourceBinding.binding.type!=='string')
   throw Error('The disjunction source must be a unique, typed parent-scope object.');
- const [leftType,rightType]=disjunction(sourceBinding.binding.type).map(renderFormula);
+ const goalOperation=planGoalOperation(parsed.type,{kind:'disjunction-elimination',source:parsed.source,
+  sourceType:sourceBinding.binding.type,branchNames:parsed.branches.map(branch=>branch.name)});
+ const [leftType,rightType]=goalOperation.subgoals.map(subgoal=>subgoal.contextDelta[0].type);
  if(resolveProofName(frame,parsed.resultName).status!=='missing')throw Error('The case result name must be fresh in the parent scope.');
  const parentResultId=scopedLineId(frame,parsed.head.line);
  const resultFrame=extendProofScope(frame,{id:parentResultId,name:parsed.resultName,type:parsed.type,kind:'cases'});
@@ -200,7 +198,7 @@ export function compileCaseProgram(input,frame,{goal=null,choices=new Map(),line
   // must match the remaining goal, not merely the original declaration.
   // This conservative structural check does not replace Lean elaboration.
   const conclusion=result.steps.at(-1);
-  if(conclusion?.kind!=='conclude'||!sameScopedFormula(conclusion.type,result.remainingGoal??parsed.type)){
+  if(!['conclude','and-intro'].includes(conclusion?.kind)||!sameScopedFormula(conclusion.type,result.remainingGoal??parsed.type)){
    const last=result.rows.at(-1);
    const reason='The branch conclusion does not structurally match its remaining goal.';
    firstOpen??={line:last?.line||branch.line,reason};
@@ -217,15 +215,23 @@ export function compileCaseProgram(input,frame,{goal=null,choices=new Map(),line
   preserveTail:true,compileSegment,cache});
  const branches=branchResults.map(({branch,child,result,closed})=>({
   id:child.id,bindingId:child.localBindingIds[0],constructor:branch.constructor,name:branch.name,type:branch.type,goal:parsed.type,
-  steps:result.steps,resultId:proofResultId(result.graph),dependencies:closed.dependencies,graph:result.graph,status:'complete'
+  steps:result.steps,resultId:proofResultId(result.graph),dependencies:closed.dependencies,graph:result.graph,status:proofDraftClosesGoal(result)?'complete':'open-obligation'
  }));
  const branchDependencies=[...new Set(branches.flatMap(branch=>branch.dependencies))];
  const inheritedOpenIds=new Set(openBindings.map(name=>resolveProofName(frame,name)).filter(result=>result.status==='resolved').map(result=>result.binding.id));
- const proofStatus=branchDependencies.some(id=>inheritedOpenIds.has(id))?'depends-on-open':'candidate';
+ const hasOpenProof=branchResults.some(({result})=>!proofDraftClosesGoal(result));
+ const proofStatus=hasOpenProof?'open':branchDependencies.some(id=>inheritedOpenIds.has(id))?'depends-on-open':'candidate';
  const branchProofIds=branches.map(branch=>branch.resultId).filter(Boolean);
- const step={kind:'cases',source:parsed.source,name:parsed.resultName,type:parsed.type,branches};
+ const scopedOperation={...goalOperation,subgoals:branchResults.map(({branch,child})=>{
+  const index=branch.constructor==='inl'?0:1,subgoal=goalOperation.subgoals[index];
+  return {...subgoal,contextDelta:subgoal.contextDelta.map(binding=>({...binding,
+   id:child.localBindingIds[0],scopeId:child.id
+  }))};
+ })};
+ const step={kind:'cases',source:parsed.source,name:parsed.resultName,type:parsed.type,branches,goalOperation:scopedOperation};
  const caseRow={kind:'cases',name:parsed.resultName,type:parsed.type,raw:parsed.head.raw.trim(),line:parsed.head.line,
-  graphId:parentResultId,status:'translated',proofStatus,resolutionStatus:proofStatus==='depends-on-open'?'depends-on-open':'candidate-unverified',step,branches,branchDependencies,branchProofIds,dependencies:[sourceBinding.binding.id,...branchDependencies,...branchProofIds]};
+  graphId:parentResultId,status:'translated',proofStatus,resolutionStatus:proofStatus==='open'?'open-obligation':proofStatus==='depends-on-open'?'depends-on-open':'candidate-unverified',
+  step,goalOperation:scopedOperation,branches,branchDependencies,branchProofIds,dependencies:[sourceBinding.binding.id,...branchDependencies,...branchProofIds]};
  // Names introduced in a branch cannot be reinterpreted as unqualified
  // global rules after closure. Parent bindings retain their original meaning;
  // a fresh parent introduction may deliberately reuse a spelling.

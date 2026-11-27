@@ -11,6 +11,7 @@ function allNodes(graph){
   for(const node of current?.nodes||[]){
    if(!seen.has(node.id)){seen.add(node.id);out.push(node);}
    for(const branch of node.branches||[])visit(branch.graph);
+   for(const subgoal of node.subgoals||[])visit(subgoal.graph);
   }
  }
  visit(graph);return out;
@@ -100,6 +101,17 @@ export function reconcileDraftIdentity(previous,graph){
    reconcileScope(prior?.graph,branch.graph,compatible);
   }
  }
+ function pairSubgoals(oldNode,newNode,eligible){
+  const oldSubgoals=oldNode?.subgoals||[];
+  for(const subgoal of newNode.subgoals||[]){
+   const matchesByKey=oldSubgoals.filter(candidate=>candidate.key&&candidate.key===subgoal.key);
+   const prior=matchesByKey.length===1?matchesByKey[0]:null;
+   let compatible=!!(eligible&&prior&&prior.goal===subgoal.goal&&prior.graph&&subgoal.graph);
+   if(compatible){mapToPrior(subgoal.id,prior.id);}
+   else if(subgoal.id&&!ids.has(subgoal.id))ids.set(subgoal.id,fresh());
+   reconcileScope(prior?.graph,subgoal.graph,compatible);
+  }
+ }
  function reconcileScope(oldGraph,newGraph,allowed){
   if(!newGraph)return;
   const oldNodes=oldGraph?.nodes||[],newNodes=newGraph.nodes||[];
@@ -124,6 +136,7 @@ export function reconcileDraftIdentity(previous,graph){
    }
    mapToPrior(node.id,prior?.id);
    if(node.kind==='cases')pairBranches(prior,node,!!prior&&compatible);
+   if(node.subgoals?.length)pairSubgoals(prior,node,!!prior&&compatible);
   }
  }
  reconcileScope(previous?.graph,graph,sameRootContext);

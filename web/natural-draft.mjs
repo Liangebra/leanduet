@@ -1,12 +1,13 @@
 import {compileFormula,sameScopedFormula} from './math-formula.mjs';
 import {buildDraftGraph} from './draft-graph.mjs';
-import {extendGoal,inferIntroduction,existentialBindings} from './context-extension.mjs';
+import {planGoalOperation,existentialBindings} from './context-extension.mjs';
 import {constrainPropositions,candidateChoice} from './proposition-constraints.mjs';
 import {discourseFrame,discourseCandidates} from './discourse.mjs';
 import {parseRuleIntent} from './rule-intent.mjs';
 import {renderChain} from './proof-chain.mjs';
 import {premiseFrame,contextCandidates,formulaPremiseSentence,citationCandidates,implicitCandidates,structuralRules} from './context-grammar.mjs';
 import {compileCaseProgram,hasCaseSplitHeader,remapProofGraph} from './case-split.mjs';
+import {compileConjunctionGoal,hasConjunctionGoalHeader} from './proof-subgoals.mjs';
 import {extendProofScope,proofScopeFacts,proofScopeNames,rootProofScope} from './proof-scope.mjs';
 const marker=/^(?:(?:therefore|hence|thus|clearly|obviously|indeed|then)(?:\s*[,，:：]\s*|\s+)|(?:因此|从而|于是|显然|事实上|故|则)[，、：:\s]*)/iu;
 const formulaPattern=/\$[^$\n]+\$|\\\([^]*?\\\)|\\\[[^]*?\\\]/g;
@@ -222,11 +223,15 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
       if(blocked)throw resolutionError('Resolve preceding incomplete wording before extending the goal.','needs-context');
       if(occupied.has(p.name))throw resolutionError('This local name already exists.','incompatible-choice');
       if(choices.has(line))throw resolutionError('An introduction has no proof candidate choice.','incompatible-choice');
-     p={...p,type:p.type||inferIntroduction(remainingGoal,p.kind)};
+     const goalOperation=planGoalOperation(remainingGoal,{kind:p.kind,name:p.name,type:p.type});
+     p={...p,type:goalOperation.subgoals[0].contextDelta[0].type};
      const names=freeNames(p.type);
      for(const n of names)if((planned.has(n)||occupied.has(n)||closed.has(n))&&!visible.has(n))throw Error('Ambiguous or forward reference in introduction: '+n);
-     remainingGoal=extendGoal(remainingGoal,p);
-     const step={kind:p.kind,name:p.name,type:p.type};
+     remainingGoal=goalOperation.subgoals[0].goal;
+     const scopedOperation={...goalOperation,subgoals:goalOperation.subgoals.map(subgoal=>({...subgoal,
+      contextDelta:subgoal.contextDelta.map(binding=>({...binding,id:'line:'+line}))
+     }))};
+     const step={kind:p.kind,name:p.name,type:p.type,goalOperation:scopedOperation};
      occupied.add(p.name);visible.add(p.name);facts.set(p.name,p.type);
      const dependencies=names.filter(n=>openNames.has(n));
      if(dependencies.length)openNames.add(p.name);
@@ -395,10 +400,11 @@ function evaluateScopeAware(input,scope=[],context=new Map(),options={}){
   // keep the lighter row-prefix cache; cloning a whole inner graph on every
   // branch hit costs more than recompiling that bounded wrapper.
   const shared=currentFrame.id==='root'?segmentOptions.cache:null;
-  const rootCase=String(text||'').split(/\r?\n/).some(line=>!line.startsWith(' ')&&!line.startsWith('\t')&&hasCaseSplitHeader(line.trim()));
+  const rootBlock=String(text||'').split(/\r?\n/).some(line=>!line.startsWith(' ')&&!line.startsWith('\t')&&
+   (hasCaseSplitHeader(line.trim())||hasConjunctionGoalHeader(line.trim())));
   // Small linear fragments are cheaper to rebuild than to deep-clone. Reserve
   // whole-result memoization for scoped programs or substantial source text.
-  if(!shared||(!rootCase&&String(text||'').length<512))return compileSegmentFresh(text,currentFrame,segmentOptions);
+  if(!shared||(!rootBlock&&String(text||'').length<512))return compileSegmentFresh(text,currentFrame,segmentOptions);
   const key=segmentCacheKey(text,currentFrame,segmentOptions),memo=shared.segmentResults??=new Map();
   const cached=memo.get(key);
   if(cached){
@@ -417,20 +423,32 @@ function evaluateScopeAware(input,scope=[],context=new Map(),options={}){
  function compileSegmentFresh(text,currentFrame,segmentOptions={}){
   const names=proofScopeNames(currentFrame),facts=proofScopeFacts(currentFrame);
   const lines=String(text||'').split(/\r?\n/),first=lines.findIndex(line=>line.trim());
-  const caseIndex=lines.findIndex((line,index)=>index>=0&&!line.startsWith(' ')&&!line.startsWith('\t')&&hasCaseSplitHeader(line.trim()));
-  if(caseIndex>=0&&caseIndex===first)return compileCaseProgram(text,currentFrame,segmentOptions,compileSegment);
-  if(caseIndex>first){
+  const blockIndex=lines.findIndex(line=>!line.startsWith(' ')&&!line.startsWith('\t')&&
+   (hasCaseSplitHeader(line.trim())||hasConjunctionGoalHeader(line.trim())));
+  const blockKind=blockIndex>=0&&hasCaseSplitHeader(lines[blockIndex].trim())?'cases':'conjunction';
+  if(blockIndex>=0&&blockIndex===first){
+   if(blockKind==='cases')return compileCaseProgram(text,currentFrame,segmentOptions,compileSegment);
+   return compileConjunctionGoal(text,currentFrame,segmentOptions,compileSegment,parseLine);
+  }
+  if(blockIndex>first){
    const lineOffset=segmentOptions.lineOffset||0;
-   const prefix=draftProof(lines.slice(0,caseIndex).join('\n'),names,facts,{...segmentOptions,lineOffset,continuation:true,
+   const prefix=draftProof(lines.slice(0,blockIndex).join('\n'),names,facts,{...segmentOptions,lineOffset,continuation:true,
     cache:cacheForFrame(currentFrame,segmentOptions.cache),scopeIds:currentFrame.bindings.map(binding=>binding.id)});
    prefix.graph=remapProofGraph(prefix.graph,currentFrame);
    const nextFrame=extendFromDraft(currentFrame,prefix);
    const hasOpenText=prefix.rows.some(row=>row.status==='unresolved');
-   const following=compileCaseProgram(lines.slice(caseIndex).join('\n'),nextFrame,{...segmentOptions,
-    goal:prefix.remainingGoal,lineOffset:lineOffset+caseIndex,
-    openBindings:[...new Set([...(segmentOptions.openBindings||[]),...(prefix.openBindings||[])])],
-    incompleteContext:!!segmentOptions.incompleteContext||hasOpenText
-   },compileSegment);
+   const remainingText=lines.slice(blockIndex).join('\n');
+   const following=blockKind==='cases'
+    ?compileCaseProgram(remainingText,nextFrame,{...segmentOptions,
+      goal:prefix.remainingGoal,lineOffset:lineOffset+blockIndex,
+      openBindings:[...new Set([...(segmentOptions.openBindings||[]),...(prefix.openBindings||[])])],
+      incompleteContext:!!segmentOptions.incompleteContext||hasOpenText
+     },compileSegment)
+     :compileConjunctionGoal(remainingText,nextFrame,{...segmentOptions,
+      goal:prefix.remainingGoal,lineOffset:lineOffset+blockIndex,
+      openBindings:[...new Set([...(segmentOptions.openBindings||[]),...(prefix.openBindings||[])])],
+      incompleteContext:!!segmentOptions.incompleteContext||hasOpenText,cache:segmentOptions.cache
+     },compileSegment,parseLine);
    return combineSegments(prefix,following);
   }
   const result=draftProof(text,names,facts,{...segmentOptions,lineOffset:segmentOptions.lineOffset||0,

@@ -49,6 +49,12 @@ export function forkProofScope(parent,{id,goal,binding,allowShadow=false}){
  return {...extended,localBindingIds:[binding.id]};
 }
 
+/** Open a child goal with the parent's context and no new assumption. */
+export function forkGoalScope(parent,{id,goal}){
+ if(typeof id!=='string'||!id||id===parent.id)throw Error('A child proof scope needs a distinct identity.');
+ return {id,parentId:parent.id,goal:formulaKey(goal),goalText:goal,bindings:[...parent.bindings],localBindingIds:[]};
+}
+
 /**
  * Close one local proof scope. The branch result must prove its own target.
  * Dependencies on declarations introduced inside the scope are discharged;
@@ -65,6 +71,13 @@ export function closeProofScope(parent,child,{proofType,dependencies=[],localIds
   else if(!childIds.has(id))throw Error('A dependency escapes from an unrelated proof scope.');
  }
  return {type:child.goalText,dependencies:[...returned],discharged:[...childIds]};
+}
+
+/** A renderable draft may still contain holes or depend on unfinished premises. */
+export function proofDraftClosesGoal(result){
+ if(!result?.complete)return false;
+ return !(result.rows||[]).some(row=>row.status==='unresolved'||
+  ['open','depends-on-open'].includes(row.proofStatus)||row.step?.application==='?');
 }
 
 /**

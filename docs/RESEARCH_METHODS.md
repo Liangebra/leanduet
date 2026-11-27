@@ -37,8 +37,18 @@ properties. No upstream source is copied.
 
 ## Next implementation gates
 
-Continue stage 5 with goal-directed quantifiers and explicit witness scopes.
-Then support branch-local scopes with independent goals, structural alternatives,
-declaration dependency indexing and faithful inference decomposition. Each gate
-requires scope/identity regression tests, independent Lean compilation of emitted
-fragments, and incremental-vs-cold evaluation tests. Preserve the existing order.
+Stage 2 now has shared goal-operation plans for universal and implication
+introduction, intuitionistic negation introduction, disjunction elimination,
+and conjunction introduction. The conjunction block opens two isolated child
+goals; local declarations and open proof obligations remain scope-local, and
+the nested identity matcher preserves only uniquely aligned child scopes.
+Generated Lean and the browser interaction are checked by repository CI
+before merge. This does not cover named local-lemma return, existential goal
+construction, equivalence introduction, or classical reductio.
+
+Next, complete those bounded proof operations over the same child-scope
+contract. Then extend stage 3 with distinct structure candidates for arbitrary
+elements, existential witnesses, definitions, subtype objects, and unresolved
+existence. Each gate requires scope/identity regression tests, independent Lean
+compilation of emitted fragments, and incremental-versus-cold evaluation tests.
+Preserve the existing eight-stage order.
