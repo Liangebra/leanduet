@@ -42,3 +42,57 @@ test('a downstream edit invalidates the earlier inferred type',()=>{
  assert.equal(r.reusedRows,0);assert.equal(r.rows[0].step.type,'Q');
  assert.deepEqual(r.rows,draftProof(b,scope,facts).rows);
 });
+
+test('a binary relation constrains two unknown propositions jointly',()=>{
+ const ctx=new Map([['h','P ∧ Q'],['k','(P → R) ∧ (Q → R)']]);
+ const text='建立 hp : $?$,由 h\n建立 hf : $?$,由 k\n由 hp 与 hf 得到 $R$';
+ const r=draftProof(text,[...ctx.keys()],ctx);
+ assert.equal(r.complete,false);
+ const group=r.graph.constraintGroups[0];
+ assert.deepEqual(group.variables.map(v=>v.name),['hp','hf']);
+ assert.deepEqual(group.assignments,[['And.left h','And.left k'],['And.right h','And.right k']]);
+ assert.equal(r.rows[0].candidates.length,2);assert.equal(r.rows[1].candidates.length,2);
+ const chosen=draftProof(text,[...ctx.keys()],ctx,{choices:new Map([[2,'And.right k']])});
+ assert.equal(chosen.complete,true);
+ assert.equal(chosen.rows[0].step.application,'And.right h');
+ assert.equal(chosen.rows[1].step.application,'And.right k');
+ assert.equal(chosen.rows[2].step.application,'hf hp');
+ const conflict=draftProof(text,[...ctx.keys()],ctx,{choices:new Map([[1,'And.left h'],[2,'And.right k']])});
+ assert.equal(conflict.complete,false);
+ assert.equal(conflict.graph.constraintGroups[0].status,'contradiction');
+});
+test('an additional unary constraint selects the entire correlated component',()=>{
+ const ctx=new Map([['h','P ∧ Q'],['k','(P → R) ∧ (Q → R)'],['g','P → S']]);
+ const text='建立 hp : $?$,由 h\n建立 hf : $?$,由 k\n由 hp 与 hf 得到 $R$\n由 hp 与 g 得到 $S$';
+ const r=draftProof(text,[...ctx.keys()],ctx);
+ assert.equal(r.complete,true);
+ assert.equal(r.rows[0].step.application,'And.left h');assert.equal(r.rows[1].step.application,'And.left k');
+ assert.deepEqual(r.graph.constraintGroups[0].assignments,[['And.left h','And.left k']]);
+});
+test('future holes cannot constrain a relation before their introduction',()=>{
+ const ctx=new Map([['h','P ∧ Q'],['k','(P → R) ∧ (Q → R)']]);
+ const r=draftProof('建立 hp : $?$,由 h\n由 hp 与 hf 得到 $R$\n建立 hf : $?$,由 k\n$R$',[...ctx.keys()],ctx);
+ assert.equal(r.complete,false);
+ assert.equal(r.graph.constraintGroups.length,2);
+ assert.equal(r.rows[0].candidates.length,2);
+});
+test('a backward constraint edit invalidates every correlated hole',async()=>{
+ const {dependentNodes}=await import('../web/draft-graph.mjs');
+ const ctx=new Map([['h','P ∧ Q'],['k','(P → R) ∧ (Q → R)']]);
+ const r=draftProof('建立 hp : $?$,由 h\n建立 hf : $?$,由 k\n由 hp 与 hf 得到 $R$',[...ctx.keys()],ctx);
+ assert.deepEqual(dependentNodes(r.graph,['line:3']),['line:1','line:2','line:3']);
+});
+test('finite relational search never treats truncated enumeration as a solution',async()=>{
+ const {solveFiniteRelations}=await import('../web/proposition-constraints.mjs');
+ const vars=Array.from({length:6},(_,i)=>({name:'v'+i,line:i+1,domain:[{term:'l'+i},{term:'r'+i}]}));
+ const r=solveFiniteRelations(vars,[],new Map(),{limit:2});
+ assert.equal(r.status,'overflow');assert.equal(r.assignments.length,0);
+ assert.ok(r.candidates.every(c=>c.length===2));
+});
+test('a globally inconsistent cycle can have locally supported relations',async()=>{
+ const {solveFiniteRelations}=await import('../web/proposition-constraints.mjs');
+ const vars=['a','b','c'].map((name,i)=>({name,line:i+1,domain:[{term:'0'},{term:'1'}]}));
+ const relations=[['a','b'],['b','c'],['a','c']].map((names,i)=>({names,status:'matched',tuples:i===2?[['0','1'],['1','0']]:[['0','0'],['1','1']]}));
+ const r=solveFiniteRelations(vars,relations);
+ assert.equal(r.status,'contradiction');assert.deepEqual(r.assignments,[]);
+});

@@ -508,6 +508,7 @@ function previewDraft({edited=false}={}){
      if(x.step)d.append(element('code',['introduce','assume'].includes(x.step.kind)?'intro '+x.step.name:x.step.kind==='define'?'let '+x.step.name+' : '+x.step.type+' := '+x.step.value:x.step.kind==='establish'?'have '+x.step.name+' : '+x.step.type+' := '+x.step.application:'show '+x.step.type+'; '+x.step.application));
      if(x.reason)d.append(element('small',x.reason));
      if(x.constraints?.length)d.append(element('small','Later structural constraints: '+x.constraints.map(c=>'line '+c.line+' ('+c.status+')').join(', ')));
+     if(x.constraintGroup?.variables.length>1){const group=x.constraintGroup;d.append(element('small','Joint constraints · '+group.variables.map(v=>v.name).join(', ')+' · '+(group.status==='overflow'?'search incomplete':group.assignments.length+' compatible assignments')));}
      if(x.dependencies?.length)d.append(element('small','Depends on open obligations: '+x.dependencies.join(', ')));
      for(const c of x.candidates||[]){
       d.append(element('code',(c.type?c.type+' ← ':'')+c.term+' · '+c.schema));

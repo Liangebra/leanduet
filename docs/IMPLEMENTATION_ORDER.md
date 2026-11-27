@@ -162,3 +162,18 @@ references participate in a fixed-point invalidation closure, not the acyclic
 proof dependency graph. Ordinary proposition annotations reject known
 forward/ambiguous local references and propagate type-level open dependencies.
 These are conservative scope and cache invariants, not Lean type checking.
+
+## Joint finite proposition constraints
+
+Independently sourced conjunction projection holes in a linear scope form
+finite domains. Explicit later inferences contribute support relations over
+all cited hole variables, rather than independently pruning their types.
+Connected components of supported relations are solved by a bounded join
+with partial-support pruning. The graph stores shared compatible assignments,
+not just marginal candidate lists. User choices are included as constraints,
+and inconsistent combinations are reported. Unsupported relations do not
+prune; overflow yields no claimed solutions and retains the original domains.
+Scope introductions and definitions are barriers; dependent-source holes,
+implicit inference, arbitrary theorem search and full Lean type inference
+remain outside this subset. Joint constraint edges participate in fixed-point
+invalidation, separately from proof dependencies.

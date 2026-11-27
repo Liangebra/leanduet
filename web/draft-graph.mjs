@@ -33,7 +33,7 @@ export function buildDraftGraph(scope,facts,rows,{goal=null}={}){
   const parsed=formula(type);
   declare({id:'context:'+i,kind:'context',name,type,formula:parsed,dependencies:parsed.refs,ambiguousName:counts.get(name)!==1});
  }
- const scopeRefs=[];
+ const scopeRefs=[],constraintGroups=new Map();
  for(const row of rows){
   const id='line:'+row.line,step=row.step,parsed=formula(row.type),value=step?.kind==='define'?formula(step.value):null;
   function alternative(c){
@@ -42,16 +42,19 @@ export function buildDraftGraph(scope,facts,rows,{goal=null}={}){
     dependencies:[...new Set([...refs(c.premises||[]),...(candidateFormula?.refs||[])])]};
   }
   const alternatives=(row.candidates||[]).map((c,i)=>({id:id+':candidate:'+i,...alternative(c)}));
+  const group=row.constraintGroup;
+  if(group)constraintGroups.set(group.id,group);
+  const constraintRefs=[...new Set([...(row.constraints||[]).map(c=>'line:'+c.line),...(group?.variables||[]).filter(v=>v.line!==row.line).map(v=>'line:'+v.line),...(group?.relations||[]).map(r=>'line:'+r.line)])];
   const application=step?.application||null;
   const selected=application&&application!=='?'?alternatives.find(c=>c.term===application):null;
   const proofRefs=application&&application!=='?'?(selected?.dependencies||refs(application.split(/\s+/))):[];
   const node={id,kind:step?.kind||'unresolved',name:step?.name||(row.kind==='infer-proposition'?row.name:null),type:row.type||null,raw:row.raw,modifiers:row.modifiers||[],formula:parsed,
-   proofStatus:row.proofStatus||'open',status:row.status,application,alternatives,value,...(row.domain?{origin:'infer-proposition',typeDomain:row.domain.map(alternative),constraints:row.constraints,constraintRefs:(row.constraints||[]).map(c=>'line:'+c.line)}:{}),
+   proofStatus:row.proofStatus||'open',status:row.status,application,alternatives,value,...(row.domain?{origin:'infer-proposition',typeDomain:row.domain.map(alternative),constraints:row.constraints,constraintRefs,constraintGroup:group?.id||null}:{}),
    selectedCandidate:selected?.id||null,scopeRefs:[...scopeRefs],dependencies:[...new Set([...scopeRefs,...parsed.refs,...(value?.refs||[]),...proofRefs])]};
   declare(node);
   if(['introduce','assume'].includes(node.kind))scopeRefs.push(id);
  }
- return {schema:1,identity:'revision-local',goal,nodes};
+ return {schema:1,identity:'revision-local',goal,nodes,constraintGroups:[...constraintGroups.values()]};
 }
 export function dependentNodes(graph,ids,{includeAlternatives=true}={}){
  const affected=new Set(ids);
