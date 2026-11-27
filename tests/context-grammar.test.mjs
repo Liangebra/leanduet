@@ -26,6 +26,12 @@ test('a typed False premise offers constructive ex-falso but not double-negation
  assert.equal(implicitCandidates('P',['hnn'],doubleNegationFacts).candidates.length,0);
 });
 
+test('an unsupported type-level local does not suppress a supported premise candidate',()=>{
+ const facts=new Map([['P','Prop'],['hFalse','False']]);
+ assert.deepEqual(contextCandidates('Q',['P','hFalse'],facts).map(candidate=>candidate.term),['False.elim hFalse']);
+ assert.equal(implicitCandidates('Q',['P','hFalse'],facts).candidates[0].term,'False.elim hFalse');
+});
+
 test('ambiguous identical conjuncts remain distinct candidate proofs',()=>{
  const facts=new Map([['h','P ∧ P']]);
  const r=draftProof('$P$，由 h',['h'],facts);
