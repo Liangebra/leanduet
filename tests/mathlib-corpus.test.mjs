@@ -11,7 +11,7 @@ const context=new Map(Object.entries(example.context));
 test('linear-map prose candidate and local edit agree with full recomputation',()=>{
  const session=createDraftSession();
  const original=session.evaluate(example.naturalDraft,scope,context,{goal:example.goal});
- assert.equal(original.complete,true);
+ assert.equal(original.complete,true,JSON.stringify(original.rows,null,2));
  assert.equal(original.steps.at(-1).application,example.expectedStructure[0].application);
  const edited=session.evaluate(example.editedNaturalDraft,scope,context,{goal:example.editedGoal});
  const cold=compileNaturalDraft(example.editedNaturalDraft,scope,context,{goal:example.editedGoal});

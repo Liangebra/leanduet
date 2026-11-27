@@ -149,7 +149,12 @@ assert.deepEqual(stripReuse(edited),stripReuse(cold));
 if(!edited.complete||edited.steps.at(-1)?.application!==example.editedExpectedStructure[0].application)throw new Error(JSON.stringify(edited));
 console.log(JSON.stringify({term:first.term,editedTerm:edited.term}));
 """
-linear_terms=json.loads(subprocess.run(["node","--input-type=module"],input=linear_script,text=True,cwd=root,check=True,capture_output=True).stdout)
+linear_process=subprocess.run(["node","--input-type=module"],input=linear_script,text=True,cwd=root,check=False,capture_output=True)
+if linear_process.returncode:
+    print(linear_process.stdout)
+    print(linear_process.stderr,file=sys.stderr)
+    raise SystemExit(linear_process.returncode)
+linear_terms=json.loads(linear_process.stdout)
 linear_source=linear_case["leanImport"]+"\n\n"+linear_case["leanTheoremHeader"].replace(
     "linear_map_add_example","linear_map_add_from_natural")+" := "+linear_terms["term"]+"\n"
 edited_header=linear_case["leanTheoremHeader"].replace("linear_map_add_example","linear_map_add_edited").replace(
