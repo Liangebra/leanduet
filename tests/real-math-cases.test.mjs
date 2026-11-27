@@ -31,7 +31,7 @@ test('compact image preserves an explicitly named Mathlib rule and premises',()=
 });
 
 test('Mathlib corpus seed matches the existing structural candidate',()=>{
- assert.equal(mathlibCases.length,1);
+ assert.equal(mathlibCases.length,2);
  for(const example of mathlibCases){
   const result=compileNaturalDraft(example.naturalDraft,example.scope,new Map(Object.entries(example.context)),{goal:example.goal});
   assert.equal(result.complete,true,example.id);
@@ -39,6 +39,18 @@ test('Mathlib corpus seed matches the existing structural candidate',()=>{
   assert.equal(result.rows.at(-1).proofStatus,'candidate',example.id);
   assert.match(example.alignmentStatus,/draft correspondence/);
  }
+});
+
+test('the subgroup fixture keeps its cited rule and both membership premises',()=>{
+ const example=mathlibCases.find(value=>value.id==='subgroup-multiplication-closure');
+ const result=compileNaturalDraft(example.naturalDraft,example.scope,new Map(Object.entries(example.context)),{goal:example.goal});
+ assert.equal(result.complete,true);
+ assert.deepEqual(result.steps.map(step=>step.application),['Subgroup.mul_mem H hx hy']);
+ const node=result.graph.nodes.find(value=>value.kind==='conclude');
+ assert.ok(node.formula.refs.includes('context:1'),'the conclusion depends on the subgroup object');
+ assert.ok(node.dependencies.includes('context:4'),'the proof cites the first membership fact');
+ assert.ok(node.dependencies.includes('context:5'),'the proof cites the second membership fact');
+ assert.match(example.alignmentStatus,/explicit rule and premises are checked/);
 });
 
 test('compact-image local lemma returns only its stated proposition',()=>{

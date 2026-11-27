@@ -26,5 +26,31 @@
     "leanTheoremHeader": "theorem compact_image_example (X Y : Type) [TopologicalSpace X] [TopologicalSpace Y] (s : Set X) (f : X → Y) (hs : IsCompact s) (hf : Continuous f) : IsCompact (f '' s)",
     "leanProofBody": "by\n  exact IsCompact.image hs hf",
     "alignmentStatus": "draft correspondence; Lean candidate is checked in the pinned Mathlib integration"
+  },
+  {
+    "id": "subgroup-multiplication-closure",
+    "domain": "abstract algebra",
+    "description": "A subgroup is closed under the group multiplication.",
+    "naturalProof": "Because x and y both belong to H and H is a subgroup, their product xy belongs to H.",
+    "naturalDraft": "因此 $x * y ∈ H$，由子群乘法封闭性，使用 H、hx 和 hy",
+    "goal": "x * y ∈ H",
+    "scope": ["G", "H", "x", "y", "hx", "hy"],
+    "context": {
+      "H": "Subgroup G",
+      "hx": "x ∈ H",
+      "hy": "y ∈ H"
+    },
+    "expectedStructure": [
+      {
+        "kind": "conclude",
+        "claim": "((x * y) ∈ H)",
+        "application": "Subgroup.mul_mem H hx hy"
+      }
+    ],
+    "expectedStepKinds": ["conclude"],
+    "leanImport": "import Mathlib.Algebra.Group.Subgroup.Basic",
+    "leanTheoremHeader": "theorem subgroup_mul_closure_example {G : Type} [Group G] (H : Subgroup G) {x y : G} (hx : x ∈ H) (hy : y ∈ H) : x * y ∈ H",
+    "leanProofBody": "by\n  exact H.mul_mem hx hy",
+    "alignmentStatus": "draft correspondence; explicit rule and premises are checked in the pinned Mathlib integration"
   }
 ]
