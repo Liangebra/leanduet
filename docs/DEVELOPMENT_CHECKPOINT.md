@@ -4,22 +4,20 @@ Updated 2026-11-27 (Asia/Shanghai).
 
 ## Active work
 
-Main is based on `4f9f925` (PR #29). PR [#22](https://github.com/Liangebra/leanduet/pull/22) and [#29](https://github.com/Liangebra/leanduet/pull/29) are merged. PR #29's Mathlib workflow and full test workflow passed; its set-image case generates and compiles an `IsCompact.image` candidate with the required continuity and compactness premises.
+Main is at merge commit `06e6c1d`, which includes PRs [#22](https://github.com/Liangebra/leanduet/pull/22), [#29](https://github.com/Liangebra/leanduet/pull/29), and [#32](https://github.com/Liangebra/leanduet/pull/32). PR #32's latest head `00b870b` passed the full Tests workflow, browser smoke, and Mathlib topology integration before merge.
 
-PR [#32](https://github.com/Liangebra/leanduet/pull/32) adds explicit semantic-resolution states and composes ordinary inference lines with multiple binary-disjunction blocks, including a linear prefix inside a branch. The scope parser carries physical line offsets; each branch receives a lexical child scope; only a common branch result returns to its parent. An unresolved prefix remains represented and prevents structural completion while later blocks remain available. The first browser run failed because its fixture exceeded the Lean extractor's depth limit; the theorem was shortened in commit `0907149`, then its natural-language types were aligned with the shortened Lean context in commit `00b870b`. The Mathlib job passed on `0907149`, but the new head `00b870b` has fresh CI running. On the earlier head, the Tests workflow passed the unit suites, Lean model files, semantic/search/LSP integrations and generated Lean interpretation fixtures; the corrected browser smoke has not yet completed.
+PR [#33](https://github.com/Liangebra/leanduet/pull/33) adds bounded per-scope row-prefix caches and exact replay memoization for scoped proof drafts. Cache keys include lexical binding identities, names, types and kinds, goals, source offsets, choices, closed names, open obligations, and continuation status. Nested cache state is LRU-bounded to 128 scope entries; exact root results are bounded to 32 entries. Reset clears both. Tests compare edited results with cold evaluation and cover changed parent identity, a newly added same-typed candidate (a negative dependency), and mutation isolation for memoized results.
 
-The local `research/scoped-draft-cache` worktree adds bounded scope-local row caches and a root-level exact-result cache for scoped programs. Cache keys include lexical binding identities, names, types and kinds, goals, source offsets, choices, closed names, open obligations, and continuation status. Nested cache state is LRU-bounded to 128 scope entries; exact root results are bounded to 32 entries. Reset clears both. Tests compare edited results with cold evaluation and cover changed parent identity, a newly added same-typed candidate (a negative dependency), and mutation isolation for memoized results.
-
-This continues stage 2 and stage 7 of the original eight-stage order; PR #32 also makes progress on stage 3 by exposing distinct resolution states. No general natural-language parser, arbitrary inductive elimination, or broad Lean type inference is introduced.
+This continues stage 2 and stage 7 of the original eight-stage order; PR #32 also advances stage 3 by exposing separate resolution states. No general natural-language parser, arbitrary inductive elimination, or broad Lean type inference is introduced.
 
 The base already supports intuitionistic negation introduction in a linear draft: assuming `P` under goal `¬ P`/`Not P` leaves `False`, and the fixture requires an explicit contradiction proof such as `hnot hp`. `False.elim` is handled separately. This does not yet provide a reusable nested child-goal scope for arbitrary local subproofs.
 
 ## Checked local state
 
-- In the cache worktree: Node suite 209/209; Python unit suite 17/17; Python byte-compilation and `git diff --check` passed.
-- The Lean executable and Chromium are not installed in this local workspace. The PR #32 GitHub run is the source of Lean and real-browser evidence; its browser step must complete on the corrected fixture before merge. The cache changes are JavaScript-only and still require CI after a PR is opened.
-- `tests/draft-benchmark.mjs` checks incremental/cold structural equality across 160 samples per case after 24 warmups, on Node v24.22.3 / Linux x64. In the latest run, medians/P95 in ms were: linear 16-line cold `0.362/1.609`; linear replay `1.377/2.552`; final-line edit `1.235/1.960`; dependency edit `1.216/1.955`; 8-level, 41-line case program cold `6.673/8.618`; exact replay `1.273/1.568`; one branch conclusion edit `7.596/9.163`; two-case interleaving cold `2.296/2.981`; interleaving terminal edit `2.908/3.702`.
-- A prior no-scope-cache run of the same nested-case evaluation measured `6.186/8.503` ms; exact replay in the cache run is `1.273/1.568` ms. Treat this as a synthetic local comparison, not a general performance guarantee. Small linear replay and structural edits show no speedup in these samples; the cache work must not be described as making every edit faster.
+- Cache worktree: Node suite 209/209; Python unit suite 17/17; Python byte-compilation and `git diff --check` passed.
+- PR #33 head `6ca0a86`: Mathlib topology integration and full Tests workflow passed against main `06e6c1d`. The local environment has no Lean executable or Chromium; compiler and browser evidence comes from CI.
+- `tests/draft-benchmark.mjs` checked incremental/cold structural equality across 160 samples per case after 24 warmups, on Node v24.22.3 / Linux x64. Latest medians/P95 in ms: linear 16-line cold `0.362/1.609`; linear replay `1.377/2.552`; final-line edit `1.235/1.960`; dependency edit `1.216/1.955`; 8-level, 41-line case program cold `6.673/8.618`; exact replay `1.273/1.568`; one branch conclusion edit `7.596/9.163`; two-case interleaving cold `2.296/2.981`; interleaving terminal edit `2.908/3.702`.
+- A prior no-scope-cache run of the same nested-case evaluation measured `6.186/8.503` ms. Treat this as one synthetic comparison, not a general performance guarantee. Small linear replay and structural edits show no speedup in these samples.
 
 ## Semantic boundaries
 
@@ -27,10 +25,10 @@ Case analysis remains explicit binary `Or` elimination, bounded to eight nested 
 
 ## Next dependency-ready tasks
 
-1. Finish PR #32's corrected browser smoke and full CI, review the latest diff, merge only if all checks pass, then verify main and Pages deployment.
-2. Rebase the local scope-cache work on the merged head, run its CI, and submit it separately with the measured limits above.
-3. Generalize proof operations around child goals, context extension and closure. Move existing negation introduction into this operation model, then add conjunction subgoal splitting and local subproof return; do not silently add classical axioms.
-4. Add structure-level candidates for “take an element satisfying …”, keeping arbitrary-variable introduction, witness extraction, definition, subtype introduction, and an open existence obligation distinct.
-5. Add a reviewed analysis or linear-algebra proof to the small real-math corpus, with source language, expected structure, generated Lean, and independent compilation.
+1. Recheck PR #33 on its current main base and merge only with every required check green; verify the resulting main workflows.
+2. Generalize proof operations around child goals, context extension and closure. Reuse the current negation rule, then add conjunction subgoal splitting and local subproof return without classical axioms.
+3. Add structure-level candidates for “take an element satisfying …”, keeping arbitrary-variable introduction, witness extraction, definition, subtype introduction, and an open existence obligation distinct.
+4. Expand the real-math corpus with a reviewed analysis or linear-algebra proof, including natural language, expected structure, generated Lean, and independent compilation.
+5. Improve branch-level incremental reuse only when cold-result comparisons establish equivalence; current measurements are a baseline, not a speed target.
 
 The existing aligned corpus includes predicate-set operations and a compact-image Mathlib example. LeanReviewBench's statement-only material should be used only to extract error mechanisms, not as proof-body ground truth.
