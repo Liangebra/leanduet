@@ -294,6 +294,8 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
             operation_text="""take an element z : $Nat$ satisfying $P$
 unsupported ⊛"""
             operation_page.locator("#chainText").fill(operation_text)
+            print("Element request visible scope:",operation_page.locator("#patchScope").inner_text(),flush=True)
+            print("Element request preview:",operation_page.locator("#draftTranslation").inner_text(),flush=True)
             operation_row=operation_page.locator("#draftTranslation .ruleResult").first
             expect(operation_row).to_contain_text("universal-variable introduction")
             expect(operation_row).to_contain_text("existential witness extraction")
