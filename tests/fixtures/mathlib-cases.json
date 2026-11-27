@@ -84,8 +84,8 @@
     "domain": "linear algebra",
     "description": "A linear map preserves addition.",
     "naturalProof": "By the defining additivity law of a linear map, f(x + y) = f(x) + f(y).",
-    "naturalDraft": "因此 $f (x + y) = f x + f y$，由线性映射加法性，使用 f、x 和 y",
-    "editedNaturalDraft": "因此 $f (y + x) = f y + f x$，由线性映射加法性，使用 f、y 和 x",
+    "naturalDraft": "因此 $f(x + y) = f(x) + f(y)$，由线性映射加法性，使用 f、x 和 y",
+    "editedNaturalDraft": "因此 $f(y + x) = f(y) + f(x)$，由线性映射加法性，使用 f、y 和 x",
     "goal": "f (x + y) = f x + f y",
     "editedGoal": "f (y + x) = f y + f x",
     "scope": [
