@@ -30,6 +30,18 @@ test('a typed element request recognizes Lean’s nondependent Pi arrow as unive
  assert.equal(operation.subgoals[0].contextDelta[0].name,'z');
  assert.equal(operation.subgoals[0].contextDelta[0].kind,'universal-variable');
 });
+test('an explicit element type can fill an omitted printed existential domain',()=>{
+ const request=parseElementRequest('take an element z : $Nat$ satisfying $P$');
+ const result=elementInterpretationCandidates(request,{goal:'Nat → P',scope:['P','he'],
+  facts:new Map([['P','Prop'],['he','∃ y, P']])});
+ assert.equal(result.status,'ambiguous');
+ assert.deepEqual(result.candidates.map(candidate=>candidate.operation),['universal-introduction','existential-elimination']);
+ assert.equal(result.candidates[1].type,'Nat');
+ const mismatch=elementInterpretationCandidates(request,{goal:'Nat → P',scope:['P','he'],
+  facts:new Map([['P','Prop'],['he','∃ y : Int, P']])});
+ assert.deepEqual(mismatch.candidates.map(candidate=>candidate.operation),['universal-introduction']);
+});
+
 test('Chinese arbitrary wording rules out existential extraction',()=>{
  const request=parseElementRequest('取任意元素 x：$Nat$ 满足 $P(x)$');
  const result=elementInterpretationCandidates(request,{goal:'∀ y : Nat, P y',scope:['he'],facts:new Map([['he','∃ y : Nat, P y']])});
