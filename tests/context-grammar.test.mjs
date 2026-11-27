@@ -42,7 +42,7 @@ test('natural draft retains a type-level parameter beside a contradiction premis
  const result=createDraftSession().evaluate('From hFalse, we obtain $P$',['P','hFalse'],facts,{goal:'P'});
  assert.equal(result.complete,true);
  assert.ok(result.term.includes('False.elim hFalse'));
- assert.deepEqual(result.rows[0].step.dependencies,['hFalse']);
+ assert.deepEqual(result.rows[0].candidates[0].premises,['hFalse']);
 });
 test('ambiguous identical conjuncts remain distinct candidate proofs',()=>{
  const facts=new Map([['h','P ∧ P']]);
