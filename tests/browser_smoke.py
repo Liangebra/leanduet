@@ -12,7 +12,7 @@ port=18765
 url=f"http://127.0.0.1:{port}"
 
 
-def select_typed_edit(page, *, exact_type=None, includes=()):
+def select_typed_edit(page, *, exact_type=None, includes=(), summary=None):
     page.locator("#typedTree").evaluate("""(root, query) => {
       const rows=[...root.querySelectorAll('.typedNode')].map(node=>({
         node,
@@ -24,7 +24,8 @@ def select_typed_edit(page, *, exact_type=None, includes=()):
         edit:node.querySelector(':scope > .typedEdit')
       }));
       const candidates=rows.filter(row=>(query.exactType===null||row.type===query.exactType)
-        &&query.includes.every(part=>row.type.includes(part))&&row.edit);
+        &&query.includes.every(part=>row.type.includes(part))
+        &&(query.summary===null||row.summary===query.summary)&&row.edit);
       if(!candidates.length) throw new Error('No editable typed node matched; available: '+
         JSON.stringify(rows.map(({type,summary,term,depth,edit})=>({type,summary,term,depth,editable:!!edit}))));
       candidates.sort((a,b)=>a.depth-b.depth||a.type.length-b.type.length);
@@ -32,7 +33,7 @@ def select_typed_edit(page, *, exact_type=None, includes=()):
       for(let current=target;current&&current!==root;current=current.parentElement)
         if(current.tagName==='DETAILS') current.open=true;
       target.querySelector(':scope > .typedEdit').click();
-    }""", {"exactType":exact_type,"includes":list(includes)})
+    }""", {"exactType":exact_type,"includes":list(includes),"summary":summary})
 
 with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL) as server:
     try:
@@ -286,7 +287,7 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
             operation_page.locator('[data-view="typed"]').click()
             operation_page.locator("#extractTerm").click()
             expect(operation_page.locator("#typedStatus")).to_contain_text("Extracted from Lean elaboration",timeout=60000)
-            select_typed_edit(operation_page,includes=("∀","P"))
+            select_typed_edit(operation_page,summary="Introduce x")
             expect(operation_page.locator("#patchTarget")).to_contain_text("∀")
             operation_page.locator("#chainEditor summary").click()
             operation_page.locator("#chainFormat").select_option("natural")
