@@ -1,4 +1,4 @@
-name: Mathlib topology integration
+name: Mathlib topology and algebra integration
 on:
   workflow_dispatch:
   push:
