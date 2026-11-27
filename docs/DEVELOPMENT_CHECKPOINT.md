@@ -13,19 +13,23 @@ PR #36 adds equivalence and explicit existential child goals. Its branch now
 contains a two-parent synchronization commit, `3e390ca`, with current `main`;
 the merged tree preserves the PR implementation and resolves the textual
 overlap with #35. The current Tests workflow is queued as run `46016092798`.
-It must complete before merge.
+Mathlib integration run `46016092675` passed. Tests run `46016092798` has
+passed unit, Lean model, backend and generated-Lean steps; browser smoke is
+still running. Merge only after that step and the complete workflow pass.
 
 PR #37 adds bounded structural candidates for element requests. Its latest
 head is `96a2488`. At the preceding head, the Mathlib workflow passed, but the
 full workflow failed in browser smoke at `tests/browser_smoke.py:259`: the new
 fixture used `:= hall`, while this editor accepts theorem bodies in `:= by`
 form. The fixture now uses `by / exact hall` and the local Lean-source parser
-accepts it. Tests run `46016046831` and Mathlib run `46016046804` are in
-progress. PR #37 still needs its base refreshed after #36 is integrated.
+accepts it. Tests run `46016046831` passed unit, Lean model and backend
+integration steps; browser smoke is still running. Mathlib run `46016046804`
+passed. PR #37 still needs its base refreshed after #36 is integrated.
 
-The current unpushed local layer extends #37 with set-restricted universal
-introduction and existential witness extraction. It is intended as a separate
-stacked PR after #37; it has not yet been published.
+PR #38 (`ac24373`) publishes the next layer on top of #37. Its Tests workflow
+`46017119145` has passed unit tests and Lean model compilation; backend and
+browser integration are still running. It remains stacked until #36 and #37
+are merged.
 
 ## Mathematical contract and current capabilities
 
@@ -75,9 +79,8 @@ not a general shared parse forest, type elaborator, or natural-language parser.
    passes, including Lean integration and browser smoke.
 2. Let #37's latest Tests and Mathlib workflows finish; repair any concrete
    failure, then retarget it to `main` after #36 merges and rerun CI there.
-3. Publish the bounded-quantifier layer as a separate PR stacked on #37. Keep
-   the local carrier check explicitly partial and test the generated terms in
-   Lean CI.
+3. Let #38's latest CI validate the generated bounded Lean terms and browser
+   selection path. Keep the local carrier check explicitly partial.
 4. Continue stage 2 with local-lemma return and classical reductio only after
    keeping intuitionistic negation introduction distinct. Continue stage 3
    with shared structural candidates and bounded constraint propagation.
