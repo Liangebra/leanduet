@@ -211,11 +211,12 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
             case_page.locator("#applyPatch").click()
             case_page.locator("#check").click()
             expect(case_page.locator("#verifyState")).to_have_text("Lean passed",timeout=120000)
-            set_source="""abbrev PredSet (α : Type) := α → Prop
-instance predicateMembership {α : Type} : Membership α (PredSet α) := ⟨fun s x => s x⟩
-instance predicateIntersection {α : Type} : Inter (PredSet α) := ⟨fun A B x => A x ∧ B x⟩
-theorem predicate_intersection_left {α : Type} (A B : PredSet α) :
-    ∀ x : α, x ∈ A ∩ B → x ∈ A := by
+            # The browser's controlled editor deliberately accepts one theorem
+            # plus imports. Keep this UI fixture within that supported source
+            # shape; the set-intersection-specific Lean prelude is compiled in
+            # tests/interpret_integration.py instead.
+            set_source="""theorem predicate_intersection_left {α : Type} (A B : α → Prop) :
+    ∀ x : α, A x ∧ B x → A x := by
   intro x
   intro hx
   exact And.left hx
@@ -231,7 +232,7 @@ theorem predicate_intersection_left {α : Type} (A B : PredSet α) :
             set_projection.locator(":scope > .typedEdit").click()
             case_page.locator("#chainEditor summary").click()
             case_page.locator("#chainFormat").select_option("natural")
-            case_page.locator("#chainText").fill("因此 $x ∈ A$，由 And.left，使用 hx")
+            case_page.locator("#chainText").fill("因此 $A(x)$，由 And.left，使用 hx")
             case_page.locator("#inferChain").click()
             expect(case_page.locator("#draftTranslation")).to_contain_text("exact And.left hx")
             case_page.locator("#compileChain").click()
