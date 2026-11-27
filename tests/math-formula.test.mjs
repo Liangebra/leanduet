@@ -46,6 +46,16 @@ test('set intersection and union bind inside membership and subset relations',()
   assert.deepEqual(compileFormula(compileFormula(input).lean,{syntax:'lean'}).scoped,compileFormula(input).scoped,input);
 });
 
+test('set image uses Lean precedence and retains its operation in the scoped tree',()=>{
+ const image=compileFormula("f '' s");
+ assert.equal(image.lean,"(f '' s)");
+ assert.deepEqual(image.scoped,{kind:'binary',op:"''",left:{kind:'free',name:'f'},right:{kind:'free',name:'s'}});
+ assert.equal(compileFormula("f '' s ∩ t").lean,"((f '' s) ∩ t)");
+ assert.equal(compileFormula("f '' (s ∩ t)").lean,"(f '' (s ∩ t))");
+ assert.equal(compileFormula("f' '' s").lean,"(f' '' s)",'prime-suffixed identifiers remain separate from the image token');
+ assert.deepEqual(compileFormula(image.lean,{syntax:'lean'}).scoped,image.scoped);
+});
+
 test('Lean presentation round trips preserve application and binder structure',()=>{
  for(const input of ['P(x)','f(g(x), y)=z','f(x)(y)','∀ x : Nat, P(x)','∀ x ∈ S, P(x)','∃ x ∈ S, P(x)','∀ S : Set, ∀ x ∈ S, P(x)']){
   const math=compileFormula(input);

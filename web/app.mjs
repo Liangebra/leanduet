@@ -45,7 +45,7 @@ function gutter(){refreshEditor();$('gutter').textContent=lean.value.split('\n')
 function element(tag,txt,cls){const e=document.createElement(tag);if(txt!==undefined)e.textContent=txt;if(cls)e.className=cls;return e;}
 function formula(parent,source){
   // Conservative offline token rendering. Unknown syntax is kept as source.
-  if(!source||!/^[\p{L}\p{N}\s_=:→∧∨¬↔∀∃()+*≤≥<>∘∈∉⊆∪∩-]+$/u.test(source)){parent.append(element('code',source));return;}
+  if(!source||!/^[\p{L}\p{N}\s_=:→∧∨¬↔∀∃()'+*≤≥<>∘∈∉⊆∪∩-]+$/u.test(source)){parent.append(element('code',source));return;}
   const ns='http://www.w3.org/1998/Math/MathML',m=document.createElementNS(ns,'math');
   m.setAttribute('aria-label',source);
   for(const token of source.match(/\p{L}[\p{L}\p{N}_]*|\p{N}+|[^\s]/gu)||[]){
