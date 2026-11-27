@@ -258,7 +258,7 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
             operation_page.locator('[data-view="typed"]').click()
             operation_page.locator("#extractTerm").click()
             expect(operation_page.locator("#typedStatus")).to_contain_text("Extracted from Lean elaboration",timeout=60000)
-            operation_page.locator("#typedTree .typedEdit").first.click()
+            operation_page.locator("#typedTree .typedEdit").last.click()
             expect(operation_page.locator("#patchTarget")).to_contain_text("∀")
             operation_page.locator("#chainEditor summary").click()
             operation_page.locator("#chainFormat").select_option("natural")
@@ -296,7 +296,7 @@ $P(x)$ | hp"""
             restricted_page.locator('[data-view="typed"]').click()
             restricted_page.locator("#extractTerm").click()
             expect(restricted_page.locator("#typedStatus")).to_contain_text("Extracted from Lean elaboration",timeout=60000)
-            restricted_page.locator("#typedTree .typedEdit").first.click()
+            restricted_page.locator("#typedTree .typedEdit").last.click()
             expect(restricted_page.locator("#patchTarget")).to_contain_text("∀")
             if not restricted_page.locator("#chainEditor").evaluate("(editor) => editor.open"):
                 restricted_page.locator("#chainEditor summary").click()
@@ -319,7 +319,7 @@ $P(x)$ | hp"""
             restricted_page.locator('[data-view="typed"]').click()
             restricted_page.locator("#extractTerm").click()
             expect(restricted_page.locator("#typedStatus")).to_contain_text("Extracted from Lean elaboration",timeout=60000)
-            restricted_page.locator("#typedTree .typedEdit").first.click()
+            restricted_page.locator("#typedTree .typedEdit").last.click()
             expect(restricted_page.locator("#patchTarget")).to_contain_text("True")
             if not restricted_page.locator("#chainEditor").evaluate("(editor) => editor.open"):
                 restricted_page.locator("#chainEditor summary").click()
