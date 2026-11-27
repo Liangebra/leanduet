@@ -11,7 +11,10 @@
       "A": "PredSet α",
       "B": "PredSet α"
     },
-    "focusTerm": "And.left hx",
+    "focusCandidate": "And.left hx",
+    "focusReference": "And.left",
+    "expectedElaboratedTerm": "hx.left",
+    "expectedFocusType": "x ∈ A",
     "expectedLastType": "(x ∈ A)",
     "expectedStepKinds": ["introduce", "assume", "conclude"],
     "expectedContextClosure": ["α", "A", "B", "x", "hx"],
@@ -26,10 +29,13 @@
     "naturalDraft": "任取 x\n假设 hx\n建立 hB : $x ∈ B$ | And.right using hx\n建立 hA : $x ∈ A$ | And.left using hx\n$ x ∈ B ∩ A $ | And.intro using hB and hA",
     "scope": ["α", "A", "B"],
     "context": {"α": "Type", "A": "PredSet α", "B": "PredSet α"},
-    "focusTerm": "And.intro hB hA",
+    "focusCandidate": "And.right hx",
+    "focusReference": "And.right",
+    "expectedElaboratedTerm": "hx.right",
+    "expectedFocusType": "x ∈ B",
     "expectedLastType": "(x ∈ (B ∩ A))",
     "expectedStepKinds": ["introduce", "assume", "establish", "establish", "conclude"],
-    "expectedContextClosure": ["α", "A", "B", "x", "hB", "hA"],
+    "expectedContextClosure": ["α", "A", "B", "x", "hx"],
     "leanPrelude": "abbrev PredSet (α : Type) := α → Prop\ninstance predicateMembership {α : Type} : Membership α (PredSet α) := ⟨fun s x => s x⟩\ninstance predicateIntersection {α : Type} : Inter (PredSet α) := ⟨fun A B x => A x ∧ B x⟩\n",
     "leanDeclaration": "theorem generated_intersection_commute {α : Type} (A B : PredSet α) : ∀ x : α, x ∈ A ∩ B → x ∈ B ∩ A := "
   }

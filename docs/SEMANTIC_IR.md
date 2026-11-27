@@ -58,6 +58,12 @@ Mathlib installation. This is a kernel-checked set argument, but it is not
 evidence of broad Mathlib prose coverage; the topology example in
 `tests/mathlib_integration.py` remains a separate adapter test.
 
+In the commutativity fixture, the browser draft writes `And.intro hB hA`, while
+the elaborated tree exposes the resulting conjunction as a constructor pair.
+The integration test therefore aligns an actual projection node (`hx.right`)
+and separately checks that the pair contains the two local results; it does not
+assume that Lean's elaborated tree preserves the surface declaration spelling.
+
 ### Branch-local proof scopes
 
 The natural draft accepts an explicit disjunction block, for example:

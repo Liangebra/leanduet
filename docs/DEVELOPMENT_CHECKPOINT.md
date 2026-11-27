@@ -40,11 +40,14 @@ current small corpus while stage 8 expands to genuine Mathlib examples.
 
 ## Validation and limits
 
-The local JavaScript suite, Python unit suite, and Python syntax checks pass for
-the two new aligned cases. The fixtures distinguish a structurally generated
-candidate from a Lean-compiled result. CI still needs to compile the generated
-Lean declarations and exercise the browser workflow before the new work is
-considered merged.
+Local verification passes: 190 Node tests, 17 Python unit tests, Python syntax
+compilation, and the full `tests/interpret_integration.py` run under Lean 4.19.
+That integration compiles both generated declarations and checks the extracted
+Lean trees and local dependency closures. The first PR CI run caught a mistaken
+assumption that `And.left hx` would remain textually named in Lean's tree; the
+test now checks its actual projection form (`hx.left`) and constructor-pair
+representation. The browser smoke test still awaits GitHub CI, because this
+workspace does not have a Playwright browser installed.
 
 The natural-language draft remains a bounded, rule-guided grammar, not
 unrestricted prose parsing. A structural `complete` result means the draft has
