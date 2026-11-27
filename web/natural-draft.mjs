@@ -75,7 +75,7 @@ function parseLine(raw){
  }
  return {raw,formula,type:compileFormula(formula).lean,name,ruleText,conclusion,modifiers,forwardText};
 }
-export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),cache=null,goal=null,lineOffset=0,closedNames=[],openBindings=[],incompleteContext=false,continuation=false}={}){
+export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),cache=null,goal=null,lineOffset=0,closedNames=[],openBindings=[],incompleteContext=false,continuation=false,scopeIds=[]}={}){
  const facts=new Map(context);
  if(typeof input!=='string'||input.length>12000)throw Error('Draft exceeds 12000 characters.');
  const lines=input.split(/\r?\n/).map((raw,i)=>({raw,line:i+1+lineOffset})).filter(x=>x.raw.trim());
@@ -94,7 +94,7 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
  const planned=new Set(parsed.flatMap(p=>[p.value?.name,p.value?.evidenceName]).filter(Boolean));
  const lookahead=parsed.some(p=>p.value?.kind==='infer-proposition')?JSON.stringify([input,[...choices]]):null;
  const inheritedOpen=[...new Set(openBindings)];
- const key=JSON.stringify([scope,[...context],[...planned].sort(),goal,lineOffset,lookahead,[...closed].sort(),inheritedOpen.sort(),incompleteContext,continuation]);
+ const key=JSON.stringify([scope,scopeIds,[...context],[...planned].sort(),goal,lineOffset,lookahead,[...closed].sort(),inheritedOpen.sort(),incompleteContext,continuation]);
  const signatures=lines.map(({raw,line},i)=>JSON.stringify([raw,line,i===lines.length-1&&!continuation,choices.has(line),choices.get(line)]));
  let remainingGoal=goal;
  const constraintResults=new Map();
@@ -332,7 +332,7 @@ export function createDraftSession(){
  return {
   evaluate:(input,scope,context,options)=>evaluateScopeAware(input,scope,context,{...options,cache}),
   compile:(input,scope,context,options)=>compileNaturalDraft(input,scope,context,{...options,cache}),
-  reset:()=>{delete cache.previous;cache.syntax?.clear();}
+  reset:()=>{delete cache.previous;cache.syntax?.clear();cache.scopeCaches?.clear();cache.segmentResults?.clear();}
  };
 }
 export function compileNaturalDraft(input,scope,context,options){
@@ -343,6 +343,18 @@ export function compileNaturalDraft(input,scope,context,options){
 
 function evaluateScopeAware(input,scope=[],context=new Map(),options={}){
  const frame=options._proofScope||rootProofScope(scope,new Map(context),{goal:options.goal});
+ function cacheForFrame(currentFrame,sharedCache){
+  if(!sharedCache)return null;
+  if(currentFrame.id==='root')return sharedCache;
+  const scoped=sharedCache.scopeCaches??=new Map();
+  let local=scoped.get(currentFrame.id);
+  if(!local){
+   if(scoped.size>=128)scoped.delete(scoped.keys().next().value);
+   local={};
+  }else scoped.delete(currentFrame.id);
+  scoped.set(currentFrame.id,local);
+  return local;
+ }
  function extendFromDraft(currentFrame,result){
   let next=currentFrame;
   const idAt=line=>next.id==='root'?'line:'+line:next.id+'/line:'+line;
@@ -368,7 +380,41 @@ function evaluateScopeAware(input,scope=[],context=new Map(),options={}){
    openBindings:[...new Set([...(prefix.openBindings||[]),...(result.openBindings||[])])],
    graph:{...result.graph,nodes,constraintGroups:[...groups.values()]},term:complete?renderChain(steps):null};
  }
+ function segmentCacheKey(text,currentFrame,segmentOptions){
+  const choices=[...(segmentOptions.choices||new Map())].sort(([left],[right])=>String(left).localeCompare(String(right)));
+  const bindings=currentFrame.bindings.map(binding=>[binding.id,binding.name,binding.type,binding.kind,!!binding.local]);
+  return JSON.stringify([currentFrame.id,currentFrame.goal,currentFrame.goalText,bindings,String(text||''),segmentOptions.goal||null,
+   segmentOptions.lineOffset||0,choices,[...(segmentOptions.closedNames||[])].sort(),[...(segmentOptions.openBindings||[])].sort(),
+   !!segmentOptions.incompleteContext,!!segmentOptions.continuation]);
+ }
+ function cloneResult(result){
+  try{return structuredClone(result);}catch{return null;}
+ }
  function compileSegment(text,currentFrame,segmentOptions={}){
+  // Memoize a complete returned tree only at the editor's root. Nested scopes
+  // keep the lighter row-prefix cache; cloning a whole inner graph on every
+  // branch hit costs more than recompiling that bounded wrapper.
+  const shared=currentFrame.id==='root'?segmentOptions.cache:null;
+  const rootCase=String(text||'').split(/\r?\n/).some(line=>!line.startsWith(' ')&&!line.startsWith('\t')&&hasCaseSplitHeader(line.trim()));
+  // Small linear fragments are cheaper to rebuild than to deep-clone. Reserve
+  // whole-result memoization for scoped programs or substantial source text.
+  if(!shared||(!rootCase&&String(text||'').length<512))return compileSegmentFresh(text,currentFrame,segmentOptions);
+  const key=segmentCacheKey(text,currentFrame,segmentOptions),memo=shared.segmentResults??=new Map();
+  const cached=memo.get(key);
+  if(cached){
+   memo.delete(key);memo.set(key,cached);
+   const reused=cloneResult(cached);
+   if(reused){reused.reusedRows=reused.rows?.length||0;return reused;}
+  }
+  const result=compileSegmentFresh(text,currentFrame,segmentOptions),copy=cloneResult(result);
+  if(copy){
+   copy.reusedRows=0;
+   if(memo.size>=32)memo.delete(memo.keys().next().value);
+   memo.set(key,copy);
+  }
+  return result;
+ }
+ function compileSegmentFresh(text,currentFrame,segmentOptions={}){
   const names=proofScopeNames(currentFrame),facts=proofScopeFacts(currentFrame);
   const lines=String(text||'').split(/\r?\n/),first=lines.findIndex(line=>line.trim());
   const caseIndex=lines.findIndex((line,index)=>index>=0&&!line.startsWith(' ')&&!line.startsWith('\t')&&hasCaseSplitHeader(line.trim()));
@@ -376,7 +422,7 @@ function evaluateScopeAware(input,scope=[],context=new Map(),options={}){
   if(caseIndex>first){
    const lineOffset=segmentOptions.lineOffset||0;
    const prefix=draftProof(lines.slice(0,caseIndex).join('\n'),names,facts,{...segmentOptions,lineOffset,continuation:true,
-    cache:currentFrame.id==='root'?segmentOptions.cache:null});
+    cache:cacheForFrame(currentFrame,segmentOptions.cache),scopeIds:currentFrame.bindings.map(binding=>binding.id)});
    prefix.graph=remapProofGraph(prefix.graph,currentFrame);
    const nextFrame=extendFromDraft(currentFrame,prefix);
    const hasOpenText=prefix.rows.some(row=>row.status==='unresolved');
@@ -388,7 +434,7 @@ function evaluateScopeAware(input,scope=[],context=new Map(),options={}){
    return combineSegments(prefix,following);
   }
   const result=draftProof(text,names,facts,{...segmentOptions,lineOffset:segmentOptions.lineOffset||0,
-   cache:currentFrame.id==='root'?segmentOptions.cache:null});
+   cache:cacheForFrame(currentFrame,segmentOptions.cache),scopeIds:currentFrame.bindings.map(binding=>binding.id)});
   result.graph=remapProofGraph(result.graph,currentFrame);
   return result;
  }

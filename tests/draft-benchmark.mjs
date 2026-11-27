@@ -17,11 +17,12 @@ function distribution(times){
  const sorted=[...times].sort((a,b)=>a-b);
  return {medianMs:sorted[Math.floor((sorted.length-1)*0.5)],p95Ms:sorted[Math.ceil(sorted.length*0.95)-1]};
 }
-function measure({name,evaluate,reference,inputAt,expectedReuse=null}){
+function measure({name,evaluate,reference,inputAt,expectedReuse=null,beforeSample=()=>{}}){
  for(let i=0;i<warmup;i++)evaluate(inputAt(i));
  const times=[],reuse=[];
  for(let i=0;i<samples;i++){
-  const input=inputAt(i),start=performance.now(),actual=evaluate(input),elapsed=performance.now()-start;
+  const input=inputAt(i);beforeSample(i);
+  const start=performance.now(),actual=evaluate(input),elapsed=performance.now()-start;
   const expected=reference(input);
   assert.deepEqual(stripReuse(actual),stripReuse(expected),name+' incremental/full result mismatch at sample '+i);
   if(expectedReuse!==null)assert.equal(actual.reusedRows,expectedReuse,name+' reused-prefix count');
@@ -46,9 +47,10 @@ function nestedCases(depth,max){
   '$P$ | r'+depth
  ].join('\n');
 }
-const caseFacts=new Map([['P','Prop'],['p','P']]);
+const caseFacts=new Map([['P','Prop'],['p','P'],['p2','P']]);
 for(let i=0;i<8;i++)caseFacts.set('h'+i,'P ∨ P');
-const caseScope=[...caseFacts.keys()],deepCase=nestedCases(0,8),caseDraft=createDraftSession(),caseReference=createDraftSession();
+const caseScope=[...caseFacts.keys()],deepCase=nestedCases(0,8),caseDraft=createDraftSession();
+const deepCaseEdited=deepCase.replace('    $P$ | p','    $P$ | p2');
 const caseLineCount=deepCase.split('\n').filter(line=>line.trim()).length;
 assert.ok(caseLineCount<=64,'nested case benchmark must remain inside the supported source bound');
 
@@ -68,11 +70,13 @@ const sequenceSession=createDraftSession();
 const results=[
  measure({name:'cold full evaluation · 16 proof lines / 62 typed locals',evaluate:cold.evaluate,reference:cold.reference,inputAt:()=>lastH14}),
  measure({name:'warm exact replay · 16 proof lines / 62 typed locals',evaluate:text=>warm.evaluate(text,scope,facts),reference:cold.reference,inputAt:()=>lastH14,expectedReuse:16}),
- measure({name:'single-character final premise edit · 15-row prefix',evaluate:text=>toggle.evaluate(text,scope,facts),reference:cold.reference,inputAt:i=>i%2?lastH14:lastH15,expectedReuse:15}),
- measure({name:'local proof-dependency edit · 7-row prefix',evaluate:text=>edit.evaluate(text,scope,facts),reference:cold.reference,inputAt:i=>i%2?lastH14:localEdit,expectedReuse:7}),
- measure({name:'nested case scopes · '+caseLineCount+' lines / 8 levels',evaluate:()=>caseDraft.evaluate(deepCase,caseScope,caseFacts,{goal:'P'}),reference:()=>caseReference.evaluate(deepCase,caseScope,caseFacts,{goal:'P'}),inputAt:()=>deepCase}),
+ measure({name:'single-character final premise edit · 15-row prefix',evaluate:text=>toggle.evaluate(text,scope,facts),reference:cold.reference,inputAt:()=>lastH15,expectedReuse:15,beforeSample:()=>{toggle.reset();toggle.evaluate(lastH14,scope,facts);}}),
+ measure({name:'local proof-dependency edit · 7-row prefix',evaluate:text=>edit.evaluate(text,scope,facts),reference:cold.reference,inputAt:()=>localEdit,expectedReuse:7,beforeSample:()=>{edit.reset();edit.evaluate(lastH14,scope,facts);}}),
+ measure({name:'nested case scopes · cold / '+caseLineCount+' lines / 8 levels',evaluate:text=>compileNaturalDraft(text,caseScope,caseFacts,{goal:'P'}),reference:text=>compileNaturalDraft(text,caseScope,caseFacts,{goal:'P'}),inputAt:()=>deepCase}),
+ measure({name:'nested case scopes · exact replay',evaluate:text=>caseDraft.evaluate(text,caseScope,caseFacts,{goal:'P'}),reference:text=>compileNaturalDraft(text,caseScope,caseFacts,{goal:'P'}),inputAt:()=>deepCase}),
+ measure({name:'nested case scopes · one branch conclusion edit',evaluate:text=>caseDraft.evaluate(text,caseScope,caseFacts,{goal:'P'}),reference:text=>compileNaturalDraft(text,caseScope,caseFacts,{goal:'P'}),inputAt:()=>deepCaseEdited,beforeSample:()=>{caseDraft.reset();caseDraft.evaluate(deepCase,caseScope,caseFacts,{goal:'P'});}}),
  measure({name:'interleaved sequence · cold / 2 case blocks',evaluate:text=>compileNaturalDraft(text,sequenceScope,sequenceFacts,{goal:'T'}),reference:text=>compileNaturalDraft(text,sequenceScope,sequenceFacts,{goal:'T'}),inputAt:()=>interleaved}),
- measure({name:'interleaved sequence · replay and terminal edit',evaluate:text=>sequenceSession.evaluate(text,sequenceScope,sequenceFacts,{goal:'T'}),reference:text=>compileNaturalDraft(text,sequenceScope,sequenceFacts,{goal:'T'}),inputAt:i=>i%2?interleaved:interleavedEdit})
+ measure({name:'interleaved sequence · replay and terminal edit',evaluate:text=>sequenceSession.evaluate(text,sequenceScope,sequenceFacts,{goal:'T'}),reference:text=>compileNaturalDraft(text,sequenceScope,sequenceFacts,{goal:'T'}),inputAt:()=>interleavedEdit,beforeSample:()=>{sequenceSession.reset();sequenceSession.evaluate(interleaved,sequenceScope,sequenceFacts,{goal:'T'});}})
 ];
 
 textOutput({node:process.version,platform:process.platform,architecture:process.arch,warmup,samples,results});
