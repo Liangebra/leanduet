@@ -10,6 +10,32 @@ const delimited='(?:\\$[^$\\n]+\\$|\\\\\\([^]*?\\\\\\))';
 const restrictionTerm=`(?:${delimited}|${identifier})`;
 const sameRestriction=(left,right)=>left==null||right==null?left==null&&right==null:
  sameScopedFormula(left,right,{syntax:'lean'});
+function restrictionReferences(restriction,scope,scopeIds,ambiguousNames){
+ if(!restriction)return {key:[],dependencies:[],ambiguousName:null};
+ const tree=compileFormula(restriction,{syntax:'lean'}).scoped,names=new Set();
+ function visit(value){
+  if(!value||typeof value!=='object')return;
+  if(Array.isArray(value)){value.forEach(visit);return;}
+  if(value.kind==='free'&&typeof value.name==='string'){names.add(value.name);return;}
+  Object.values(value).forEach(visit);
+ }
+ visit(tree);
+ const ambiguous=new Set(ambiguousNames);
+ for(const name of names){
+  if(ambiguous.has(name)||scope.filter(candidate=>candidate===name).length>1)
+   return {key:[],dependencies:[],ambiguousName:name};
+ }
+ const key=[],dependencies=[];
+ for(const name of [...names].sort()){
+  const index=scope.indexOf(name);
+  if(index<0)key.push([name,'global:'+name]);
+  else{
+   const id=scopeIds[index]||'name:'+name;
+   key.push([name,id]);dependencies.push(id);
+  }
+ }
+ return {key,dependencies,ambiguousName:null};
+}
 const explicitSource=(source,scope)=>!source||scope.includes(source);
 
 export function parseElementRequest(raw){
@@ -56,11 +82,14 @@ function knownRestrictionCarrier(restriction,facts){
  * the set's carrier. No local definition, subtype coercion, or witness search
  * is inferred by this function.
  */
-export function elementInterpretationCandidates(request,{goal=null,scope=[],facts=new Map(),scopeIds=[],reservedNames=[],budget=64,limit=8}={}){
+export function elementInterpretationCandidates(request,{goal=null,scope=[],facts=new Map(),scopeIds=[],reservedNames=[],ambiguousNames=[],budget=64,limit=8}={}){
  if(!request||request.kind!=='element-request')return {candidates:[],status:'no-supported-match',explored:0};
  const names=[...new Set(scope)];
  if(scope.length>budget)return {candidates:[],status:'budget-exhausted',explored:budget,
   reason:'Element interpretation exceeded its finite context scan budget; narrow the visible context.'};
+ const restrictionRefs=restrictionReferences(request.restriction,scope,scopeIds,ambiguousNames);
+ if(restrictionRefs.ambiguousName)return {candidates:[],status:'ambiguous-context',explored:names.length,
+  reason:`The set restriction refers to ambiguous local object ${restrictionRefs.ambiguousName}; qualify or rename it before choosing an interpretation.`};
  const carrier=knownRestrictionCarrier(request.restriction,facts);
  if(request.restriction&&request.type&&carrier&&!compatibleType(request.type,carrier))return {
   candidates:[],status:'incompatible-type',explored:names.length,expectedType:carrier,
@@ -75,10 +104,10 @@ export function elementInterpretationCandidates(request,{goal=null,scope=[],fact
    const restriction=operation.restrictionSet||null;
    if(!scope.includes(request.name)&&compatibleType(request.type,binding.type)&&
       sameRestriction(request.restriction,restriction)&&sameScopedFormula(request.property,property,{syntax:'lean'})){
-    const key=JSON.stringify([request.name,binding.type,restriction,property]);
+    const key=JSON.stringify([request.name,binding.type,restriction,property,restrictionRefs.key]);
     add({kind:'introduce',name:request.name,type:binding.type,term:'introduce '+request.name,
      schema:restriction?'arbitrary element introduction under a set restriction':'universal-variable introduction',
-     choice:'element:forall:'+key,operation:'universal-introduction',
+     choice:'element:forall:'+key,operation:'universal-introduction',restrictionDependencies:restrictionRefs.dependencies,
      ...(restriction?{restrictionSet:restriction,requiredCondition:'('+request.name+' ∈ '+restriction+')'}:{})});
    }
   }catch{}
@@ -98,12 +127,12 @@ export function elementInterpretationCandidates(request,{goal=null,scope=[],fact
    let evidenceName='h_'+request.name;
    let suffix=0;
    while(new Set([...scope,...reservedNames,request.name]).has(evidenceName))evidenceName='h_'+request.name+'_'+(++suffix);
-   const key=JSON.stringify([sourceId,request.name,binding.type,binding.restrictionSet||null,binding.propertyType]);
+   const key=JSON.stringify([sourceId,request.name,binding.type,binding.restrictionSet||null,binding.propertyType,restrictionRefs.key]);
    add({kind:'obtain',name:request.name,type:binding.type,source,evidenceName,
     evidenceType:binding.evidenceType,sourceId,premises:[source],term:`obtain ${request.name}, ${evidenceName} from ${source}`,
     schema:binding.restrictionSet?'restricted existential witness extraction':'existential witness extraction',
     choice:'element:exists:'+key,operation:'existential-elimination',
-    ...(binding.restrictionSet?{restrictionSet:binding.restrictionSet}:{})});
+    restrictionDependencies:restrictionRefs.dependencies,...(binding.restrictionSet?{restrictionSet:binding.restrictionSet}:{})});
   }
  }
  if(candidates.length>limit)return {candidates:[],status:'budget-exhausted',explored:names.length,
