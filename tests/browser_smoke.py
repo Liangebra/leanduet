@@ -188,7 +188,8 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
             case_page.locator("#extractTerm").click()
             expect(case_page.locator("#typedStatus")).to_contain_text("Extracted from Lean elaboration",timeout=60000)
             case_page.locator("#typedTree").evaluate("(root) => root.querySelectorAll('details.typedNode').forEach(x=>x.open=true)")
-            case_page.locator(".typedNode").filter(has=case_page.locator("summary").filter(has_text=__import__("re").compile("^Apply Or\\.elim$"))).get_by_role("button",name="Replace this proof").click()
+            case_node=case_page.locator("#typedTree summary").filter(has_text=__import__("re").compile("^Apply Or\\.elim$")).last.locator("xpath=..")
+            case_node.locator(":scope > button.typedEdit").click()
             case_page.locator("#chainEditor summary").click()
             case_page.locator("#chainFormat").select_option("natural")
             case_text="分情况讨论 h，建立 hR : $R$\n  左支 hp\n    $R$ | f hp\n  右支 hq\n    $R$ | g hq\n$R$ | hR"
