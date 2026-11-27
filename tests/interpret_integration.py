@@ -261,7 +261,120 @@ let rejected=false;
 try { compileNaturalDraft('假设 hp\\n$False$ | hp',['P'],new Map(),{goal:'¬ P'}); }
 catch(error) { rejected=/Surface type of local premise hp .* differs structurally .* Lean definitional equality has not been checked/.test(error.message); }
 if(!rejected)throw new Error('A local proof of P was incorrectly accepted as a proof of False');
-const exfalso=compileNaturalDraft('$Q$ | False.elim using hFalse',['Q','hFalse'],new Map([['hFalse','False']]),{goal:'Q'});
+const exfalso=compileNaturalDraft('From hFalse, we obtain $Q
+console.log(JSON.stringify([neg.term,not.term,exfalso.term,alias.term]));
+"""
+neg_term,not_term,exfalso_term,alias_term=json.loads(subprocess.run(["node","--input-type=module"],input=logic_script,text=True,cwd=root,check=True,capture_output=True).stdout)
+with TemporaryDirectory() as tmp:
+    target=Path(tmp)/"IntuitionisticNegation.lean"
+    target.write_text("theorem negation_intro (P : Prop) (hnot : P → False) : ¬ P := "+neg_term+"\n"
+        +"theorem not_intro (P : Prop) (hnot : P → False) : Not P := "+not_term+"\n"
+        +"theorem exfalso (Q : Prop) (hFalse : False) : Q := "+exfalso_term+"\n"
+        +"theorem negation_alias (P : Prop) (hnot : Not P) : ¬ P := "+alias_term+"\n",encoding="utf-8")
+    subprocess.run(["lean",str(target)],cwd=root,check=True)
+print("Intuitionistic negation introduction and explicit False elimination accepted by Lean")
+
+# A conjunction goal opens two identity-isolated child scopes. Local assumptions
+# are discharged inside their child, and the same operation composes inside a
+# disjunction branch without exporting branch-local names.
+subgoal_script="""
+import {compileNaturalDraft} from './web/natural-draft.mjs';
+const pair=compileNaturalDraft(`split conjunction
+  first goal
+    $P$ | hp
+  second goal
+    $Q$ | hq`,['hp','hq'],new Map([['hp','P'],['hq','Q']]),{goal:'P ∧ Q'});
+const local=compileNaturalDraft(`假设 hp : $P$
+split conjunction
+  first goal
+    $P$ | hp
+  second goal
+    $P$ | hp`,[],new Map(),{goal:'P → (P ∧ P)'});
+const nested=compileNaturalDraft(`cases h, establish hab : $A ∧ B$
+  left case hp
+    split conjunction
+      first goal
+        $A$ | fa hp
+      second goal
+        $B$ | fb hp
+  right case hq
+    split conjunction
+      first goal
+        $A$ | ga hq
+      second goal
+        $B$ | gb hq
+$A ∧ B$ | hab`,['h','fa','fb','ga','gb'],new Map([['h','P ∨ Q'],['fa','P → A'],['fb','P → B'],['ga','Q → A'],['gb','Q → B']]),{goal:'A ∧ B'});
+const iff=compileNaturalDraft(`prove equivalence
+  forward direction
+    assume hp : $P$
+    $Q$ | f hp
+  reverse direction
+    assume hq : $Q$
+    $P$ | g hq`,['f','g'],new Map([['f','P → Q'],['g','Q → P']]),{goal:'P ↔ Q'});
+const exists=compileNaturalDraft(`construct witness a
+  witness property
+    $P(a)$ | ha`,['a','ha'],new Map([['a','Nat'],['ha','P a']]),{goal:'∃ x : Nat, P x'});
+const nestedExists=compileNaturalDraft(`cases h, establish hex : $∃ x : Nat, P(x)$
+  left case hpa
+    construct witness a
+      witness property
+        $P(a)$ | hpa
+  right case hq
+    construct witness a
+      witness property
+        $P(a)$ | ha`,['a','ha','h'],new Map([['a','Nat'],['ha','P a'],['h','P a ∨ Q']]),{goal:'∃ x : Nat, P x'});
+console.log(JSON.stringify([pair.term,local.term,nested.term,iff.term,exists.term,nestedExists.term]));
+"""
+pair_term,local_term,nested_pair_term,iff_term,exists_term,nested_exists_term=json.loads(subprocess.run(["node","--input-type=module"],input=subgoal_script,text=True,cwd=root,check=True,capture_output=True).stdout)
+with TemporaryDirectory() as tmp:
+    target=Path(tmp)/"ConjunctionSubgoals.lean"
+    target.write_text("theorem conjunction_subgoals (P Q : Prop) (hp : P) (hq : Q) : P ∧ Q := "+pair_term+"\n"
+        +"theorem conjunction_local_intro (P : Prop) : P → P ∧ P := "+local_term+"\n"
+        +"theorem conjunction_inside_cases (A B P Q : Prop) (h : P ∨ Q) (fa : P → A) (fb : P → B) (ga : Q → A) (gb : Q → B) : A ∧ B := "+nested_pair_term+"\n"
+        +"theorem iff_subgoals (P Q : Prop) (f : P → Q) (g : Q → P) : P ↔ Q := "+iff_term+"\n"
+        +"theorem exists_explicit_witness (P : Nat → Prop) (a : Nat) (ha : P a) : ∃ x : Nat, P x := "+exists_term+"\n"
+        +"theorem exists_inside_cases (P : Nat → Prop) (Q : Prop) (a : Nat) (ha : P a) (h : P a ∨ Q) : ∃ x : Nat, P x := "+nested_exists_term+"\n",encoding="utf-8")
+    subprocess.run(["lean",str(target)],cwd=root,check=True)
+print("Conjunction, equivalence and explicit existential child goals accepted by Lean")
+
+# An aligned set-theory case exercises presentation syntax, bounded context
+# introductions and the resulting Lean term. The minimal predicate-set model
+# uses Lean's core Membership and Inter classes; no copied Mathlib source is
+# needed for this fixture.
+real_math_cases=json.loads((root/"tests/fixtures/real-math-cases.json").read_text(encoding="utf-8"))
+for real_math_case in real_math_cases:
+    case_script="""
+import {compileNaturalDraft} from './web/natural-draft.mjs';
+const example="""+json.dumps(real_math_case,ensure_ascii=False)+""";
+const result=compileNaturalDraft(example.naturalDraft,example.scope,new Map(Object.entries(example.context)),{goal:example.goal});
+console.log(JSON.stringify(result.term));
+"""
+    case_term=json.loads(subprocess.run(["node","--input-type=module"],input=case_script,text=True,cwd=root,check=True,capture_output=True).stdout)
+    with TemporaryDirectory() as tmp:
+        target=Path(tmp)/(real_math_case["id"]+".lean")
+        case_source=real_math_case["leanPrelude"]+real_math_case["leanDeclaration"]+case_term+"\n"
+        target.write_text(case_source,encoding="utf-8")
+        subprocess.run(["lean",str(target)],cwd=root,check=True)
+    case_tree=extract(case_source)["tree"]
+    focus=next(node for node in walk(case_tree)
+               if node.get("reference","").endswith(real_math_case["focusReference"])
+               and node.get("term")==real_math_case["expectedElaboratedTerm"])
+    assert focus.get("type")==real_math_case["expectedFocusType"],(real_math_case["id"],focus)
+    context={binding["name"]:binding for binding in focus["scope"]}
+    closure={binding["name"] for binding in focus["scope"] if binding["neededForContext"]}
+    assert set(real_math_case["expectedContextClosure"]).issubset(closure),(real_math_case["id"],closure)
+    assert real_math_case["focusCandidate"] in case_term,(real_math_case["id"],case_term)
+    if real_math_case["id"]=="predicate-intersection-left":
+        assert context["hx"]["usedInTerm"] and context["A"]["usedInType"] and context["x"]["usedInType"],context
+    else:
+        # Lean elaborates the source-level And.intro as constructor notation.
+        # Keep that distinction visible instead of demanding textual node identity.
+        pair=next(node for node in walk(case_tree) if node.get("kind")=="opaque"
+                  and "hB" in node.get("term","") and "hA" in node.get("term","")
+                  and "∧" in node.get("type", ""))
+        assert "hB" in pair["term"] and "hA" in pair["term"],pair
+    print("Lean-compiled aligned set case:",real_math_case["id"])
+,['hFalse'],new Map([['hFalse','False']]),{goal:'Q'});
 console.log(JSON.stringify([neg.term,not.term,exfalso.term,alias.term]));
 """
 neg_term,not_term,exfalso_term,alias_term=json.loads(subprocess.run(["node","--input-type=module"],input=logic_script,text=True,cwd=root,check=True,capture_output=True).stdout)
