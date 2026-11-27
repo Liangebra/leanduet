@@ -151,7 +151,19 @@ const rows = [
 ["A guided sentence maps to one formal fragment. It is not unrestricted natural language.","引导式句子对应一个形式化片段，并非不受限制的自然语言。","ガイド付き文は形式的断片に対応します。自由な自然言語ではありません。"],
 ["Write freely: questions, incomplete arguments, conjectures, counterexamples, notation of your own. No grammar or proof obligations are imposed here. Notes are local and unverified; editing them does not alter the Lean source.","自由记录问题、不完整论证、猜想、反例与自定义记号。此处不要求语法或证明义务。笔记仅保存在本地且未经验证，编辑不会改变 Lean 源码。","質問、不完全な論証、予想、反例、独自の記号を自由に記録できます。文法や証明義務はありません。ノートはローカルで未検証であり、編集しても Lean ソースは変わりません。"],
 ["Optional scope names identify objects already introduced elsewhere. Translation creates a candidate fragment, not a checked theorem. No server or AI required.","可选的上下文名称标识已引入的对象。转换只生成候选片段，不是已验证定理。无需服务器或 AI。","任意の文脈名は既に導入された対象を表します。変換は候補断片を生成するだけで、検証済み定理ではありません。サーバーや AI は不要です。"],
-["Proposals are unverified; nothing is sent until you request it and confirm.","建议未经验证；只有在你主动请求并确认之后才会发送内容。","提案は未検証です。要求して確認するまで内容は送信されません。"]
+["Proposals are unverified; nothing is sent until you request it and confirm.","建议未经验证；只有在你主动请求并确认之后才会发送内容。","提案は未検証です。要求して確認するまで内容は送信されません。"],
+["Candidate generated · Lean not checked","已生成候选 · 尚未交由 Lean 检查","候補を生成 · Lean 未検査"],
+["Depends on an open obligation","依赖尚未完成的证明义务","未解決の証明義務に依存"],
+["Open proof obligation","尚有开放的证明义务","未解決の証明義務"],
+["Needs more context","需要更多上下文","追加の文脈が必要"],
+["A candidate is available · choose how to proceed","已有候选 · 请决定是否采用","候補あり · 採用するか選択してください"],
+["Multiple supported interpretations remain","仍有多种受支持的解释","複数の対応可能な解釈が残っています"],
+["Candidate search budget exhausted","候选搜索达到预算上限","候補探索の予算上限に達しました"],
+["Current choice no longer fits","当前选择已不再相容","現在の選択は整合しません"],
+["Draft constraints conflict","草稿约束彼此冲突","下書きの制約が矛盾しています"],
+["No match in the supported rule set","当前支持的规则中没有匹配项","対応可能な規則に一致するものがありません"],
+["Wording or rule is not supported","该措辞或规则目前不受支持","この表現または規則は未対応です"],
+["Does not match the current goal","与当前目标不匹配","現在の目標と一致しません"]
 ];
 const dictionaries = new Map(rows.map(([en,zh,ja])=>[en,{en,zh,ja}]));
 const key='leanduet.interface-language';
