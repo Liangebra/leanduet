@@ -57,3 +57,21 @@ with TemporaryDirectory() as tmp:
     subprocess.run(["lean", str(target)], cwd=root, check=True)
 print("Generated local definitions and context introductions accepted by Lean")
 
+
+# The omitted proposition is determined by a later statement, not by the
+# order of the conjunction's arguments. Both resulting fragments compile.
+constraint_script = """
+import {compileNaturalDraft} from './web/natural-draft.mjs';
+const facts=new Map([['h','P ∧ Q'],['f','P → R'],['g','Q → R']]);
+const prefix='建立 hp : $?$,由 h\\n';
+console.log(JSON.stringify(['f','g'].map(rule=>compileNaturalDraft(prefix+'由 hp 与 '+rule+' 得到 $R$',[...facts.keys()],facts).term)));
+"""
+left_term, right_term = json.loads(subprocess.run(["node", "--input-type=module"], input=constraint_script, text=True, cwd=root, check=True, capture_output=True).stdout)
+assert "And.left h" in left_term and "And.right h" in right_term
+with TemporaryDirectory() as tmp:
+    target = Path(tmp) / "Constrained.lean"
+    signature = " (P Q R : Prop) (h : P ∧ Q) (f : P → R) (g : Q → R) : R := "
+    target.write_text("theorem constrained_left" + signature + left_term + "\n"
+                      "theorem constrained_right" + signature + right_term + "\n", encoding="utf-8")
+    subprocess.run(["lean", str(target)], cwd=root, check=True)
+print("Both backward-constrained proof fragments accepted by Lean")

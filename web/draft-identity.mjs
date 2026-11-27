@@ -22,7 +22,7 @@ const contextSignature=nodes=>nodes.filter(n=>n.kind==='context').map(n=>[n.name
 const lineKey=n=>JSON.stringify([n.kind,n.raw]);
 function candidateKey(c,ids){
  if(c.dependencies.some(id=>!ids.has(id)))return null;
- return JSON.stringify([c.schema,c.term,c.dependencies.map(id=>ids.get(id)).sort()]);
+ return JSON.stringify([c.schema,c.term,c.type||null,c.dependencies.map(id=>ids.get(id)).sort()]);
 }
 export function reconcileDraftIdentity(previous,graph){
  const ids=new Map(),matches=new Map();let next=previous?.next??1;

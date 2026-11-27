@@ -1,6 +1,7 @@
 import {compileFormula} from './math-formula.mjs';
 import {buildDraftGraph} from './draft-graph.mjs';
 import {extendGoal} from './context-extension.mjs';
+import {constrainProposition} from './proposition-constraints.mjs';
 import {discourseFrame,discourseCandidates} from './discourse.mjs';
 import {parseRuleIntent} from './rule-intent.mjs';
 import {renderChain} from './proof-chain.mjs';
@@ -11,6 +12,12 @@ const namePattern=/^[A-Za-z_][A-Za-z0-9_']{0,63}$/;
 function unwrap(s){let body=s.trim(),modifiers=[];for(let i=0;i<4;i++){const m=marker.exec(body);if(!m)break;modifiers.push(m[0].trim());body=body.slice(m[0].length);}return {body,modifiers};}
 function parseLine(raw){
  const {body,modifiers}=unwrap(raw);
+ const hole=/^(?:建立|记|establish\s+|have\s+)\s*([A-Za-z_][A-Za-z0-9_']{0,63})\s*[:：]\s*\$\?\$\s*[,，|；;]\s*(?:由|from\s+|using\s+)\s*([A-Za-z_][A-Za-z0-9_']{0,63})\s*[。.]?$/iu.exec(body);
+ if(hole){
+  const [,name,source]=hole;
+  if(compileFormula(name).ast.kind!=='id')throw Error('Invalid intermediate name.');
+  return {raw,kind:'infer-proposition',name,source,modifiers};
+ }
  const intro=/^(任取|取任意|假设|设|take\s+|assume\s+)\s*([A-Za-z_][A-Za-z0-9_']{0,63})\s*[:：]\s*(\$[^$\n]+\$|\\\([^]*?\\\))\s*[。.]?$/iu.exec(body);
  if(intro){
   const [,word,name,type]=intro;
@@ -61,7 +68,8 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
   syntax.set(raw,entry);return entry;
  });
  const planned=new Set(parsed.map(p=>p.value?.name).filter(Boolean));
- const key=JSON.stringify([scope,[...context],[...planned].sort(),goal]);
+ const lookahead=parsed.some(p=>p.value?.kind==='infer-proposition')?JSON.stringify([input,[...choices]]):null;
+ const key=JSON.stringify([scope,[...context],[...planned].sort(),goal,lookahead]);
  const signatures=lines.map(({raw,line},i)=>JSON.stringify([raw,line,i===lines.length-1,choices.has(line),choices.get(line)]));
  let remainingGoal=goal;
  let serial=1;const rows=[],steps=[],openNames=new Set(),serials=[];let blocked=false,reusedRows=0;
@@ -99,7 +107,7 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
   const row={...p,raw,line,status:'unresolved',proofStatus:'open',...details};
   // Keep a recognized proposition as a tentative local object. It is not
   // an established theorem and no incomplete draft is exported.
-  if(p&&!['define','introduce','assume'].includes(p.kind)&&!last&&!p.conclusion&&(!p.name||!occupied.has(p.name))){
+  if(p&&!['define','introduce','assume','infer-proposition'].includes(p.kind)&&!last&&!p.conclusion&&(!p.name||!occupied.has(p.name))){
    const step=makeStep(p,false,'?');
    openNames.add(step.name);steps.push(step);row.step=step;
   }
@@ -110,6 +118,24 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
    try{
     if(parsed[i].error)throw Error(parsed[i].error);
     p=parsed[i].value;
+    if(p.kind==='infer-proposition'){
+     if(last)throw Error('An inferred intermediate must be followed by a conclusion.');
+     if(occupied.has(p.name))throw Error('This intermediate name already exists.');
+     const future=lines.slice(i+1).map((x,j)=>({line:x.line,parsed:parsed[i+1+j].value}));
+     const result=constrainProposition(p,[...visible],facts,future);
+     const {domain,candidates,constraints}=result;
+     const picked=choices.has(line)?candidates.find(c=>c.term===choices.get(line)):candidates.length===1?candidates[0]:null;
+     if(!picked){
+      unresolved(p,raw,line,last,{candidates,domain,constraints,reason:choices.has(line)?'Selected proposition candidate is no longer compatible.':result.reason||'Intermediate proposition is ambiguous; choose a candidate or add a structural constraint.'});
+      continue;
+     }
+     p={...p,type:picked.type};
+     const dependencies=picked.premises.filter(n=>openNames.has(n));
+     const proofStatus=dependencies.length?'depends-on-open':'candidate';
+     const step=makeStep(p,false,picked.term);
+     if(dependencies.length)openNames.add(step.name);
+     rows.push({...p,line,status:blocked?'provisional':'translated',proofStatus,dependencies,step,candidates,domain,constraints});steps.push(step);continue;
+    }
     if(['introduce','assume'].includes(p.kind)){
      if(last)throw Error('An introduction must be followed by a conclusion.');
      if(blocked)throw Error('Resolve preceding incomplete wording before extending the goal.');
