@@ -129,7 +129,7 @@ function proofContextDependencies(graph){
  return [...found];
 }
 
-function incomplete(input,parsed,branchResults,frame,{goal,choices,closedNames=[],openBindings=[],incompleteContext=false,reason,resolutionStatus='open-obligation',preserveTail=false,compileSegment}){
+function incomplete(input,parsed,branchResults,frame,{goal,choices,closedNames=[],openBindings=[],incompleteContext=false,reason,resolutionStatus='open-obligation',preserveTail=false,compileSegment,cache=null}){
  const line=parsed.head.line;
  const branches=branchResults.map(({branch,child,result,closed})=>({
   id:child.id,bindingId:child.localBindingIds[0],constructor:branch.constructor,name:branch.name,type:branch.type,goal:parsed.type,
@@ -150,16 +150,18 @@ function incomplete(input,parsed,branchResults,frame,{goal,choices,closedNames=[
   const inherited=[...new Set([...openBindings,parsed.resultName])];
   const tailResult=compileSegment(parsed.tail.map(x=>x.raw).join('\n'),resultFrame,{
    goal,choices,lineOffset:parsed.tailLineOffset,closedNames:[...expired],openBindings:inherited,
-   incompleteContext:true
+   incompleteContext:true,cache
   });
   const tailRows=(tailResult.rows||[]).map(item=>({...item,graphId:item.graphId||scopedLineId(resultFrame,item.line)}));
   const rows=[row,...branchRows,...tailRows].sort((a,b)=>a.line-b.line);
   const combinedGraph=remapProofGraph(buildDraftGraph(proofScopeNames(frame),proofScopeFacts(frame),[row,...(tailResult.rows||[])],{goal}),frame);
-  return {rows,steps:[],complete:false,completionKind:'incomplete',leanVerification:'not-run',semanticFidelity:'not-assessed',reusedRows:0,
+  const reusedRows=branchResults.reduce((total,item)=>total+(item.result?.reusedRows||0),0)+(tailResult.reusedRows||0);
+  return {rows,steps:[],complete:false,completionKind:'incomplete',leanVerification:'not-run',semanticFidelity:'not-assessed',reusedRows,
    openBindings:[...new Set([...inherited,...(tailResult.openBindings||[])])],
    remainingGoal:tailResult.remainingGoal,graph:combinedGraph,term:null};
  }
- return {rows:[row,...branchRows],steps:[],complete:false,completionKind:'incomplete',leanVerification:'not-run',semanticFidelity:'not-assessed',reusedRows:0,
+ const reusedRows=branchResults.reduce((total,item)=>total+(item.result?.reusedRows||0),0);
+ return {rows:[row,...branchRows],steps:[],complete:false,completionKind:'incomplete',leanVerification:'not-run',semanticFidelity:'not-assessed',reusedRows,
   openBindings:[...new Set(openBindings)],remainingGoal:goal,graph,term:null};
 }
 
@@ -167,7 +169,7 @@ function incomplete(input,parsed,branchResults,frame,{goal,choices,closedNames=[
  * Compile one scoped disjunction block and its parent continuation. Each arm
  * is elaborated in a forked identity context; only the common result returns.
  */
-export function compileCaseProgram(input,frame,{goal=null,choices=new Map(),lineOffset=0,closedNames=[],openBindings=[],incompleteContext=false}={},compileSegment){
+export function compileCaseProgram(input,frame,{goal=null,choices=new Map(),lineOffset=0,closedNames=[],openBindings=[],incompleteContext=false,cache=null}={},compileSegment){
  if((frame.id.match(/\/case:/g)||[]).length>=8)throw Error('Nested disjunction scope is limited to eight levels.');
  const parsed=parseBlock(input,lineOffset),sourceBinding=resolveProofName(frame,parsed.source);
  if(sourceBinding.status!=='resolved'||typeof sourceBinding.binding.type!=='string')
@@ -187,7 +189,7 @@ export function compileCaseProgram(input,frame,{goal=null,choices=new Map(),line
    id:childId+':binding',name:branch.name,type:branchTypes[branch.constructor],kind:'case-assumption'
   },allowShadow:true});
   const body=branch.sourceLines.join('\n');
-  const result=compileSegment(body,child,{goal:parsed.type,choices,lineOffset:branch.bodyLineOffset,closedNames:[...closedNames,...parsed.branches.filter(b=>b!==branch&&b.name!==branch.name).map(b=>b.name)],openBindings});
+  const result=compileSegment(body,child,{goal:parsed.type,choices,lineOffset:branch.bodyLineOffset,closedNames:[...closedNames,...parsed.branches.filter(b=>b!==branch&&b.name!==branch.name).map(b=>b.name)],openBindings,cache});
   if(!result.complete){
    const failed=result.rows.find(row=>row.status==='unresolved');
    firstOpen??=failed?{line:failed.line,reason:failed.reason}:{reason:'A case branch is still open.'};
@@ -212,7 +214,7 @@ export function compileCaseProgram(input,frame,{goal=null,choices=new Map(),line
  }
  if(firstOpen)return incomplete(input,parsed,branchResults,frame,{goal,choices,closedNames,openBindings,incompleteContext,
   reason:(firstOpen.line?'Branch proof line '+firstOpen.line+': ':'')+(firstOpen.reason||'A case branch is still open.'),
-  preserveTail:true,compileSegment});
+  preserveTail:true,compileSegment,cache});
  const branches=branchResults.map(({branch,child,result,closed})=>({
   id:child.id,bindingId:child.localBindingIds[0],constructor:branch.constructor,name:branch.name,type:branch.type,goal:parsed.type,
   steps:result.steps,resultId:proofResultId(result.graph),dependencies:closed.dependencies,graph:result.graph,status:'complete'
@@ -249,13 +251,13 @@ export function compileCaseProgram(input,frame,{goal=null,choices=new Map(),line
   return null;
  }
  const escaping=freeClosed(compileFormula(parsed.type,{syntax:'lean'}).scoped);
- if(escaping)return incomplete(input,parsed,branchResults,frame,{goal,reason:'A branch-local name cannot occur in the parent result: '+escaping,resolutionStatus:'incompatible-target'});
+ if(escaping)return incomplete(input,parsed,branchResults,frame,{goal,reason:'A branch-local name cannot occur in the parent result: '+escaping,resolutionStatus:'incompatible-target',cache});
  let tailResult;
  if(parsed.tail.length){
-  tailResult=compileSegment(parsed.tail.map(x=>x.raw).join('\n'),resultFrame,{goal,choices,lineOffset:parsed.tailLineOffset,closedNames:[...expired],openBindings,incompleteContext});
+  tailResult=compileSegment(parsed.tail.map(x=>x.raw).join('\n'),resultFrame,{goal,choices,lineOffset:parsed.tailLineOffset,closedNames:[...expired],openBindings,incompleteContext,cache});
  }else{
   if(goal&&!sameScopedFormula(parsed.type,goal))return incomplete(input,parsed,branchResults,frame,{goal,
-   reason:'The case result does not structurally match the enclosing goal; supply a parent continuation.',resolutionStatus:'incompatible-target'});
+   reason:'The case result does not structurally match the enclosing goal; supply a parent continuation.',resolutionStatus:'incompatible-target',cache});
   tailResult={rows:[],steps:[{kind:'conclude',type:goal||null,application:parsed.resultName}],complete:!incompleteContext,
    graph:remapProofGraph(buildDraftGraph(proofScopeNames(resultFrame),proofScopeFacts(resultFrame),[],{goal}),resultFrame),
    openBindings:[],reusedRows:0,remainingGoal:goal};
@@ -266,7 +268,8 @@ export function compileCaseProgram(input,frame,{goal=null,choices=new Map(),line
  const graph=remapProofGraph(buildDraftGraph(proofScopeNames(frame),proofScopeFacts(frame),[caseRow,...(tailResult.rows||[])],{goal}),frame);
  const steps=[step,...tailResult.steps];
  const complete=tailResult.complete&&!incompleteContext;
- return {rows,steps,complete,completionKind:complete?'structural-export-ready':'incomplete',leanVerification:'not-run',semanticFidelity:'not-assessed',reusedRows:0,
+ const reusedRows=branchResults.reduce((total,item)=>total+(item.result?.reusedRows||0),0)+(tailResult.reusedRows||0);
+ return {rows,steps,complete,completionKind:complete?'structural-export-ready':'incomplete',leanVerification:'not-run',semanticFidelity:'not-assessed',reusedRows,
   openBindings:tailResult.openBindings||[],remainingGoal:tailResult.remainingGoal,graph,
   term:complete?renderChain(steps):null};
 }
