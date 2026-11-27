@@ -25,4 +25,6 @@ test('compact image preserves an explicitly named Mathlib rule and premises',()=
  assert.equal(result.complete,true);
  assert.equal(result.rows.at(-1).proofStatus,'candidate');
  assert.match(result.term,/IsCompact\.image hs hf/);
+ assert.throws(()=>compileNaturalDraft(input,['f','s','hs'],new Map([['hs','IsCompact s']]),{goal:"IsCompact (f '' s)"}),
+  'continuity is a required premise; the draft must not invent or omit hf');
 });
