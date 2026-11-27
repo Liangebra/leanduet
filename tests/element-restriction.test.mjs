@@ -126,8 +126,8 @@ test('bounded candidate identity follows the set object and rejects an ambiguous
 
 test('set object identities are explicit dependencies in the semantic draft graph',()=>{
  const facts=new Map([['A','Set Nat'],['hall','∀ x : Nat, x ∈ A → P x']]);
- const input='take an arbitrary element x : $Nat$ in A satisfying $P(x)$\\n'+
-  'assume hx : $x ∈ A$\\n$P(x)$ | hall x hx';
+ const input='take an arbitrary element x : $Nat$ in A satisfying $P(x)$\n'+
+  'assume hx : $x ∈ A$\n$P(x)$ | hall x hx';
  const result=compileNaturalDraft(input,['A','hall'],facts,{goal:'∀ x ∈ A, P x'});
  const request=result.graph.nodes.find(node=>node.kind==='witness');
  assert.ok(request);
