@@ -418,6 +418,8 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
             expect(false_page.locator("#patchTarget")).to_contain_text("P")
             false_page.locator("#chainEditor summary").click()
             false_page.locator("#chainFormat").select_option("natural")
+            print("Ex-falso patch target:",false_page.locator("#patchTarget").inner_text(),flush=True)
+            print("Ex-falso source scope:",false_page.locator("#patchScope").inner_text(),flush=True)
             false_page.locator("#chainText").fill("From hFalse, we obtain $P$")
             expect(false_page.locator("#draftTranslation")).to_contain_text("False.elim hFalse · false elimination")
             false_page.locator("#compileChain").click()
