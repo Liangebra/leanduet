@@ -299,10 +299,12 @@ classical double-negation elimination is never inserted. A bare local reference
 whose type is known is compared in the scoped surface grammar, including the
 built-in equivalence between `Not P` and `¬ P`; other structural mismatches
 remain unresolved and explicitly state that Lean definitional equality was not
-checked. Nontrivial applications still require Lean's independent check. From `False`,
-users can apply an explicit rule such as `False.elim`. The structured backend
-checks the annotations with Lean. Existential elimination remains a linear scope extension; it is
-not arbitrary dependent pattern matching or implicit type inference.
+checked. Nontrivial applications still require Lean's independent check. A
+typed local premise of `False` can now yield a distinct `False.elim` candidate
+for a different goal, including through the deterministic implicit rule search.
+The resolver does not derive arbitrary contradictions or insert classical
+principles. Existential elimination remains a linear scope extension; it is not
+arbitrary dependent pattern matching or implicit type inference.
 
 ## Branch-local disjunction elimination
 

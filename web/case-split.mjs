@@ -126,6 +126,27 @@ export function proofContextDependencies(graph){
 
 function incomplete(input,parsed,branchResults,frame,{goal,choices,closedNames=[],openBindings=[],incompleteContext=false,reason,resolutionStatus='open-obligation',preserveTail=false,compileSegment,cache=null}){
  const line=parsed.head.line;
+ // Even an unclosed arm cannot justify a parent result whose type mentions
+ // one of its local objects. Check the shared result type against the same
+ // scope identities used at closure, while respecting bound occurrences.
+ const parentIds=new Set(frame.bindings.map(binding=>binding.id));
+ const expired=new Set(closedNames);
+ for(const {result} of branchResults){
+  for(const node of graphNodes(result?.graph))if(node.name&&!parentIds.has(node.id))expired.add(node.name);
+ }
+ const parentNames=new Set(proofScopeNames(frame));
+ function freeClosed(tree){
+  if(tree.kind==='free')return expired.has(tree.name)&&!parentNames.has(tree.name)?tree.name:null;
+  for(const value of Object.values(tree))if(value&&typeof value==='object'){
+   for(const child of Array.isArray(value)?value:[value]){const name=freeClosed(child);if(name)return name;}
+  }
+  return null;
+ }
+ const escaping=freeClosed(compileFormula(parsed.type,{syntax:'lean'}).scoped);
+ if(escaping){
+  reason='A branch-local name cannot occur in the parent result: '+escaping;
+  resolutionStatus='incompatible-target';
+ }
  const branches=branchResults.map(({branch,child,result,closed})=>({
   id:child.id,bindingId:child.localBindingIds[0],constructor:branch.constructor,name:branch.name,type:branch.type,goal:parsed.type,
   resultId:proofResultId(result?.graph),dependencies:closed?.dependencies||[],graph:result?.graph||null,
@@ -136,12 +157,11 @@ function incomplete(input,parsed,branchResults,frame,{goal,choices,closedNames=[
   name:parsed.resultName,type:parsed.type,source:parsed.source,graphId:scopedLineId(frame,line),step:null,branches,branchProofIds};
  const graph=remapProofGraph(buildDraftGraph(proofScopeNames(frame),proofScopeFacts(frame),[row],{goal}),frame);
  const branchRows=branchResults.flatMap(({child,result})=>(result?.rows||[]).map(item=>({...item,graphId:item.graphId||scopedLineId(child,item.line)})));
+ // Keep parsing parent prose even when the provisional result itself has an
+ // invalid escaped type. The continuation is explicitly open and the expired
+ // names remain unavailable, so this retains useful structure without
+ // certifying or exporting a term that depends on the bad result.
  if(preserveTail&&parsed.tail.length){
-  const parentIds=new Set(frame.bindings.map(binding=>binding.id));
-  const expired=new Set(closedNames);
-  for(const {result} of branchResults){
-   for(const node of graphNodes(result?.graph))if(node.name&&!parentIds.has(node.id))expired.add(node.name);
-  }
   const resultFrame=extendProofScope(frame,{id:scopedLineId(frame,line),name:parsed.resultName,type:parsed.type,kind:'cases'});
   const inherited=[...new Set([...openBindings,parsed.resultName])];
   const tailResult=compileSegment(parsed.tail.map(x=>x.raw).join('\n'),resultFrame,{
@@ -257,7 +277,9 @@ export function compileCaseProgram(input,frame,{goal=null,choices=new Map(),line
   return null;
  }
  const escaping=freeClosed(compileFormula(parsed.type,{syntax:'lean'}).scoped);
- if(escaping)return incomplete(input,parsed,branchResults,frame,{goal,reason:'A branch-local name cannot occur in the parent result: '+escaping,resolutionStatus:'incompatible-target',cache});
+ if(escaping)return incomplete(input,parsed,branchResults,frame,{goal,choices,closedNames:[...expired],openBindings,incompleteContext,
+  reason:'A branch-local name cannot occur in the parent result: '+escaping,resolutionStatus:'incompatible-target',
+  preserveTail:true,compileSegment,cache});
  let tailResult;
  if(parsed.tail.length){
   tailResult=compileSegment(parsed.tail.map(x=>x.raw).join('\n'),resultFrame,{goal,choices,lineOffset:parsed.tailLineOffset,closedNames:[...expired],openBindings,incompleteContext,cache});
