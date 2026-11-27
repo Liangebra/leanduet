@@ -38,8 +38,11 @@ function specialize(tree,witness,depth=0){
 export function contextCandidates(goal,names,facts){
  const target=parse(goal),out=[],seen=new Set();
  if(!target||!Array.isArray(names)||names.length<1||names.length>4||names.some(n=>!simple.test(n)))return out;
- const entries=names.map(name=>({name,type:parse(facts.get(name)||'')}));
- if(entries.some(e=>!e.type))return out;
+ const entries=names.map(name=>({name,type:parse(facts.get(name)||'')})).filter(entry=>entry.type);
+ // A typed context can contain objects whose types are not propositions in
+ // this small surface grammar (for example `P : Prop`). Ignore those entries
+ // without letting them suppress candidates justified by supported premises.
+ if(!entries.length)return out;
  function add(schema,rule,args){
   const term=[rule,...args].join(' ');
   if(seen.has(term))return;
