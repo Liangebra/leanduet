@@ -10,13 +10,9 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from semantic import extract, search, patch, inspect_ir, abstract_preview, factor_preview
 
 project=Path(sys.argv[1]).resolve()
-source="""import Mathlib.Topology.Compactness.Compact
-
-theorem compact_image_example (X Y : Type) [TopologicalSpace X] [TopologicalSpace Y]
-    (s : Set X) (f : X → Y) (hs : IsCompact s) (hf : Continuous f) :
-    IsCompact (f '' s) := by
-  exact IsCompact.image hs hf
-"""
+mathlib_cases=json.loads((Path(__file__).resolve().parent/"fixtures"/"mathlib-cases.json").read_text(encoding="utf-8"))
+mathlib_case=next(case for case in mathlib_cases if case["id"]=="compact-image-continuous")
+source=mathlib_case["leanImport"]+"\n\n"+mathlib_case["leanTheoremHeader"]+" := "+mathlib_case["leanProofBody"]+"\n"
 
 def walk(n):
     yield n
@@ -36,7 +32,9 @@ print("Mathlib topology: compactness-preserving continuous image retrieved and c
 # A real Mathlib theorem with dependent instance parameters, rather than
 # an isolated propositional example. The inner compact-image proof is
 # extracted from an enclosing conjunction, keeping its outer constructor.
-nested=source.replace("theorem compact_image_example","theorem compact_image_refactor").replace("IsCompact (f '' s) := by\n  exact IsCompact.image hs hf","IsCompact (f '' s) ∧ True := by\n  exact ⟨IsCompact.image hs hf, True.intro⟩")
+nested=source.replace("theorem compact_image_example","theorem compact_image_refactor").replace(
+    mathlib_case["goal"]+" := "+mathlib_case["leanProofBody"],
+    mathlib_case["goal"]+" ∧ True := by\n  exact ⟨IsCompact.image hs hf, True.intro⟩")
 inner=next(n for n in walk(extract(nested,project)["tree"]) if n.get("reference")=="IsCompact.image")
 ir=inspect_ir(nested,inner["path"],project=project)
 assert ir["judgment"]["roundTrip"]["freshContextChecked"],ir
@@ -54,18 +52,13 @@ print("Mathlib topology: dependent-context round trip and nested compact-image f
 root=Path(__file__).resolve().parents[1]
 draft_script=r"""
 import {compileNaturalDraft} from './web/natural-draft.mjs';
-const facts=new Map([['hs','IsCompact s'],['hf','Continuous f']]);
-const input=String.raw`因此 $IsCompact (f '' s)$，由紧集的连续像，使用 hs 和 hf`;
-const result=compileNaturalDraft(input,['f','s','hs','hf'],facts,{goal:"IsCompact (f '' s)"});
-if(!result.complete||result.rows.at(-1).proofStatus!=='candidate')throw new Error(JSON.stringify(result));
+const example="""+json.dumps(mathlib_case,ensure_ascii=False)+r""";
+const result=compileNaturalDraft(example.naturalDraft,example.scope,new Map(Object.entries(example.context)),{goal:example.goal});
+if(!result.complete||result.rows.at(-1).proofStatus!=='candidate'||result.steps.at(-1).application!==example.expectedStructure[0].application)throw new Error(JSON.stringify(result));
 console.log(JSON.stringify(result.term));
 """
 term=json.loads(subprocess.run(["node","--input-type=module"],input=draft_script,text=True,cwd=root,check=True,capture_output=True).stdout)
-generated="""import Mathlib.Topology.Compactness.Compact
-
-theorem compact_image_from_natural (X Y : Type) [TopologicalSpace X] [TopologicalSpace Y]
-    (s : Set X) (f : X → Y) (hs : IsCompact s) (hf : Continuous f) :
-    IsCompact (f '' s) := """+term+"\n"
+generated=mathlib_case["leanImport"]+"\n\n"+mathlib_case["leanTheoremHeader"].replace("compact_image_example","compact_image_from_natural")+" := "+term+"\n"
 with TemporaryDirectory() as tmp:
     target=Path(tmp)/"CompactImageFromNatural.lean"
     target.write_text(generated,encoding="utf-8")
@@ -75,7 +68,7 @@ natural_tree=extract(generated,project)["tree"]
 natural_node=next(n for n in walk(natural_tree) if n.get("reference")=="IsCompact.image")
 needed=[d for d in natural_node["scope"] if d["neededForContext"]]
 needed_names={d["name"] for d in needed}
-assert {"X","Y","s","f","hs","hf"}.issubset(needed_names),needed
-for space in ("X","Y"):
-    assert any("TopologicalSpace "+space in d["type"] for d in needed),needed
+assert set(mathlib_case["expectedContextClosure"]).issubset(needed_names),needed
+for instance in mathlib_case["requiredTypeclassClosure"]:
+    assert any(instance in d["type"] for d in needed),needed
 print("Mathlib topology: extracted proof retains its dependent data and topology-instance closure")

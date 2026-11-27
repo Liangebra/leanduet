@@ -111,6 +111,11 @@ proof of semantic equivalence. It does not rewrite the Lean source.
 and independently compiles its generated bounded-quantifier proof with Lean.
 The browser smoke test selects a proof candidate without changing the raw
 text and checks that subsequent edits invalidate the staged patch.
+`tests/fixtures/mathlib-cases.json` stores the compact-image topology example with
+its prose, controlled draft, expected structure, theorem header and context
+closure. The JavaScript structural test and pinned Mathlib integration consume
+the same fixture; Mathlib CI compiles the generated candidate. This single
+case is a corpus seed, not broad analysis or algebra coverage.
 `node tests/draft-benchmark.mjs` is an opt-in synthetic full-vs-incremental
 latency comparison; results are environment-dependent and do not establish a
 real-world latency guarantee. More realistic mathematical corpora and

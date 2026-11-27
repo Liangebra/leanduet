@@ -4,6 +4,7 @@ import {readFileSync} from 'node:fs';
 import {compileNaturalDraft} from '../web/natural-draft.mjs';
 
 const cases=JSON.parse(readFileSync(new URL('./fixtures/real-math-cases.json',import.meta.url),'utf8'));
+const mathlibCases=JSON.parse(readFileSync(new URL('./fixtures/mathlib-cases.json',import.meta.url),'utf8'));
 
 test('aligned real-math fixtures preserve set operations and proof structure',()=>{
  assert.equal(cases.length,2);
@@ -27,4 +28,15 @@ test('compact image preserves an explicitly named Mathlib rule and premises',()=
  assert.match(result.term,/IsCompact\.image hs hf/);
  assert.throws(()=>compileNaturalDraft(input,['f','s','hs'],new Map([['hs','IsCompact s']]),{goal:"IsCompact (f '' s)"}),
   'continuity is a required premise; the draft must not invent or omit hf');
+});
+
+test('Mathlib corpus seed matches the existing structural candidate',()=>{
+ assert.equal(mathlibCases.length,1);
+ for(const example of mathlibCases){
+  const result=compileNaturalDraft(example.naturalDraft,example.scope,new Map(Object.entries(example.context)),{goal:example.goal});
+  assert.equal(result.complete,true,example.id);
+  assert.deepEqual(result.steps.map(step=>({kind:step.kind,claim:step.type,application:step.application})),example.expectedStructure,example.id);
+  assert.equal(result.rows.at(-1).proofStatus,'candidate',example.id);
+  assert.match(example.alignmentStatus,/draft correspondence/);
+ }
 });

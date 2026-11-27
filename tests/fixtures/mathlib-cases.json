@@ -1,0 +1,29 @@
+[
+  {
+    "id": "compact-image-continuous",
+    "domain": "point-set topology",
+    "description": "A continuous image of a compact set is compact.",
+    "naturalProof": "Since s is compact and f is continuous, the image f '' s is compact by the continuous-image theorem.",
+    "naturalDraft": "因此 $IsCompact (f '' s)$，由紧集的连续像，使用 hs 和 hf",
+    "goal": "IsCompact (f '' s)",
+    "scope": ["f", "s", "hs", "hf"],
+    "context": {
+      "hs": "IsCompact s",
+      "hf": "Continuous f"
+    },
+    "expectedStructure": [
+      {
+        "kind": "conclude",
+        "claim": "(IsCompact (f '' s))",
+        "application": "IsCompact.image hs hf"
+      }
+    ],
+    "expectedStepKinds": ["conclude"],
+    "expectedContextClosure": ["X", "Y", "s", "f", "hs", "hf"],
+    "requiredTypeclassClosure": ["TopologicalSpace X", "TopologicalSpace Y"],
+    "leanImport": "import Mathlib.Topology.Compactness.Compact",
+    "leanTheoremHeader": "theorem compact_image_example (X Y : Type) [TopologicalSpace X] [TopologicalSpace Y] (s : Set X) (f : X → Y) (hs : IsCompact s) (hf : Continuous f) : IsCompact (f '' s)",
+    "leanProofBody": "by\n  exact IsCompact.image hs hf",
+    "alignmentStatus": "draft correspondence; Lean candidate is checked in the pinned Mathlib integration"
+  }
+]
