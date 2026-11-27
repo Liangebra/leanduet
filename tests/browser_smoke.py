@@ -286,20 +286,20 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
             expect(operation_page.locator("#patchTarget")).to_contain_text("∀")
             operation_page.locator("#chainEditor summary").click()
             operation_page.locator("#chainFormat").select_option("natural")
-            operation_text="""take an element x : $Nat$ satisfying $P(x)$"""
+            operation_text="""take an element x : $Nat$ satisfying $P(x)$
+unsupported ⊛"""
             operation_page.locator("#chainText").fill(operation_text)
             operation_row=operation_page.locator("#draftTranslation .ruleResult").first
             expect(operation_row).to_contain_text("universal-variable introduction")
             expect(operation_row).to_contain_text("existential witness extraction")
             operation_row.get_by_role("button",name="Use this candidate").first.click()
             expect(operation_row).to_contain_text("Clear choice")
-            operation_text += """
-cases h, establish hp : $P(x)$
+            operation_text=operation_text.replace("unsupported ⊛", """cases h, establish hp : $P(x)$
   left case hleft
     $P(x)$ | hall x
   right case hright
     $P(x)$ | hall x
-$P(x)$ | hp"""
+$P(x)$ | hp""")
             operation_page.locator("#chainText").fill(operation_text)
             operation_row=operation_page.locator("#draftTranslation .ruleResult").first
             expect(operation_row).to_contain_text("universal-variable introduction")
