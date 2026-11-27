@@ -10,14 +10,17 @@ and PRs #32–#35 are merged. PR #36 (`ee64768`,
 workflow passed, but its complete Tests workflow exposed a browser smoke
 failure: after adopting a new existential theorem, the test filled `#chainText`
 while its enclosing editor was collapsed. This is fixed on PR #36 at head
-`4a6628a`; the workflow for that new head must pass before merge. The failed
-run passed JavaScript, Python, Lean models, backend integration and generated
-Lean integration; only the browser smoke step failed.
+`4a6628a`; no workflow result for that new head was visible at the last check,
+so it must pass before merge. The failed run passed JavaScript, Python, Lean
+models, backend integration and generated Lean integration; only the browser
+smoke step failed.
 
 The current local branch, `research/element-operation-candidates`, is based on
 PR #36's prior head `ee64768` and contains the next stacked change, including
-the same browser-test correction as #36. It is not yet on GitHub. Its
-dependency is explicit: it uses the constructive equivalence and
+the same browser-test correction as #36. PR #37 is open with head
+`12aaa6e` and targets the #36 branch at `4a6628a`; its Tests workflow
+`46012468016` and Mathlib workflow `46012468038` were in progress at the last
+check. Its dependency is explicit: it uses the constructive equivalence and
 existential child-goal operations introduced by #36 in neighboring integration
 tests, while the operation-candidate resolver itself also reuses main's scope,
 identity and existential-elimination machinery.
@@ -45,8 +48,8 @@ remain unimplemented.
 - JavaScript unit suite: 238/238 passed after the candidate-graph null-selection
   regression was fixed.
 - Python unit suite: 17/17 passed.
-- Python byte-compilation and `git diff --check`: passed before the latest docs
-  and benchmark edits; rerun before commit.
+- Python byte-compilation, `git diff --check`, and `node --check` for changed
+  modules: passed after the latest edits.
 - Opt-in synthetic benchmark: Node v24.22.3, Linux x64, 24 warmups and 160
   samples; candidate evaluation over 50 typed context entries measured 0.678 ms
   median / 1.124 ms P95 cold and 0.461 / 0.735 ms on exact replay. A property
@@ -54,17 +57,16 @@ remain unimplemented.
   0.696 / 1.162 ms. Every incremental case matched a fresh full evaluation.
   These are synthetic local measurements, not browser latency guarantees.
 - Local Playwright is installed but its Chromium executable is absent; Lean is
-  also absent locally. The new real Lean compilation and browser interactions
-  therefore require CI. PR #36's Mathlib CI passed; its full workflow remained
-  in progress at the last status check.
+  also absent locally. The generated Lean compilation and browser interaction
+  therefore require CI. PR #36's current head and PR #37's workflows still need
+  green results before merge.
 
 ## Next dependency-ready work
 
-1. Finish local review of the candidate family and its acceptance fixtures;
-   rerun all tests and the benchmark, then publish the stacked change as PR #37.
-2. Wait for #36's latest full workflow, review its final head and merge only
-   after Lean and browser checks pass. Retarget #37 to `main` afterward and
-   rerun its workflows against the merged base.
+1. Wait for #36's head `4a6628a` CI result. If its browser path now passes,
+   merge #36, retarget #37 to `main`, and rerun #37 against the merged base.
+2. Review #37's Lean-generated terms and the actual browser candidate-selection
+   path from its CI; merge only when both workflows pass and the base is current.
 3. Audit the shared goal-operation contract for proof-local assumptions,
    conjunction/iff children, and return behavior before adding another
    operation. The intuitionistic negation introduction subset is already
