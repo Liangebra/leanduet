@@ -1,7 +1,7 @@
 import {compileFormula} from './math-formula.mjs';
 import {buildDraftGraph} from './draft-graph.mjs';
 import {extendGoal} from './context-extension.mjs';
-import {constrainProposition} from './proposition-constraints.mjs';
+import {constrainPropositions} from './proposition-constraints.mjs';
 import {discourseFrame,discourseCandidates} from './discourse.mjs';
 import {parseRuleIntent} from './rule-intent.mjs';
 import {renderChain} from './proof-chain.mjs';
@@ -78,6 +78,7 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
  const key=JSON.stringify([scope,[...context],[...planned].sort(),goal,lookahead]);
  const signatures=lines.map(({raw,line},i)=>JSON.stringify([raw,line,i===lines.length-1,choices.has(line),choices.get(line)]));
  let remainingGoal=goal;
+ const constraintResults=new Map();
  let serial=1;const rows=[],steps=[],openNames=new Set(),serials=[];let blocked=false,reusedRows=0;
  // The context and all planned names affect the entire draft. Under the
  // same context, reuse only an identical prefix, including choice and
@@ -129,11 +130,30 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
      if(last)throw Error('An inferred intermediate must be followed by a conclusion.');
      if(occupied.has(p.name))throw Error('This intermediate name already exists.');
      const future=lines.slice(i+1).map((x,j)=>({line:x.line,parsed:parsed[i+1+j].value}));
-     const result=constrainProposition(p,[...visible],facts,future);
-     const {domain,candidates,constraints}=result;
-     const picked=choices.has(line)?candidates.find(c=>c.term===choices.get(line)):candidates.length===1?candidates[0]:null;
+     if(!constraintResults.has(line)){
+      const network=constrainPropositions({line,parsed:p},[...visible],facts,future,choices,new Set(constraintResults.keys()));
+      for(const [key,value] of network)if(!constraintResults.has(key))constraintResults.set(key,value);
+     }
+     const result=constraintResults.get(line);
+     const {domain,candidates,constraints,group}=result;
+     const picked=result.overflow?null:choices.has(line)?candidates.find(c=>c.term===choices.get(line)):candidates.length===1?candidates[0]:null;
      if(!picked){
-      unresolved(p,raw,line,last,{candidates,domain,constraints,reason:choices.has(line)?'Selected proposition candidate is no longer compatible.':result.reason||'Intermediate proposition is ambiguous; choose a candidate or add a structural constraint.'});
+      const details={candidates,domain,constraints,constraintGroup:group,reason:result.reason||(choices.has(line)?'Selected proposition candidate is no longer compatible.':'Intermediate proposition is ambiguous; choose a candidate or add a structural constraint.')};
+      // A type can be known even when the proof is not. Preserve a typed
+      // open obligation if every surviving candidate has the same scoped
+      // type; do not choose a proof merely because the types coincide.
+      if(!result.overflow&&!choices.has(line)&&candidates.length>1){
+       const type=candidates[0].type;
+       const canonical=JSON.stringify(compileFormula(type,{syntax:'lean'}).scoped);
+       if(candidates.every(c=>JSON.stringify(compileFormula(c.type,{syntax:'lean'}).scoped)===canonical)&&!unavailable(type)){
+        p={...p,type};
+        const step=makeStep(p,false,'?');
+        openNames.add(step.name);steps.push(step);
+        details.step=step;
+        details.reason='The proposition type is determined, but its proof is ambiguous; choose a proof candidate.';
+       }
+      }
+      unresolved(p,raw,line,last,details);
       continue;
      }
      p={...p,type:picked.type};
@@ -141,7 +161,7 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
      const proofStatus=dependencies.length?'depends-on-open':'candidate';
      const step=makeStep(p,false,picked.term);
      if(dependencies.length)openNames.add(step.name);
-     rows.push({...p,line,status:blocked?'provisional':'translated',proofStatus,dependencies,step,candidates,domain,constraints});steps.push(step);continue;
+     rows.push({...p,line,status:blocked?'provisional':'translated',proofStatus,dependencies,step,candidates,domain,constraints,constraintGroup:group});steps.push(step);continue;
     }
     if(['introduce','assume'].includes(p.kind)){
      if(last)throw Error('An introduction must be followed by a conclusion.');

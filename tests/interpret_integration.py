@@ -75,3 +75,26 @@ with TemporaryDirectory() as tmp:
                       "theorem constrained_right" + signature + right_term + "\n", encoding="utf-8")
     subprocess.run(["lean", str(target)], cwd=root, check=True)
 print("Both backward-constrained proof fragments accepted by Lean")
+
+# The two independent holes have correlated choices. Both legal assignments
+# must compile; inconsistent assignments must not be exported.
+joint_script = """
+import {draftProof,compileNaturalDraft} from './web/natural-draft.mjs';
+const facts=new Map([['h','P ∧ Q'],['k','(P → R) ∧ (Q → R)']]);
+const input='建立 hp : $?$,由 h\\n建立 hf : $?$,由 k\\n由 hp 与 hf 得到 $R$';
+const scope=[...facts.keys()];
+const left=compileNaturalDraft(input,scope,facts,{choices:new Map([[2,'And.left k']])});
+const right=compileNaturalDraft(input,scope,facts,{choices:new Map([[2,'And.right k']])});
+const bad=draftProof(input,scope,facts,{choices:new Map([[1,'And.left h'],[2,'And.right k']])});
+console.log(JSON.stringify([left.term,right.term,bad.term,bad.graph.constraintGroups[0].status]));
+"""
+joint_left,joint_right,joint_bad,joint_status=json.loads(subprocess.run(["node","--input-type=module"],input=joint_script,text=True,cwd=root,check=True,capture_output=True).stdout)
+assert joint_bad is None and joint_status=="contradiction"
+assert "And.left h" in joint_left and "And.left k" in joint_left
+assert "And.right h" in joint_right and "And.right k" in joint_right
+with TemporaryDirectory() as tmp:
+    target=Path(tmp)/"JointConstraints.lean"
+    signature=" (P Q R : Prop) (h : P ∧ Q) (k : (P → R) ∧ (Q → R)) : R := "
+    target.write_text("theorem joint_left"+signature+joint_left+"\n"+"theorem joint_right"+signature+joint_right+"\n",encoding="utf-8")
+    subprocess.run(["lean",str(target)],cwd=root,check=True)
+print("Both correlated proof assignments accepted by Lean; conflicting assignment not exported")
