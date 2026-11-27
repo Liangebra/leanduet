@@ -57,6 +57,25 @@ The on-demand #duet_ir command and /api/ir endpoint serialize the selected Lean 
 
 The proof editor can switch to a formula-only surface syntax: one delimited LaTeX formula per line, optionally named for intermediate results. All earlier lines create typed proof holes; the last uses a `show` statement so that Lean must accept the proposition as the selected target. Generated intermediate names avoid supplied local names. The same structured steps and checked patch pipeline apply. No completeness or proof-choice guarantee is claimed.
 
+### Initial natural-language set-theory fixture
+
+The presentation formula grammar recognizes set union and intersection,
+including `\cup` and `\cap`, at Lean core precedences 65 and 70. This keeps
+`x ∈ A ∩ B` grouped as membership in the intersection. The aligned fixture in
+`tests/fixtures/real-math-cases.json` pairs a Chinese proof sketch with its
+selected goal, typed context and generated Lean declaration. It uses a small
+predicate-set model with explicit `Membership` and `Inter` instances, so the
+generated result compiles under the pinned Lean toolchain without another
+Mathlib installation. This is a kernel-checked set argument, but it is not
+evidence of broad Mathlib prose coverage; the topology example in
+`tests/mathlib_integration.py` remains a separate adapter test.
+
+In the commutativity fixture, the browser draft writes `And.intro hB hA`, while
+the elaborated tree exposes the resulting conjunction as a constructor pair.
+The integration test therefore aligns an actual projection node (`hx.right`)
+and separately checks that the pair contains the two local results; it does not
+assume that Lean's elaborated tree preserves the surface declaration spelling.
+
 ### Branch-local proof scopes
 
 The natural draft accepts an explicit disjunction block, for example:

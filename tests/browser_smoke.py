@@ -211,6 +211,34 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
             case_page.locator("#applyPatch").click()
             case_page.locator("#check").click()
             expect(case_page.locator("#verifyState")).to_have_text("Lean passed",timeout=120000)
+            # The browser's controlled editor deliberately accepts one theorem
+            # plus imports. Keep this UI fixture within that supported source
+            # shape; the set-intersection-specific Lean prelude is compiled in
+            # tests/interpret_integration.py instead.
+            set_source="""theorem predicate_intersection_left {α : Type} (A B : α → Prop) :
+    ∀ x : α, A x ∧ B x → A x := by
+  intro x
+  intro hx
+  exact And.left hx
+"""
+            case_page.locator("#lean").fill(set_source)
+            case_page.once("dialog",lambda d:d.accept())
+            case_page.locator("#adopt").click()
+            case_page.locator('[data-view="typed"]').click()
+            case_page.locator("#extractTerm").click()
+            expect(case_page.locator("#typedStatus")).to_contain_text("Extracted from Lean elaboration",timeout=60000)
+            case_page.locator("#typedTree").evaluate("(root) => root.querySelectorAll('details.typedNode').forEach(x=>x.open=true)")
+            set_projection=case_page.locator(".typedNode").filter(has=case_page.locator("summary").filter(has_text=__import__("re").compile("^Apply And\\.left$"))).last
+            set_projection.locator(":scope > .typedEdit").click()
+            case_page.locator("#chainEditor summary").click()
+            case_page.locator("#chainFormat").select_option("natural")
+            case_page.locator("#chainText").fill("因此 $A(x)$，由 And.left，使用 hx")
+            case_page.locator("#inferChain").click()
+            expect(case_page.locator("#draftTranslation")).to_contain_text("exact And.left hx")
+            case_page.locator("#compileChain").click()
+            expect(case_page.locator("#patchTerm")).to_have_value(__import__("re").compile(r"exact And\.left hx"))
+            case_page.locator("#checkPatch").click()
+            expect(case_page.locator("#applyPatch")).to_be_enabled(timeout=120000)
             case_page.close()
             exploration_source=patch_page.locator("#lean").input_value()
             patch_page.locator("#noteGoal").click()
