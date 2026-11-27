@@ -64,14 +64,15 @@ export function buildDraftGraph(scope,facts,rows,{goal=null}={}){
    binding:{id:branch.bindingId,name:branch.name,type:branch.type},
    dependencies:branch.dependencies||[],graph:branch.graph||null,status:branch.status||'open'
   })):undefined;
-  const subgoalStep=step?.kind==='and-intro'||row.kind==='and-intro';
+  const subgoalKinds=new Set(['and-intro','iff-intro','exists-intro']);
+  const subgoalStep=subgoalKinds.has(step?.kind)||subgoalKinds.has(row.kind);
   const subgoals=subgoalStep?(row.subgoals||step?.subgoals||[]).map(subgoal=>({
    id:subgoal.id,key:subgoal.key||null,kind:'subgoal',goal:subgoal.goal,resultId:subgoal.resultId||null,
    dependencies:subgoal.dependencies||[],graph:subgoal.graph||null,status:subgoal.status||'open'
   })):undefined;
   const goalOperation=step?.goalOperation||row.goalOperation;
   const subgoalRefs=subgoalStep?[...(row.dependencies||[]),...(subgoals||[]).flatMap(subgoal=>subgoal.dependencies||[]),...(subgoals||[]).map(subgoal=>subgoal.resultId).filter(Boolean)]:[];
-  const fallbackKind=row.kind==='cases'?'cases':row.kind==='and-intro'?'and-intro':'unresolved';
+  const fallbackKind=row.kind==='cases'?'cases':subgoalKinds.has(row.kind)?row.kind:'unresolved';
   const node={id,kind:step?.kind||fallbackKind,name:step?.name||(row.kind==='infer-proposition'?row.name:row.name||null),type:row.type||null,raw:row.raw,modifiers:row.modifiers||[],formula:parsed,
    proofStatus:row.proofStatus||'open',resolutionStatus:row.resolutionStatus||'open-obligation',status:row.status,application,alternatives,value,...(row.domain?{origin:'infer-proposition',typeDomain:row.domain.map(alternative),constraints:row.constraints,constraintRefs,constraintGroup:group?.id||null}:{}),
    ...(branches?{branches}:{}),...(subgoals?{subgoals}:{}),...(goalOperation?{goalOperation}:{}),selectedCandidate:selected?.id||null,scopeRefs:[...scopeRefs],dependencies:[...new Set([...scopeRefs,...parsed.refs,...(value?.refs||[]),...proofRefs,...caseRefs,...subgoalRefs])]};

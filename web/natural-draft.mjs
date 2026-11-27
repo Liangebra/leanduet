@@ -7,7 +7,7 @@ import {parseRuleIntent} from './rule-intent.mjs';
 import {renderChain} from './proof-chain.mjs';
 import {premiseFrame,contextCandidates,formulaPremiseSentence,citationCandidates,implicitCandidates,structuralRules} from './context-grammar.mjs';
 import {compileCaseProgram,hasCaseSplitHeader,remapProofGraph} from './case-split.mjs';
-import {compileConjunctionGoal,hasConjunctionGoalHeader} from './proof-subgoals.mjs';
+import {compileGoalOperationProgram,goalOperationHeader} from './proof-subgoals.mjs';
 import {extendProofScope,proofScopeFacts,proofScopeNames,rootProofScope} from './proof-scope.mjs';
 const marker=/^(?:(?:therefore|hence|thus|clearly|obviously|indeed|then)(?:\s*[,，:：]\s*|\s+)|(?:因此|从而|于是|显然|事实上|故|则)[，、：:\s]*)/iu;
 const formulaPattern=/\$[^$\n]+\$|\\\([^]*?\\\)|\\\[[^]*?\\\]/g;
@@ -401,7 +401,7 @@ function evaluateScopeAware(input,scope=[],context=new Map(),options={}){
   // branch hit costs more than recompiling that bounded wrapper.
   const shared=currentFrame.id==='root'?segmentOptions.cache:null;
   const rootBlock=String(text||'').split(/\r?\n/).some(line=>!line.startsWith(' ')&&!line.startsWith('\t')&&
-   (hasCaseSplitHeader(line.trim())||hasConjunctionGoalHeader(line.trim())));
+   (hasCaseSplitHeader(line.trim())||goalOperationHeader(line.trim())));
   // Small linear fragments are cheaper to rebuild than to deep-clone. Reserve
   // whole-result memoization for scoped programs or substantial source text.
   if(!shared||(!rootBlock&&String(text||'').length<512))return compileSegmentFresh(text,currentFrame,segmentOptions);
@@ -424,11 +424,11 @@ function evaluateScopeAware(input,scope=[],context=new Map(),options={}){
   const names=proofScopeNames(currentFrame),facts=proofScopeFacts(currentFrame);
   const lines=String(text||'').split(/\r?\n/),first=lines.findIndex(line=>line.trim());
   const blockIndex=lines.findIndex(line=>!line.startsWith(' ')&&!line.startsWith('\t')&&
-   (hasCaseSplitHeader(line.trim())||hasConjunctionGoalHeader(line.trim())));
-  const blockKind=blockIndex>=0&&hasCaseSplitHeader(lines[blockIndex].trim())?'cases':'conjunction';
+   (hasCaseSplitHeader(line.trim())||goalOperationHeader(line.trim())));
+  const blockKind=blockIndex>=0&&hasCaseSplitHeader(lines[blockIndex].trim())?'cases':blockIndex>=0?goalOperationHeader(lines[blockIndex].trim())?.kind:'linear';
   if(blockIndex>=0&&blockIndex===first){
    if(blockKind==='cases')return compileCaseProgram(text,currentFrame,segmentOptions,compileSegment);
-   return compileConjunctionGoal(text,currentFrame,segmentOptions,compileSegment,parseLine);
+   return compileGoalOperationProgram(text,currentFrame,segmentOptions,compileSegment,parseLine);
   }
   if(blockIndex>first){
    const lineOffset=segmentOptions.lineOffset||0;
@@ -444,7 +444,7 @@ function evaluateScopeAware(input,scope=[],context=new Map(),options={}){
       openBindings:[...new Set([...(segmentOptions.openBindings||[]),...(prefix.openBindings||[])])],
       incompleteContext:!!segmentOptions.incompleteContext||hasOpenText
      },compileSegment)
-     :compileConjunctionGoal(remainingText,nextFrame,{...segmentOptions,
+     :compileGoalOperationProgram(remainingText,nextFrame,{...segmentOptions,
       goal:prefix.remainingGoal,lineOffset:lineOffset+blockIndex,
       openBindings:[...new Set([...(segmentOptions.openBindings||[]),...(prefix.openBindings||[])])],
       incompleteContext:!!segmentOptions.incompleteContext||hasOpenText,cache:segmentOptions.cache

@@ -22,6 +22,103 @@ test('goal operations distinguish intuitionistic negation from a two-child conju
  assert.deepEqual(cases.subgoals.map(subgoal=>subgoal.contextDelta[0].type),['P','Q']);
 });
 
+test('equivalence introduction opens both directions without a classical principle',()=>{
+ const operation=planGoalOperation('P ↔ Q',{kind:'iff-introduction'});
+ assert.equal(operation.logic,'intuitionistic');
+ assert.equal(operation.closure.name,'Iff.intro');
+ assert.deepEqual(operation.subgoals.map(goal=>goal.goal),['(P → Q)','(Q → P)']);
+ const facts=new Map([['f','P → Q'],['g','Q → P']]);
+ const input=`prove equivalence
+  forward direction
+    assume hp : $P$
+    $Q$ | f hp
+  reverse direction
+    assume hq : $Q$
+    $P$ | g hq`;
+ const result=compileNaturalDraft(input,['f','g'],facts,{goal:'P ↔ Q'});
+ assert.equal(result.complete,true);
+ assert.equal(result.steps.at(-1).kind,'iff-intro');
+ assert.equal(result.rows[0].proofStatus,'candidate');
+ assert.match(result.term,/constructor[\s\S]*intro hp[\s\S]*exact f hp[\s\S]*intro hq[\s\S]*exact g hq/);
+ const node=result.graph.nodes.find(item=>item.kind==='iff-intro');
+ assert.deepEqual(node.subgoals.map(item=>item.status),['complete','complete']);
+ assert.notEqual(node.subgoals[0].id,node.subgoals[1].id);
+ assert.throws(()=>planGoalOperation('P → Q',{kind:'iff-introduction'}),/not a supported equivalence/);
+});
+
+test('existential introduction requires an explicit visible witness with a matching type',()=>{
+ const operation=planGoalOperation('∃ x : Nat, P x',{kind:'existential-introduction',witness:'a',witnessType:'Nat',witnessId:'context:0'});
+ assert.equal(operation.logic,'dependent-function');
+ assert.equal(operation.closure.name,'Exists.intro');
+ assert.deepEqual(operation.subgoals.map(goal=>goal.goal),['(P a)']);
+ const input=`construct witness a
+  witness property
+    $P(a)$ | ha`;
+ const facts=new Map([['a','Nat'],['ha','P a']]);
+ const result=compileNaturalDraft(input,['a','ha'],facts,{goal:'∃ x : Nat, P x'});
+ assert.equal(result.complete,true);
+ assert.equal(result.steps.at(-1).kind,'exists-intro');
+ assert.equal(result.steps.at(-1).goalOperation.witnessId,'context:0');
+ assert.match(result.term,/refine ⟨a, \?_⟩[\s\S]*exact ha/);
+ const node=result.graph.nodes.find(item=>item.kind==='exists-intro');
+ assert.ok(node.dependencies.includes('context:0'),'the witness identity is an operation dependency');
+ assert.deepEqual(node.subgoals.map(item=>item.status),['complete']);
+ assert.throws(()=>compileNaturalDraft(input,['ha'],new Map([['ha','P Nat']]),{goal:'∃ x : Nat, P x'}),/uniquely visible typed local witness/);
+ assert.throws(()=>compileNaturalDraft(input,['a','ha'],new Map([['a','Int'],['ha','P a']]),{goal:'∃ x : Nat, P x'}),/does not match the existential domain/);
+ assert.throws(()=>planGoalOperation('∃ x : Nat, ∀ a : Nat, R x a',{
+  kind:'existential-introduction',witness:'a',witnessType:'Nat'
+ }),/captured/);
+ assert.throws(()=>planGoalOperation('P',{kind:'existential-introduction',witness:'a',witnessType:'Nat'}),/not a supported existential/);
+ const dependent=compileNaturalDraft(`construct witness a
+  witness property
+    $True$ | ht`,['α','a','ht'],new Map([['a','α'],['ht','True']]),{
+  goal:'∃ x : α, True',openBindings:['α']
+ });
+ assert.equal(dependent.complete,true);
+ assert.equal(dependent.rows[0].proofStatus,'depends-on-open',
+  'a witness operation inherits dependencies from the witness type even when the predicate proof does not mention it');
+});
+
+test('explicit witness construction composes inside isolated disjunction branches',()=>{
+ const input=`cases h, establish hex : $∃ x : Nat, P(x)$
+  left case hpa
+    construct witness a
+      witness property
+        $P(a)$ | hpa
+  right case hq
+    construct witness a
+      witness property
+        $P(a)$ | ha`;
+ const result=compileNaturalDraft(input,['a','ha','h'],new Map([['a','Nat'],['ha','P a'],['h','P a ∨ Q']]),{goal:'∃ x : Nat, P x'});
+ assert.equal(result.complete,true);
+ assert.match(result.term,/cases h with[\s\S]*refine ⟨a, \?_⟩[\s\S]*exact hpa[\s\S]*refine ⟨a, \?_⟩[\s\S]*exact ha/);
+ const cases=result.graph.nodes.find(node=>node.kind==='cases');
+ assert.ok(cases.branches.every(branch=>branch.graph.nodes.some(node=>node.kind==='exists-intro')));
+ assert.ok(cases.branches.every(branch=>branch.status==='complete'));
+});
+
+test('goal-operation child edits agree with a cold rebuild and retain later child structure',()=>{
+ const scope=['f','g'],facts=new Map([['f','P → Q'],['g','Q → P']]);
+ const input=`prove equivalence
+  forward direction
+    assume hp : $P$
+    $Q$ | f hp
+  reverse direction
+    assume hq : $Q$
+    $P$ | g hq`;
+ const edited=input.replace('$P$ | g hq','显然 $P$ | g hq');
+ const session=createDraftSession();
+ session.evaluate(input,scope,facts,{goal:'P ↔ Q'});
+ const incremental=session.evaluate(edited,scope,facts,{goal:'P ↔ Q'});
+ const cold=compileNaturalDraft(edited,scope,facts,{goal:'P ↔ Q'});
+ assert.ok(incremental.reusedRows>=1);
+ assert.deepEqual(incremental.rows,cold.rows);
+ assert.deepEqual(incremental.steps,cold.steps);
+ assert.deepEqual(incremental.graph,cold.graph);
+ assert.equal(incremental.term,cold.term);
+ assert.ok(incremental.graph.nodes.find(node=>node.kind==='iff-intro').subgoals.every(goal=>goal.status==='complete'));
+});
+
 test('conjunction goal closes only after both isolated child proofs close',()=>{
  const context=new Map([['hp','P'],['hq','Q']]);
  const result=compileNaturalDraft(pair('$P$ | hp'),['hp','hq'],context,{goal:'P ∧ Q'});

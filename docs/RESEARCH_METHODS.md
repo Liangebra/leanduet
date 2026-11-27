@@ -37,14 +37,17 @@ properties. No upstream source is copied.
 
 ## Next implementation gates
 
-Stage 2 now has shared goal-operation plans for universal and implication
+Stage 2 has shared goal-operation plans for universal and implication
 introduction, intuitionistic negation introduction, disjunction elimination,
-and conjunction introduction. The conjunction block opens two isolated child
-goals; local declarations and open proof obligations remain scope-local, and
-the nested identity matcher preserves only uniquely aligned child scopes.
-Generated Lean and the browser interaction are checked by repository CI
-before merge. This does not cover named local-lemma return, existential goal
-construction, equivalence introduction, or classical reductio.
+conjunction introduction, equivalence introduction, and explicit existential
+introduction. Child goals inherit parent identities but have isolated local
+contexts; local declarations and open proof obligations remain scope-local,
+and the nested identity matcher preserves only uniquely aligned child scopes.
+Existential construction consumes a selected typed local object and leaves its
+predicate as an obligation; equivalence construction proves both directions
+without classical axioms. Generated Lean and browser interaction are checked
+by repository CI before merge. This still does not cover named local-lemma
+return, classical reductio, or general inductive elimination.
 
 Next, complete those bounded proof operations over the same child-scope
 contract. Then extend stage 3 with distinct structure candidates for arbitrary

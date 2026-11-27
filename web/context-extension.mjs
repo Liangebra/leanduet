@@ -5,6 +5,11 @@ function containsName(ast,name){
  if(ast.kind==='id'&&ast.value===name||['binder','bounded'].includes(ast.kind)&&ast.name===name)return true;
  return Object.values(ast).some(v=>v&&typeof v==='object'&&(Array.isArray(v)?v.some(x=>containsName(x,name)):containsName(v,name)));
 }
+function hasBinderNamed(ast,name){
+ if(!ast||typeof ast!=='object')return false;
+ if(['binder','bounded'].includes(ast.kind)&&ast.name===name)return true;
+ return Object.values(ast).some(value=>Array.isArray(value)?value.some(item=>hasBinderNamed(item,name)):hasBinderNamed(value,name));
+}
 function rename(ast,oldName,newName){
  if(ast.kind==='id')return ast.value===oldName?{...ast,value:newName}:ast;
  if(ast.kind==='binary')return {...ast,left:rename(ast.left,oldName,newName),right:rename(ast.right,oldName,newName)};
@@ -30,7 +35,7 @@ function inferredIntroductionType(ast,kind){
 }
 
 /** Describe a goal operation before opening its child proof obligations. */
-export function planGoalOperation(goal,{kind,name=null,type=null,source=null,sourceType=null,branchNames=['hp','hq']}={}){
+export function planGoalOperation(goal,{kind,name=null,type=null,source=null,sourceType=null,branchNames=['hp','hq'],witness=null,witnessType=null,witnessId=null}={}){
  if(!goal)throw Error('A proof operation needs the current goal.');
  const ast=compileFormula(goal,{syntax:'lean'}).ast;
  if(kind==='disjunction-elimination'){
@@ -54,6 +59,31 @@ export function planGoalOperation(goal,{kind,name=null,type=null,source=null,sou
   return {kind:'conjunction-introduction',parentGoal:goal,logic:'intuitionistic',
    subgoals:parts.map((part,index)=>({id:index===0?'first':'second',goal:renderFormula(part),contextDelta:[]})),
    closure:{kind:'constructor',name:'And.intro'}};
+ }
+ if(kind==='iff-introduction'){
+  let parts=null;
+  if(ast.kind==='binary'&&ast.op==='↔')parts=[ast.left,ast.right];
+  else if(ast.kind==='call'&&ast.fn?.kind==='id'&&ast.fn.value==='Iff'&&ast.args.length===2)parts=ast.args;
+  if(!parts)throw Error('The current goal is not a supported equivalence.');
+  const [forward,backward]=parts.map(renderFormula);
+  return {kind:'iff-introduction',parentGoal:goal,logic:'intuitionistic',
+   subgoals:[{id:'forward',goal:'('+forward+' → '+backward+')',contextDelta:[]},
+    {id:'reverse',goal:'('+backward+' → '+forward+')',contextDelta:[]}],
+   closure:{kind:'constructor',name:'Iff.intro'}};
+ }
+ if(kind==='existential-introduction'){
+  if(ast.kind!=='binder'||ast.op!=='∃')throw Error('The current goal is not a supported existential.');
+  if(typeof witness!=='string'||!witness)throw Error('Choose an explicit local witness.');
+  const witnessAst=compileFormula(witness,{syntax:'lean'}).ast;
+  if(witnessAst.kind!=='id')throw Error('Supply a visible typed local object as the witness.');
+  if(typeof witnessType!=='string'||!witnessType)throw Error('The witness type is not available in the current context.');
+  if(ast.domain&&!same(scopedFormula(ast.domain),compileFormula(witnessType,{syntax:'lean'}).scoped))
+   throw Error('The witness type does not match the existential domain.');
+  if(witness!==ast.name&&hasBinderNamed(ast.body,witness))
+   throw Error('The witness name would be captured by a nested binder in the existential body.');
+  return {kind:'existential-introduction',parentGoal:goal,logic:'dependent-function',witness,witnessId,
+   subgoals:[{id:'witness-property',goal:renderFormula(rename(ast.body,ast.name,witness)),contextDelta:[]}],
+   closure:{kind:'constructor',name:'Exists.intro',witness}};
  }
  if(!['introduce','assume'].includes(kind))throw Error('Unknown goal operation.');
  const introType=type||inferredIntroductionType(ast,kind);
