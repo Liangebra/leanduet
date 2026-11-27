@@ -273,10 +273,9 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
             operation_page.on("pageerror",lambda error:errors.append(str(error)))
             operation_page.goto(url)
             operation_source="""theorem operation_choice_demo (P : Nat → Prop) (hall : ∀ x : Nat, P x)
-    (he : ∃ y : Nat, P y) (h : True ∨ True) :
-    (∀ witness : ∃ y : Nat, P y, ∀ x : Nat, P x) := by
-  intro witness
-  exact hall
+    (he : ∃ y : Nat, P y) (h : True ∨ True) : ∀ x : Nat, P x := by
+  intro x
+  exact hall x
 """
             operation_page.locator("#lean").fill(operation_source)
             operation_page.once("dialog",lambda d:d.accept())
@@ -284,7 +283,7 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
             operation_page.locator('[data-view="typed"]').click()
             operation_page.locator("#extractTerm").click()
             expect(operation_page.locator("#typedStatus")).to_contain_text("Extracted from Lean elaboration",timeout=60000)
-            select_typed_edit(operation_page,includes=("∀","P x"),summary="Use hypothesis",term="hall")
+            select_typed_edit(operation_page,includes=("∀","P x"),summary="Introduce x")
             expect(operation_page.locator("#patchTarget")).to_contain_text("∀")
             operation_page.locator("#chainEditor summary").click()
             operation_page.locator("#chainFormat").select_option("natural")
