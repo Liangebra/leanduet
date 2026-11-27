@@ -103,6 +103,9 @@ export function planGoalOperation(goal,{kind,name=null,type=null,source=null,sou
  if(!['introduce','assume'].includes(kind))throw Error('Unknown goal operation.');
  const restricted=kind==='introduce'?restrictedQuantifier(ast,'∀'):null;
  if(restricted){
+  // A parsed Lean Pi already carries a trustworthy binder domain. Surface
+  // bounded quantifiers omit it, so those still require an explicit type.
+  if((typeof type!=='string'||!type)&&restricted.domain)type=renderFormula(restricted.domain);
   if(typeof type!=='string'||!type)throw Error('A set-restricted universal needs an explicit element type annotation.');
   const domain=compileFormula(type,{syntax:'lean'}).scoped;
   if(restricted.domain&&!same(scopedFormula(restricted.domain),domain))
