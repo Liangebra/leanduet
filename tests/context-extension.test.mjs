@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {draftProof,createDraftSession,compileNaturalDraft} from '../web/natural-draft.mjs';
-import {extendGoal} from '../web/context-extension.mjs';
+import {extendGoal,planGoalOperation} from '../web/context-extension.mjs';
 import {dependentNodes} from '../web/draft-graph.mjs';
 import {forkProofScope,proofScopeFacts,proofScopeNames,resolveProofName,rootProofScope} from '../web/proof-scope.mjs';
 const scope=['P'],facts=new Map();
@@ -39,6 +39,13 @@ test('Lean pretty-printed binders and inferred domains accept explicit user anno
  assert.equal(r.complete,true);
  assert.equal(r.remainingGoal,'(x ∈ s)');
  assert.equal(extendGoal('∀ (z : Nat), P z',{kind:'introduce',name:'x',type:'Nat'}),'(P x)');
+});
+test('a typed Lean universal binder supplies its domain for an implicit introduction',()=>{
+ const operation=planGoalOperation('∀ (x : Nat), x ∈ A → P x',{kind:'introduce',name:'x'});
+ assert.equal(operation.subgoals[0].contextDelta[0].type,'Nat');
+ assert.equal(operation.subgoals[0].goal,'((x ∈ A) → (P x))');
+ assert.throws(()=>planGoalOperation('∀ x ∈ A, P x',{kind:'introduce',name:'x'}),
+  /explicit element type annotation/,'surface bounded syntax has no carrier type to infer');
 });
 test('scope dependencies exist even when a proof does not mention its binder',()=>{
  const r=draftProof('任取 x : $Nat$\n$P$ | p',['P','p'],new Map([['p','P']]),{goal:'∀ z : Nat, P'});
