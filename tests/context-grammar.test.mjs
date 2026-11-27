@@ -26,12 +26,15 @@ test('a typed False premise offers constructive ex-falso but not double-negation
  assert.equal(implicitCandidates('P',['hnn'],doubleNegationFacts).candidates.length,0);
 });
 
-test('an unsupported type-level local does not suppress a supported premise candidate',()=>{
+test('a known Lean sort is ignored while other unknown local types stay unresolved',()=>{
  const facts=new Map([['P','Prop'],['hFalse','False']]);
  const candidates=contextCandidates('Q',['P','hFalse'],facts);
  assert.deepEqual(candidates.map(candidate=>candidate.term),['False.elim hFalse']);
  assert.deepEqual(candidates[0].premises,['hFalse'],'irrelevant type-level locals are not semantic proof dependencies');
  assert.equal(implicitCandidates('Q',['P','hFalse'],facts).candidates[0].term,'False.elim hFalse');
+ const unknownFacts=new Map([['hUnknown','P ∧'],['hFalse','False']]);
+ assert.deepEqual(contextCandidates('Q',['hUnknown','hFalse'],unknownFacts),[],
+  'an unparsed non-sort local is not silently discarded when assessing candidate completeness');
 });
 
 test('ambiguous identical conjuncts remain distinct candidate proofs',()=>{
