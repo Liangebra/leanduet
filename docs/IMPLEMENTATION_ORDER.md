@@ -105,3 +105,31 @@ All compatible referent tuples are retained within a bounded search, with
 explicit overflow. Open referents remain open. This is one local relational
 constraint over a shared draft graph, not general discourse understanding or
 a global parser for unrestricted prose.
+
+## Typed local definitions
+
+A definition `令 y : $Nat$ := $f(x)$` introduces a typed local value, not
+an equality proposition. The draft graph retains separate type and value trees,
+including value dependencies; subsequent candidate matching can use the
+explicit declared type. Lean checks the actual value and type. Duplicate,
+self and forward local references are rejected; unknown global names are
+left to Lean. Untyped inference, arbitrary set-builder notation and general
+unfolding are not implemented. The structured chain endpoint accepts bounded
+single-expression definitions and traces their elaborated local bindings.
+
+## Goal-directed introductions
+
+Explicitly typed universal and implication introductions consume a matching
+constructor of the selected goal. Each extension records the residual goal
+and emits intro followed by change at the local declaration, so Lean checks
+the annotation. Absent or unsupported goals block translation. This is a
+single nested scope, not case splitting, implicit binder inference or
+arbitrary goal elaboration.
+
+The goal reader additionally accepts single parenthesized Lean binders and
+untyped universal syntax when the author explicitly supplies a domain
+annotation. Lean, not the browser, decides the inferred domain. The graph
+stores initial goal and scope-introduction dependencies even if a later
+proof does not use the binder. Structured chain validation accepts bounded
+nested named applications emitted by the quantifier translator. Added
+actual JavaScript-to-Lean tests for both kinds of context extension.

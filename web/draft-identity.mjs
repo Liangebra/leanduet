@@ -28,7 +28,7 @@ export function reconcileDraftIdentity(previous,graph){
  const ids=new Map(),matches=new Map();let next=previous?.next??1;
  const fresh=()=> 'object:'+next++;
  const old=previous?.graph?.nodes||[],now=graph.nodes;
- const sameContext=!!previous&&same(contextSignature(old),contextSignature(now));
+ const sameContext=!!previous&&previous.graph.goal===graph.goal&&same(contextSignature(old),contextSignature(now));
  const oldLines=groups(old.filter(n=>n.kind!=='context'),lineKey);
  const newLines=groups(now.filter(n=>n.kind!=='context'),lineKey);
  const oldById=new Map(old.map(n=>[n.id,n]));
@@ -40,7 +40,7 @@ export function reconcileDraftIdentity(previous,graph){
    // A repeated source occurrence has no reliable edit correspondence.
    if(a.length===1&&b.length===1&&n.formula.tree&&a[0].formula.tree){
     try{
-     if(same(stableTree(a[0].formula.tree,previous.ids),stableTree(n.formula.tree,ids)))prior=a[0];
+     if(same(stableTree(a[0].formula.tree,previous.ids),stableTree(n.formula.tree,ids))&&same(stableTree(a[0].value?.tree,previous.ids),stableTree(n.value?.tree,ids))&&(n.scopeRefs||[]).every(x=>ids.has(x))&&same((a[0].scopeRefs||[]).map(x=>previous.ids.get(x)),(n.scopeRefs||[]).map(x=>ids.get(x))))prior=a[0];
     }catch{}
    }
   }

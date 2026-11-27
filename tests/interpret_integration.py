@@ -38,3 +38,22 @@ with TemporaryDirectory() as tmp:
     target.write_text("theorem bounded (P : Nat → Prop) (s : List Nat) (a : Nat) (h : ∀ x, x ∈ s → P x) (hm : a ∈ s) : ∃ x, x ∈ s ∧ P x := " + term + "\n", encoding="utf-8")
     subprocess.run(["lean", str(target)], cwd=root, check=True)
 print("JavaScript-generated bounded quantifier proof accepted by Lean")
+
+# Compile context extensions independently; use the actual generated source.
+extension_script = """
+import {compileNaturalDraft} from './web/natural-draft.mjs';
+const goal='∀ z : Nat, P z → P z';
+const a=compileNaturalDraft('任取 x : $Nat$\\n假设 hp : $P(x)$\\n$P(x)$ | hp',['P'],new Map(),{goal});
+const b=compileNaturalDraft('令 y : $Nat$ := $f(x)$\\n由 h 与 y 得到 $P(y)$',['P','f','x','h'],new Map([['f','Nat → Nat'],['x','Nat'],['h','∀ z : Nat, P z']]));
+console.log(JSON.stringify([a.term,b.term]));
+"""
+intro_term, let_term = json.loads(subprocess.run(["node", "--input-type=module"], input=extension_script, text=True, cwd=root, check=True, capture_output=True).stdout)
+with TemporaryDirectory() as tmp:
+    target = Path(tmp) / "ContextExtensions.lean"
+    target.write_text(
+        "theorem intro_demo (P : Nat → Prop) : ∀ z : Nat, P z → P z := " + intro_term + "\n"
+        "theorem let_demo (P : Nat → Prop) (f : Nat → Nat) (x : Nat) (h : ∀ z : Nat, P z) : P (f x) := " + let_term + "\n",
+        encoding="utf-8")
+    subprocess.run(["lean", str(target)], cwd=root, check=True)
+print("Generated local definitions and context introductions accepted by Lean")
+

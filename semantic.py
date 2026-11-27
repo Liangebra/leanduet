@@ -103,6 +103,42 @@ def patch(source, path, replacement, project=None):
 _SIMPLE = r"[A-Za-z_][A-Za-z0-9_']{0,63}"
 _RULE = r"[A-Za-z_][A-Za-z0-9_'.]{0,159}"
 
+def _ordered_application(app):
+    """Restricted named applications with bounded parenthesized arguments."""
+    if not isinstance(app, str) or len(app) > 2000:
+        return False
+    if app == "?":
+        return True
+    tokens = re.findall(r"[A-Za-z_][A-Za-z0-9_'.]*|[()]|[ \t]+", app)
+    if "".join(tokens) != app:
+        return False
+    tokens = [t for t in tokens if not t.isspace()]
+    forbidden = {"by", "fun", "match", "let", "have", "show", "do", "if", "then", "else", "where", "sorry", "admit", "sorryAx"}
+    if len(tokens) > 80 or any(t in forbidden for t in tokens):
+        return False
+    pos = 0
+    def parse(depth):
+        nonlocal pos
+        if depth > 8 or pos >= len(tokens) or not re.fullmatch(_RULE, tokens[pos]):
+            return False
+        pos += 1
+        argc = 0
+        while pos < len(tokens) and tokens[pos] != ")":
+            argc += 1
+            if argc > 8:
+                return False
+            if tokens[pos] == "(":
+                pos += 1
+                if not parse(depth + 1) or pos >= len(tokens) or tokens[pos] != ")":
+                    return False
+                pos += 1
+            elif re.fullmatch(_SIMPLE, tokens[pos]):
+                pos += 1
+            else:
+                return False
+        return True
+    return parse(0) and pos == len(tokens)
+
 def infer_chain(source, path, steps, project=None):
     """Elaborate an ordered chain at the selected occurrence; never edit source."""
     name = _name(source)
@@ -115,8 +151,36 @@ def infer_chain(source, path, steps, project=None):
     for i,step in enumerate(steps):
         if not isinstance(step,dict):
             raise ValueError("Expected a structured proof step.")
+        if step.get("kind") in ("introduce","assume") and i < len(steps)-1:
+            h, ty = step.get("name"), step.get("type")
+            if not isinstance(h,str) or not re.fullmatch(_SIMPLE,h) or h in names:
+                raise ValueError("Invalid or repeated introduction name.")
+            if (not isinstance(ty,str) or not ty.strip() or len(ty)>2000 or
+                re.search(r"[\r\n;{}]|/-|--|:=|\b(?:by|sorry|admit|sorryAx)\b",ty)):
+                raise ValueError("Expected an introduction type.")
+            names.append(h)
+            line = "  intro " + h
+            # Check the user's annotation by definitional equality in Lean.
+            check = "  change " + ty + " at " + h
+            lines.extend([line,check])
+            traced.extend([line,check,"  duet_trace "+h])
+            continue
+        if step.get("kind") == "define" and i < len(steps)-1:
+            h, ty, value = step.get("name"), step.get("type"), step.get("value")
+            if not isinstance(h,str) or not re.fullmatch(_SIMPLE,h) or h in names:
+                raise ValueError("Invalid or repeated local definition name.")
+            for expression in (ty,value):
+                if (not isinstance(expression,str) or not expression.strip() or len(expression)>2000 or
+                    not re.fullmatch(r"[\w'().,: +*/^=<>∀∃∈⊆↔→∧∨¬≤≥≠\-]+",expression) or
+                    re.search(r"/-|--|:=|\b(?:by|sorry|admit|sorryAx|let|have|fun|match|do|where|import|theorem|def)\b",expression)):
+                    raise ValueError("Expected a restricted local definition expression.")
+            names.append(h)
+            line = "  let " + h + " : " + ty + " := " + value
+            lines.append(line)
+            traced.extend([line,"  duet_trace "+h])
+            continue
         app = step.get("application")
-        if not isinstance(app,str) or (app!='?' and not re.fullmatch(_RULE + r"(?: " + _SIMPLE + r"){0,8}",app)):
+        if not _ordered_application(app):
             raise ValueError("Expected an ordered application of a named rule.")
         if step.get("kind")=="conclude" and i==len(steps)-1:
             ty=step.get("type")

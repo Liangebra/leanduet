@@ -1,5 +1,6 @@
 import {compileFormula} from './math-formula.mjs';
 import {buildDraftGraph} from './draft-graph.mjs';
+import {extendGoal} from './context-extension.mjs';
 import {discourseFrame,discourseCandidates} from './discourse.mjs';
 import {parseRuleIntent} from './rule-intent.mjs';
 import {renderChain} from './proof-chain.mjs';
@@ -10,6 +11,20 @@ const namePattern=/^[A-Za-z_][A-Za-z0-9_']{0,63}$/;
 function unwrap(s){let body=s.trim(),modifiers=[];for(let i=0;i<4;i++){const m=marker.exec(body);if(!m)break;modifiers.push(m[0].trim());body=body.slice(m[0].length);}return {body,modifiers};}
 function parseLine(raw){
  const {body,modifiers}=unwrap(raw);
+ const intro=/^(任取|取任意|假设|设|take\s+|assume\s+)\s*([A-Za-z_][A-Za-z0-9_']{0,63})\s*[:：]\s*(\$[^$\n]+\$|\\\([^]*?\\\))\s*[。.]?$/iu.exec(body);
+ if(intro){
+  const [,word,name,type]=intro;
+  if(compileFormula(name).ast.kind!=='id')throw Error('Invalid introduction name.');
+  return {raw,kind:/^(?:假设|设|assume)/iu.test(word)?'assume':'introduce',name,type:compileFormula(type).lean,modifiers};
+ }
+ // A definition introduces a value, not a proof of an equality.
+ const definition=/^(?:令|定义|记|let\s+|define\s+)\s*([A-Za-z_][A-Za-z0-9_']{0,63})\s*[:：]\s*(\$[^$\n]+\$|\\\([^]*?\\\))\s*(?::=|＝|=)\s*(\$[^$\n]+\$|\\\([^]*?\\\))\s*[。.]?$/iu.exec(body);
+ if(definition){
+  const [,name,domain,value]=definition;
+  // Validate the name with the same restricted identifier grammar.
+  if(compileFormula(name).ast.kind!=='id')throw Error('Invalid definition name.');
+  return {raw,kind:'define',name,type:compileFormula(domain).lean,value:compileFormula(value).lean,modifiers};
+ }
  const citation=formulaPremiseSentence(body);
  if(citation)return {raw,formula:citation.goal,type:compileFormula(citation.goal).lean,name:null,ruleText:'',conclusion:false,modifiers,citation};
  const occurrences=[...body.matchAll(formulaPattern)];
@@ -30,7 +45,7 @@ function parseLine(raw){
  }
  return {raw,formula,type:compileFormula(formula).lean,name,ruleText,conclusion,modifiers,forwardText};
 }
-export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),cache=null}={}){
+export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),cache=null,goal=null}={}){
  const facts=new Map(context);
  if(typeof input!=='string'||input.length>12000)throw Error('Draft exceeds 12000 characters.');
  const lines=input.split(/\r?\n/).map((raw,i)=>({raw,line:i+1})).filter(x=>x.raw.trim());
@@ -46,8 +61,9 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
   syntax.set(raw,entry);return entry;
  });
  const planned=new Set(parsed.map(p=>p.value?.name).filter(Boolean));
- const key=JSON.stringify([scope,[...context],[...planned].sort()]);
+ const key=JSON.stringify([scope,[...context],[...planned].sort(),goal]);
  const signatures=lines.map(({raw,line},i)=>JSON.stringify([raw,line,i===lines.length-1,choices.has(line),choices.get(line)]));
+ let remainingGoal=goal;
  let serial=1;const rows=[],steps=[],openNames=new Set(),serials=[];let blocked=false,reusedRows=0;
  // The context and all planned names affect the entire draft. Under the
  // same context, reuse only an identical prefix, including choice and
@@ -60,9 +76,10 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
    if(row.status==='unresolved')blocked=true;
    if(row.step){
     steps.push(row.step);
-    if(row.step.kind==='establish'){
+    if(['establish','define','introduce','assume'].includes(row.step.kind)){
      const {name,type}=row.step;occupied.add(name);visible.add(name);facts.set(name,type);
      if(row.proofStatus!=='candidate')openNames.add(name);
+     if(['introduce','assume'].includes(row.step.kind))remainingGoal=row.remainingGoal;
     }
    }
    reusedRows++;
@@ -82,7 +99,7 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
   const row={...p,raw,line,status:'unresolved',proofStatus:'open',...details};
   // Keep a recognized proposition as a tentative local object. It is not
   // an established theorem and no incomplete draft is exported.
-  if(p&&!last&&!p.conclusion&&(!p.name||!occupied.has(p.name))){
+  if(p&&!['define','introduce','assume'].includes(p.kind)&&!last&&!p.conclusion&&(!p.name||!occupied.has(p.name))){
    const step=makeStep(p,false,'?');
    openNames.add(step.name);steps.push(step);row.step=step;
   }
@@ -93,6 +110,41 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
    try{
     if(parsed[i].error)throw Error(parsed[i].error);
     p=parsed[i].value;
+    if(['introduce','assume'].includes(p.kind)){
+     if(last)throw Error('An introduction must be followed by a conclusion.');
+     if(blocked)throw Error('Resolve preceding incomplete wording before extending the goal.');
+     if(occupied.has(p.name))throw Error('This local name already exists.');
+     if(choices.has(line))throw Error('An introduction has no proof candidate choice.');
+     const names=new Set();
+     function visit(t){if(t.kind==='free')names.add(t.name);for(const v of Object.values(t))if(v&&typeof v==='object'){if(Array.isArray(v))v.forEach(visit);else visit(v);}}
+     visit(compileFormula(p.type,{syntax:'lean'}).scoped);
+     for(const n of names)if((planned.has(n)||occupied.has(n))&&!visible.has(n))throw Error('Ambiguous or forward reference in introduction: '+n);
+     remainingGoal=extendGoal(remainingGoal,p);
+     const step={kind:p.kind,name:p.name,type:p.type};
+     occupied.add(p.name);visible.add(p.name);facts.set(p.name,p.type);
+     rows.push({...p,line,status:'translated',proofStatus:'candidate',remainingGoal,step,candidates:[]});steps.push(step);continue;
+    }
+    if(p.kind==='define'){
+     if(last)throw Error('A definition must be followed by a conclusion.');
+     if(occupied.has(p.name))throw Error('This local name already exists.');
+     if(choices.has(line))throw Error('A definition has no proof candidate choice.');
+     const free=new Set();
+     function visit(t){
+      if(t.kind==='free')free.add(t.name);
+      for(const v of Object.values(t))if(v&&typeof v==='object'){
+       if(Array.isArray(v))v.forEach(visit);else visit(v);
+      }
+     }
+     visit(compileFormula(p.type,{syntax:'lean'}).scoped);
+     visit(compileFormula(p.value,{syntax:'lean'}).scoped);
+     for(const n of free)if((planned.has(n)||occupied.has(n))&&!visible.has(n))throw Error('Ambiguous or forward reference in definition: '+n);
+     const dependencies=[...free].filter(n=>openNames.has(n));
+     const proofStatus=dependencies.length?'depends-on-open':'candidate';
+     const step={kind:'define',name:p.name,type:p.type,value:p.value};
+     occupied.add(p.name);visible.add(p.name);facts.set(p.name,p.type);
+     if(dependencies.length)openNames.add(p.name);
+     rows.push({...p,line,status:blocked?'provisional':'translated',proofStatus,dependencies,step,candidates:[]});steps.push(step);continue;
+    }
     if(p.conclusion&&!last)throw Error('A conclusion must be the last inference.');
     if(last&&p.name)throw Error('The final inference must conclude the goal, not name a fact.');
     let application='?',candidates=[];
@@ -143,7 +195,7 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
  }
  if(cache)cache.previous={key,signatures,rows,serials};
  const complete=lines.length>0&&!blocked&&steps.at(-1)?.kind==='conclude';
- return {rows,steps,complete,reusedRows,openBindings:[...openNames],graph:buildDraftGraph(scope,context,rows),term:complete?renderChain(steps):null};
+ return {rows,steps,complete,reusedRows,remainingGoal,openBindings:[...openNames],graph:buildDraftGraph(scope,context,rows,{goal}),term:complete?renderChain(steps):null};
 }
 export function createDraftSession(){
  const cache={};
