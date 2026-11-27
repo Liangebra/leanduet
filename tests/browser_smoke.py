@@ -199,7 +199,7 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
             expect(case_page.locator("#chainBindings")).to_contain_text("hR",timeout=120000)
             expect(case_page.locator("#chainBindings")).not_to_contain_text("hp")
             expect(case_page.locator("#chainBindings")).not_to_contain_text("hq")
-            expect(case_page.locator("#patchTerm")).to_have_value(__import__("re").compile(r"(?s).*cases h with.*"))
+            assert "cases h with" in case_page.locator("#patchTerm").input_value()
             case_page.locator("#checkPatch").click()
             expect(case_page.locator("#applyPatch")).to_be_enabled(timeout=120000)
             case_page.once("dialog",lambda d:d.accept())
