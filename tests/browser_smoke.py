@@ -287,7 +287,7 @@ $P(x)$ | hp"""
             restricted_page=browser.new_page(viewport={"width":1440,"height":900})
             restricted_page.on("pageerror",lambda error:errors.append(str(error)))
             restricted_page.goto(url)
-            restricted_page.locator("#lean").fill("""theorem restricted_forall_demo (A : Set Nat) (P : Nat → Prop)
+            restricted_page.locator("#lean").fill("""theorem restricted_forall_demo (A : List Nat) (P : Nat → Prop)
     (hall : ∀ x : Nat, x ∈ A → P x) : ∀ x ∈ A, P x := by
   exact fun x hx => hall x hx
 """)
@@ -310,7 +310,7 @@ $P(x)$ | hp"""
             restricted_page.locator("#checkPatch").click()
             expect(restricted_page.locator("#applyPatch")).to_be_enabled(timeout=120000)
 
-            restricted_page.locator("#lean").fill("""theorem restricted_exists_demo (A : Set Nat) (P : Nat → Prop)
+            restricted_page.locator("#lean").fill("""theorem restricted_exists_demo (A : List Nat) (P : Nat → Prop)
     (h : ∃ x ∈ A, P x) (hq : True) : True := by
   exact hq
 """)
