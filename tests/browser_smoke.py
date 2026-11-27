@@ -388,6 +388,8 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
             goalop_page.locator("#typedTree").evaluate("(root) => root.querySelectorAll('details.typedNode').forEach(x=>x.open=true)")
             exists_node=goalop_page.locator(".typedNode").filter(has=goalop_page.locator("summary").filter(has_text=__import__("re").compile("^Apply Exists\\.intro$"))).last
             exists_node.locator(":scope > button.typedEdit").click()
+            if not goalop_page.locator("#chainEditor").evaluate("(editor) => editor.open"):
+                goalop_page.locator("#chainEditor summary").click()
             goalop_page.locator("#chainText").fill("construct witness a\n  witness property\n    $P(a)$ | ha")
             expect(goalop_page.locator("#draftTranslation")).to_contain_text("construct witness a")
             goalop_page.locator("#compileChain").click()
