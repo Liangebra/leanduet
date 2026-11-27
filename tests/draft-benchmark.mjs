@@ -1,7 +1,7 @@
 // Opt-in synthetic latency and cache-equivalence checks: node tests/draft-benchmark.mjs
 import {performance} from 'node:perf_hooks';
 import assert from 'node:assert/strict';
-import {draftProof,compileNaturalDraft,createDraftSession} from '../web/natural-draft.mjs';
+import {compileNaturalDraft,createDraftSession} from '../web/natural-draft.mjs';
 
 const warmup=24,samples=160;
 const facts=new Map([['p','P'],['h15','P']]);
@@ -34,7 +34,10 @@ function measure({name,evaluate,reference,inputAt,expectedReuse=null,beforeSampl
 const warm=createDraftSession();
 const toggle=createDraftSession();
 const edit=createDraftSession();
-const cold={evaluate:text=>draftProof(text,scope,facts),reference:text=>draftProof(text,scope,facts)};
+// Compare the session's public evaluation path with the same full compiler
+// path used by cold cases. Calling draftProof directly omits sequence/scope
+// dispatch and makes the linear baseline artificially cheap.
+const cold={evaluate:text=>compileNaturalDraft(text,scope,facts),reference:text=>compileNaturalDraft(text,scope,facts)};
 
 function nestedCases(depth,max){
  const header='cases h'+depth+', establish r'+depth+' : $P$';
