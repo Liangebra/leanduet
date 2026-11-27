@@ -11,29 +11,6 @@ ROOT=Path(__file__).resolve().parents[1]
 port=18765
 url=f"http://127.0.0.1:{port}"
 
-def select_typed_edit(page, *, exact_type=None, includes=(), summary=None, term=None):
-    page.locator("#typedTree").evaluate("""(root, query) => {
-      const rows=[...root.querySelectorAll('.typedNode')].map(node=>({
-        node,
-        type:node.querySelector(':scope > .typedType code')?.textContent.trim()||'',
-        summary:node.querySelector(':scope > summary')?.textContent.trim()||'',
-        term:node.querySelector(':scope > details pre')?.textContent.trim()||''
-      }));
-      let candidates=rows.filter(row=>(query.exactType===null||row.type===query.exactType)
-        &&query.includes.every(part=>row.type.includes(part))
-        &&(query.summary===null||row.summary===query.summary)
-        &&(query.term===null||row.term===query.term)
-        &&row.node.querySelector(':scope > .typedEdit'));
-      if(!candidates.length) throw new Error('Could not locate the requested typed proof node.');
-      const shortest=Math.min(...candidates.map(row=>row.type.length));
-      candidates=candidates.filter(row=>row.type.length===shortest);
-      if(candidates.length!==1) throw new Error('The requested typed proof node is ambiguous.');
-      const target=candidates[0].node;
-      for(let current=target;current&&current!==root;current=current.parentElement)
-        if(current.tagName==='DETAILS') current.open=true;
-      target.querySelector(':scope > .typedEdit').click();
-    }""", {"exactType":exact_type,"includes":list(includes),"summary":summary,"term":term})
-
 with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL) as server:
     try:
         for _ in range(100):
