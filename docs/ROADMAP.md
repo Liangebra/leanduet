@@ -7,6 +7,7 @@
 - Community-importable mathematical language packs.
 - Checked dependency-closed lemma abstraction and two-theorem factoring previews.
 - Scope-indexed substitution laws and native judgment encoding/decoding with fresh-context round-trip checks.
+- Experimental binary disjunction elimination with nested branch-local scopes; arbitrary inductive case analysis remains open.
 
 ## Experimental track
 

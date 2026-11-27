@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {draftProof,createDraftSession} from '../web/natural-draft.mjs';
+import {draftProof,createDraftSession,compileNaturalDraft} from '../web/natural-draft.mjs';
 import {extendGoal} from '../web/context-extension.mjs';
+import {dependentNodes} from '../web/draft-graph.mjs';
 const scope=['P'],facts=new Map();
 const input='任取 x : $Nat$\n假设 hp : $P(x)$\n$P(x)$ | hp';
 const goal='∀ z : Nat, P z → P z';
@@ -96,4 +97,69 @@ test('generated existential copy avoids source and planned names and stays backe
  assert.equal(r.complete,true);
  assert.equal(r.rows[0].step.copy,stem+'_1');
  assert.ok(r.rows[0].step.copy.length<=64);
+});
+
+test('disjunction elimination forks branch identities and returns only its common result',()=>{
+ const facts=new Map([['P','Prop'],['Q','Prop'],['R','Prop'],['h','P ∨ Q'],['f','P → R'],['g','Q → R']]);
+ const input='分情况讨论 h，建立 hR : $R$\n  左支 hp\n    $R$ | f hp\n  右支 hq\n    $R$ | g hq\n$R$ | hR';
+ const r=compileNaturalDraft(input,[...facts.keys()],facts,{goal:'R'});
+ assert.equal(r.complete,true);
+ assert.equal(r.steps[0].kind,'cases');
+ assert.match(r.term,/cases h with[\s\S]*exact f hp[\s\S]*exact g hq/);
+ const node=r.graph.nodes.find(n=>n.kind==='cases');
+ assert.equal(node.branches.length,2);
+ assert.notEqual(node.branches[0].binding.id,node.branches[1].binding.id);
+ assert.deepEqual(node.branches.map(b=>b.constructor),['inl','inr']);
+ assert.ok(node.dependencies.includes('context:3'),'the parent split depends on its source disjunction');
+ assert.ok(dependentNodes(r.graph,['context:0']).includes(node.id),'changes to a declaration used by a branch invalidate the parent case result');
+ const affectedByBranchProof=dependentNodes(r.graph,[node.branches[0].resultId]);
+ assert.ok(affectedByBranchProof.includes(node.id),'editing a branch proof invalidates the common result');
+ assert.ok(affectedByBranchProof.includes('line:6'),'editing a branch proof invalidates the parent continuation');
+ assert.equal(r.graph.nodes.some(n=>['hp','hq'].includes(n.name)),false,'branch binders stay inside branch graphs');
+ assert.ok(r.graph.nodes.find(n=>n.kind==='conclude').dependencies.includes(node.id),'the common result is available to the continuation');
+});
+
+test('sibling branches may reuse display names without sharing object identity',()=>{
+ const facts=new Map([['P','Prop'],['Q','Prop'],['R','Prop'],['h','P ∨ Q'],['f','P → R'],['g','Q → R']]);
+ const input='cases h, establish hR : $R$\n  left case hp\n    $R$ | f hp\n  right case hp\n    $R$ | g hp\n$R$ | hR';
+ const r=compileNaturalDraft(input,[...facts.keys()],facts,{goal:'R'});
+ const branches=r.graph.nodes.find(n=>n.kind==='cases').branches;
+ assert.equal(r.complete,true);
+ assert.equal(branches[0].name,branches[1].name);
+ assert.notEqual(branches[0].binding.id,branches[1].binding.id);
+});
+
+test('a branch-local hypothesis cannot leak to a sibling or parent continuation',()=>{
+ const facts=new Map([['P','Prop'],['Q','Prop'],['R','Prop'],['h','P ∨ Q'],['f','P → R'],['g','Q → R']]);
+ const sibling='cases h, establish hR : $R$\n  left case hp\n    $R$ | g hq\n  right case hq\n    $R$ | g hq\n$R$ | hR';
+ assert.throws(()=>compileNaturalDraft(sibling,[...facts.keys()],facts,{goal:'R'}),/Line 3:/);
+ const escaped='cases h, establish hR : $R$\n  left case hp\n    $R$ | f hp\n  right case hq\n    $R$ | g hq\n$R$ | hp';
+ assert.throws(()=>compileNaturalDraft(escaped,[...facts.keys()],facts,{goal:'R'}));
+});
+
+test('an open case branch does not hide the other branch semantic graph',()=>{
+ const facts=new Map([['P','Prop'],['Q','Prop'],['R','Prop'],['h','P ∨ Q'],['g','Q → R']]);
+ const input='cases h, establish hR : $R$\n  left case hp\n    unsupported ⊛\n  right case hq\n    $R$ | g hq\n$R$ | hR';
+ const result=createDraftSession().evaluate(input,[...facts.keys()],facts,{goal:'R'});
+ const node=result.graph.nodes.find(n=>n.kind==='cases');
+ assert.equal(result.complete,false);
+ assert.deepEqual(node.branches.map(branch=>branch.status),['open','complete']);
+ assert.ok(node.branches.every(branch=>branch.graph));
+});
+
+test('nested disjunctions preserve lexical branch scopes and match full recomputation',()=>{
+ const facts=new Map([['P','Prop'],['Q','Prop'],['U','Prop'],['V','Prop'],['R','Prop'],['h','P ∨ Q'],['j','U ∨ V'],['f','P → U → R'],['g','P → V → R'],['k','Q → R']]);
+ const input='分情况讨论 h，建立 hR : $R$\n  左支 hp\n    分情况讨论 j，建立 hpR : $R$\n      左支 hu\n        $R$ | f hp hu\n      右支 hv\n        $R$ | g hp hv\n    $R$ | hpR\n  右支 hq\n    $R$ | k hq\n$R$ | hR';
+ const session=createDraftSession();
+ const incremental=session.evaluate(input,[...facts.keys()],facts,{goal:'R'});
+ const complete=compileNaturalDraft(input,[...facts.keys()],facts,{goal:'R'});
+ assert.equal(incremental.complete,true);
+ assert.equal(incremental.reusedRows,0);
+ assert.equal(incremental.term,complete.term);
+ assert.deepEqual(incremental.graph,complete.graph);
+ const outer=incremental.graph.nodes.find(n=>n.kind==='cases');
+ const inner=outer.branches[0].graph.nodes.find(n=>n.kind==='cases');
+ assert.ok(inner);
+ assert.notEqual(outer.branches[0].binding.id,outer.branches[1].binding.id);
+ assert.equal(outer.branches[0].graph.nodes.some(n=>n.name==='hq'),false);
 });

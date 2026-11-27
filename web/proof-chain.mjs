@@ -75,6 +75,14 @@ export function renderChain(steps){
   for(const s of steps){
     if(['introduce','assume'].includes(s.kind))lines.push('  intro '+s.name,'  change '+s.type+' at '+s.name);
     else if(s.kind==='obtain')lines.push('  have '+s.copy+' := '+s.source,'  rcases '+s.copy+' with ⟨'+s.name+', '+s.evidenceName+'⟩','  change '+s.type+' at '+s.name,'  change '+s.evidenceType+' at '+s.evidenceName);
+    else if(s.kind==='cases'){
+      lines.push('  have '+s.name+' : '+s.type+' := by','    cases '+s.source+' with');
+      for(const branch of s.branches||[]){
+        lines.push('    | '+branch.constructor+' '+branch.name+' =>','      change '+branch.type+' at '+branch.name);
+        const body=renderChain(branch.steps).split('\n').slice(1);
+        lines.push(...body.map(line=>'    '+line));
+      }
+    }
     else if(s.kind==='define')lines.push('  let '+s.name+' : '+s.type+' := '+s.value);
     else if(s.kind==='establish')lines.push('  have '+s.name+(s.type===null?'':' : '+s.type)+' := '+(s.application==='?'?'by exact?':s.application));
     else {

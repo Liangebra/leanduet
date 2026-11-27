@@ -45,6 +45,40 @@ The on-demand #duet_ir command and /api/ir endpoint serialize the selected Lean 
 
 The proof editor can switch to a formula-only surface syntax: one delimited LaTeX formula per line, optionally named for intermediate results. All earlier lines create typed proof holes; the last uses a `show` statement so that Lean must accept the proposition as the selected target. Generated intermediate names avoid supplied local names. The same structured steps and checked patch pipeline apply. No completeness or proof-choice guarantee is claimed.
 
+### Branch-local proof scopes
+
+The natural draft accepts an explicit disjunction block, for example:
+
+```text
+分情况讨论 h，建立 hR : $R$
+  左支 hp
+    $R$ | f hp
+  右支 hq
+    $R$ | g hq
+$R$ | hR
+```
+
+The source must be a uniquely named local declaration whose parsed type is a
+binary disjunction. Nested blocks are parsed after removing the enclosing
+branch indentation. Each arm is compiled in a forked proof scope with a
+distinct local binding identity; sibling display names may coincide. Closing
+an arm checks its common surface target, discharges local identities, and
+returns only parent-context dependencies. The graph keeps both branch trees
+and dependency sets, while the parent continuation refers to the case result.
+An unfinished branch stays in the graph and prevents a complete Lean term
+from being exported.
+
+This surface check is not Lean elaboration and does not decide arbitrary
+typeclass or definitional-equality questions. The structured backend emits
+nested `cases ... with` blocks for `Or`, then asks Lean to elaborate and trace
+the parent result. Only that result is returned as a binding; branch-local
+assumptions and intermediate declarations are not traced out of their scope.
+The supported operation is binary disjunction elimination only, bounded to
+eight nested splits and 64 nonblank surface lines. It does not provide general
+inductive case analysis, contradiction, or unrestricted branching prose
+parsing. Recomputing a case block is currently a full block evaluation;
+branch-aware prefix caching remains future work.
+
 ## Checked same-context round trip
 
 The native decoder reconstructs all supported Expr constructors with exact structural names, universe levels, binder modes and local-slot identity. Each exported context type/value, selected term/type and optional formula is decoded in Lean, checked, compared with its original shape, and re-encoded to the identical JSON. The final decoded term must have a type definitionally equal to the decoded target. The returned roundTrip fields record these checks. This verifies individual exported judgments in their original context; it is not a general formal theorem, cross-project import, independent environment reconstruction, or a proof of the browser parser. No external JSON is executed or accepted by the API. The decoder rejects unknown constructors and out-of-scope slots. Encoding and round-trip checking share a bounded inspection budget.

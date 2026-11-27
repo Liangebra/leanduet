@@ -56,27 +56,45 @@ export function buildDraftGraph(scope,facts,rows,{goal=null}={}){
   const application=step?.application||null;
   const selected=application&&application!=='?'?alternatives.find(c=>c.term===application&&(!c.type||c.type===row.type)):null;
   const proofRefs=application&&application!=='?'?(selected?.dependencies||refs(application.split(/\s+/))):[];
-  const node={id,kind:step?.kind||'unresolved',name:step?.name||(row.kind==='infer-proposition'?row.name:null),type:row.type||null,raw:row.raw,modifiers:row.modifiers||[],formula:parsed,
+  const caseStep=step?.kind==='cases'||row.kind==='cases';
+  const caseRefs=caseStep?[...refs([step?.source||row.source]),...(row.branchDependencies||[]),...(row.branchProofIds||[])]:[];
+  const branches=caseStep?(step?.branches||row.branches||[]).map(branch=>({
+   id:branch.id,resultId:branch.resultId||null,kind:'case-branch',constructor:branch.constructor,name:branch.name,
+   type:branch.type,goal:branch.goal,
+   binding:{id:branch.bindingId,name:branch.name,type:branch.type},
+   dependencies:branch.dependencies||[],graph:branch.graph||null,status:branch.status||'open'
+  })):undefined;
+  const node={id,kind:step?.kind||(row.kind==='cases'?'cases':'unresolved'),name:step?.name||(row.kind==='infer-proposition'?row.name:row.name||null),type:row.type||null,raw:row.raw,modifiers:row.modifiers||[],formula:parsed,
    proofStatus:row.proofStatus||'open',status:row.status,application,alternatives,value,...(row.domain?{origin:'infer-proposition',typeDomain:row.domain.map(alternative),constraints:row.constraints,constraintRefs,constraintGroup:group?.id||null}:{}),
-   selectedCandidate:selected?.id||null,scopeRefs:[...scopeRefs],dependencies:[...new Set([...scopeRefs,...parsed.refs,...(value?.refs||[]),...proofRefs])]};
+   ...(branches?{branches}:{}),selectedCandidate:selected?.id||null,scopeRefs:[...scopeRefs],dependencies:[...new Set([...scopeRefs,...parsed.refs,...(value?.refs||[]),...proofRefs,...caseRefs])]};
   declare(node);
-  if(['introduce','assume'].includes(node.kind))scopeRefs.push(id);
+  if(['introduce','assume','cases'].includes(node.kind))scopeRefs.push(id);
  }
  return {schema:1,identity:'revision-local',goal,nodes,constraintGroups:[...constraintGroups.values()]};
 }
 export function dependentNodes(graph,ids,{includeAlternatives=true}={}){
  const affected=new Set(ids);
+ function allNodes(current){
+  const out=[];
+  for(const node of current?.nodes||[]){
+   out.push(node);
+   for(const branch of node.branches||[])out.push(...allNodes(branch.graph));
+  }
+  return out;
+ }
+ const nodes=allNodes(graph);
  // Constraint edges point backwards in source order. They are invalidation
  // edges, not proof dependencies; a fixed point handles their cycles.
  let changed=true;
  while(changed){
   changed=false;
-  for(const node of graph.nodes){
+  for(const node of nodes){
    if(affected.has(node.id))continue;
    const deps=[...node.dependencies,...(node.constraintRefs||[]),
-    ...(includeAlternatives?[...(node.alternatives||[]),...(node.typeDomain||[])].flatMap(c=>c.dependencies):[])];
+    ...(includeAlternatives?[...(node.alternatives||[]),...(node.typeDomain||[])].flatMap(c=>c.dependencies):[]),
+    ...(node.branches||[]).flatMap(branch=>branch.dependencies||[])];
    if(deps.some(id=>affected.has(id))){affected.add(node.id);changed=true;}
   }
  }
- return graph.nodes.filter(n=>affected.has(n.id)).map(n=>n.id);
+ return nodes.filter(n=>affected.has(n.id)).map(n=>n.id);
 }

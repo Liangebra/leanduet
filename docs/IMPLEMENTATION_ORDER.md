@@ -131,8 +131,8 @@ untyped universal syntax when the author explicitly supplies a domain
 annotation. Lean, not the browser, decides the inferred domain. The graph
 stores initial goal and scope-introduction dependencies even if a later
 proof does not use the binder. Structured chain validation accepts bounded
-nested named applications emitted by the quantifier translator. Added
-actual JavaScript-to-Lean tests for both kinds of context extension.
+nested named applications emitted by the quantifier translator. Actual
+JavaScript-to-Lean tests cover both kinds of context extension.
 
 ## Backward proposition constraints (first finite domain)
 
@@ -216,8 +216,34 @@ proof of the instantiated predicate. The original premise is retained via a
 fresh internal copy. The graph records both introductions and their scope
 edges; cache replay restores both bindings. Conditional projection lookahead
 stops at this scope boundary. The structured backend checks the annotations
-with Lean. This is a linear existential scope extension, not full branching
-proof syntax, arbitrary dependent pattern matching or implicit type inference.
+with Lean. Existential elimination remains a linear scope extension; it is
+not arbitrary dependent pattern matching or implicit type inference.
+
+## Branch-local disjunction elimination
+
+The natural draft supports an explicit binary split of a typed local premise
+whose type is `P ∨ Q` (or Lean `Or P Q`). Each `inl`/`inr` branch receives a
+fresh local identity and a branch-local assumption. The same display name may
+be reused in sibling branches because those assumptions are different
+objects. Each branch must establish the declared common result before its
+scope closes. The closure discharges branch-local proof objects and returns
+only dependencies already present in the parent. A fresh parent result
+binding is then available to later steps. Branch trees and their dependencies
+remain visible in the semantic graph, including when a branch is incomplete.
+
+The implementation accepts nested case blocks with at most eight split levels
+and 64 nonblank source lines, but only for explicit binary disjunctions with
+both arms supplied in left-to-right order. Branch indentation is parsed
+recursively. It does not implement arbitrary inductive `cases`,
+`Or` elimination from an untyped premise, `False` elimination, contradiction
+or classical proof by cases. The browser checks a shared scoped target; the
+structured backend re-elaborates the generated nested Lean term and traces
+only parent-scope results, so branch-local names cannot escape through the
+backend response. Browser and backend integration fixtures compile nested
+generated proofs with Lean and compare branch dependency behavior. This is a
+bounded proof-scope operation in stage 5, grounded in stage 2 identity and
+stage 3 dependency edges; it does not replace the eight-stage plan or claim
+general natural-language proof understanding.
 
 See [research methods](RESEARCH_METHODS.md) for references mapped to this
 unchanged eight-stage plan.

@@ -6,9 +6,12 @@ import {discourseFrame,discourseCandidates} from './discourse.mjs';
 import {parseRuleIntent} from './rule-intent.mjs';
 import {renderChain} from './proof-chain.mjs';
 import {premiseFrame,contextCandidates,formulaPremiseSentence,citationCandidates,implicitCandidates,structuralRules} from './context-grammar.mjs';
+import {compileCaseProgram,hasCaseSplitHeader,remapProofGraph} from './case-split.mjs';
+import {proofScopeFacts,proofScopeNames,rootProofScope} from './proof-scope.mjs';
 const marker=/^(?:(?:therefore|hence|thus|clearly|obviously|indeed|then)(?:\s*[,，:：]\s*|\s+)|(?:因此|从而|于是|显然|事实上|故|则)[，、：:\s]*)/iu;
 const formulaPattern=/\$[^$\n]+\$|\\\([^]*?\\\)|\\\[[^]*?\\\]/g;
 const namePattern=/^[A-Za-z_][A-Za-z0-9_']{0,63}$/;
+const ruleGlueWords=new Set(['using','from','by','with','and','or','the','a']);
 function freeNames(...expressions){
  const names=new Set();
  function visit(t){if(t.kind==='free')names.add(t.name);for(const v of Object.values(t))if(v&&typeof v==='object'){if(Array.isArray(v))v.forEach(visit);else visit(v);}}
@@ -70,10 +73,10 @@ function parseLine(raw){
  }
  return {raw,formula,type:compileFormula(formula).lean,name,ruleText,conclusion,modifiers,forwardText};
 }
-export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),cache=null,goal=null}={}){
+export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),cache=null,goal=null,lineOffset=0}={}){
  const facts=new Map(context);
  if(typeof input!=='string'||input.length>12000)throw Error('Draft exceeds 12000 characters.');
- const lines=input.split(/\r?\n/).map((raw,i)=>({raw,line:i+1})).filter(x=>x.raw.trim());
+ const lines=input.split(/\r?\n/).map((raw,i)=>({raw,line:i+1+lineOffset})).filter(x=>x.raw.trim());
  if(lines.length>16)throw Error('Use at most sixteen inference lines.');
  const occupied=new Set(scope),visible=new Set(scope.filter((x,i)=>scope.indexOf(x)===i&&scope.lastIndexOf(x)===i));
  // Cache syntax by exact text, independently of context. Cached errors are
@@ -87,7 +90,7 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
  });
  const planned=new Set(parsed.flatMap(p=>[p.value?.name,p.value?.evidenceName]).filter(Boolean));
  const lookahead=parsed.some(p=>p.value?.kind==='infer-proposition')?JSON.stringify([input,[...choices]]):null;
- const key=JSON.stringify([scope,[...context],[...planned].sort(),goal,lookahead]);
+ const key=JSON.stringify([scope,[...context],[...planned].sort(),goal,lineOffset,lookahead]);
  const signatures=lines.map(({raw,line},i)=>JSON.stringify([raw,line,i===lines.length-1,choices.has(line),choices.get(line)]));
  let remainingGoal=goal;
  const constraintResults=new Map();
@@ -258,6 +261,10 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
     }else if(p.ruleText&&p.ruleText!=='?'){
       const words=p.ruleText.split(/\s+/);
       if(words.length<=9&&words.every(w=>namePattern.test(w)&&visible.has(w)))application=words.join(' ');
+      else if(words.length<=9&&words.every(w=>namePattern.test(w))&&words.some(w=>visible.has(w))&&words.some(w=>!visible.has(w)&&!ruleGlueWords.has(w.toLowerCase()))){
+       const missing=words.find(w=>!visible.has(w)&&!ruleGlueWords.has(w.toLowerCase()));
+       throw Error('Unknown or unavailable local premise: '+missing+'.');
+      }
       else {
        const r=parseRuleIntent(p.ruleText,{ordered:true});
        if(!r.rule||r.required.some(x=>!visible.has(x)))throw Error('Unknown or ambiguous premise; check scope and wording.');
@@ -292,13 +299,26 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
 export function createDraftSession(){
  const cache={};
  return {
-  evaluate:(input,scope,context,options)=>draftProof(input,scope,context,{...options,cache}),
+  evaluate:(input,scope,context,options)=>evaluateScopeAware(input,scope,context,{...options,cache}),
   compile:(input,scope,context,options)=>compileNaturalDraft(input,scope,context,{...options,cache}),
   reset:()=>{delete cache.previous;cache.syntax?.clear();}
  };
 }
 export function compileNaturalDraft(input,scope,context,options){
- const r=draftProof(input,scope,context,options);
- if(!r.complete){const unresolved=r.rows.find(x=>x.status==='unresolved');throw Error(unresolved?'Line '+unresolved.line+': '+unresolved.reason:'No complete conclusion.');}
+ const r=evaluateScopeAware(input,scope,context,options);
+ if(!r.complete){const unresolved=r.rows.find(x=>x.status==='unresolved'&&x.graphId?.includes('/case:'))||[...r.rows].reverse().find(x=>x.status==='unresolved');throw Error(unresolved?'Line '+unresolved.line+': '+unresolved.reason:'No complete conclusion.');}
  return r;
+}
+
+function evaluateScopeAware(input,scope=[],context=new Map(),options={}){
+ const frame=options._proofScope||rootProofScope(scope,new Map(context),{goal:options.goal});
+ function compileSegment(text,currentFrame,segmentOptions={}){
+  if(hasCaseSplitHeader(text))return compileCaseProgram(text,currentFrame,segmentOptions,compileSegment);
+  const names=proofScopeNames(currentFrame),facts=proofScopeFacts(currentFrame);
+  const result=draftProof(text,names,facts,{...segmentOptions,lineOffset:segmentOptions.lineOffset||0,
+   cache:currentFrame.id==='root'?segmentOptions.cache:null});
+  result.graph=remapProofGraph(result.graph,currentFrame);
+  return result;
+ }
+ return compileSegment(input,frame,options);
 }
