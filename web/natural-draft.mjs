@@ -9,6 +9,12 @@ import {premiseFrame,contextCandidates,formulaPremiseSentence,citationCandidates
 const marker=/^(?:(?:therefore|hence|thus|clearly|obviously|indeed|then)(?:\s*[,，:：]\s*|\s+)|(?:因此|从而|于是|显然|事实上|故|则)[，、：:\s]*)/iu;
 const formulaPattern=/\$[^$\n]+\$|\\\([^]*?\\\)|\\\[[^]*?\\\]/g;
 const namePattern=/^[A-Za-z_][A-Za-z0-9_']{0,63}$/;
+function freeNames(...expressions){
+ const names=new Set();
+ function visit(t){if(t.kind==='free')names.add(t.name);for(const v of Object.values(t))if(v&&typeof v==='object'){if(Array.isArray(v))v.forEach(visit);else visit(v);}}
+ for(const expression of expressions)if(expression)visit(compileFormula(expression,{syntax:'lean'}).scoped);
+ return [...names];
+}
 function unwrap(s){let body=s.trim(),modifiers=[];for(let i=0;i<4;i++){const m=marker.exec(body);if(!m)break;modifiers.push(m[0].trim());body=body.slice(m[0].length);}return {body,modifiers};}
 function parseLine(raw){
  const {body,modifiers}=unwrap(raw);
@@ -39,7 +45,7 @@ function parseLine(raw){
  const f=occurrences[0],formula=f[0],before=body.slice(0,f.index).trim(),after=body.slice(f.index+formula.length).trim().replace(/[。.]$/,'').trim();
  let name=null,ruleText='',conclusion=false,forwardText=null;
  const binding=/^(?:建立|记|令|let|establish|have|置く|示す)\s*([A-Za-z_][A-Za-z0-9_']{0,63})\s*[:：]$/iu.exec(before);
- if(binding){name=binding[1];ruleText=after.replace(/^[,，|；;]\s*/,'');}
+ if(binding){name=binding[1];if(compileFormula(name).ast.kind!=='id')throw Error('Invalid intermediate name.');ruleText=after.replace(/^[,，|；;]\s*/,'');}
  else if(/^(?:结论|证明|推出|conclude|show|therefore|示す)\s*[:：]?$/iu.test(before)){conclusion=true;ruleText=after.replace(/^[,，|；;]\s*/,'');}
  else if(!before){ruleText=after.replace(/^[,，|；;]\s*/,'');}
  else{
@@ -94,6 +100,7 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
   }
   if(reusedRows)serial=serials.at(-1);
  }
+ function unavailable(type){return freeNames(type).find(n=>(planned.has(n)||occupied.has(n))&&!visible.has(n));}
  function makeStep(p,last,application){
   if(last)return {kind:'conclude',type:p.type,application};
   let name=p.name;
@@ -107,7 +114,7 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
   const row={...p,raw,line,status:'unresolved',proofStatus:'open',...details};
   // Keep a recognized proposition as a tentative local object. It is not
   // an established theorem and no incomplete draft is exported.
-  if(p&&!['define','introduce','assume','infer-proposition'].includes(p.kind)&&!last&&!p.conclusion&&(!p.name||!occupied.has(p.name))){
+  if(p&&!['define','introduce','assume','infer-proposition'].includes(p.kind)&&!last&&!p.conclusion&&(!p.name||!occupied.has(p.name))&&!unavailable(p.type)){
    const step=makeStep(p,false,'?');
    openNames.add(step.name);steps.push(step);row.step=step;
   }
@@ -130,7 +137,7 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
       continue;
      }
      p={...p,type:picked.type};
-     const dependencies=picked.premises.filter(n=>openNames.has(n));
+     const dependencies=[...new Set([...picked.premises,...freeNames(picked.type)].filter(n=>openNames.has(n)))];
      const proofStatus=dependencies.length?'depends-on-open':'candidate';
      const step=makeStep(p,false,picked.term);
      if(dependencies.length)openNames.add(step.name);
@@ -141,28 +148,20 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
      if(blocked)throw Error('Resolve preceding incomplete wording before extending the goal.');
      if(occupied.has(p.name))throw Error('This local name already exists.');
      if(choices.has(line))throw Error('An introduction has no proof candidate choice.');
-     const names=new Set();
-     function visit(t){if(t.kind==='free')names.add(t.name);for(const v of Object.values(t))if(v&&typeof v==='object'){if(Array.isArray(v))v.forEach(visit);else visit(v);}}
-     visit(compileFormula(p.type,{syntax:'lean'}).scoped);
+     const names=freeNames(p.type);
      for(const n of names)if((planned.has(n)||occupied.has(n))&&!visible.has(n))throw Error('Ambiguous or forward reference in introduction: '+n);
      remainingGoal=extendGoal(remainingGoal,p);
      const step={kind:p.kind,name:p.name,type:p.type};
      occupied.add(p.name);visible.add(p.name);facts.set(p.name,p.type);
-     rows.push({...p,line,status:'translated',proofStatus:'candidate',remainingGoal,step,candidates:[]});steps.push(step);continue;
+     const dependencies=names.filter(n=>openNames.has(n));
+     if(dependencies.length)openNames.add(p.name);
+     rows.push({...p,line,status:'translated',proofStatus:dependencies.length?'depends-on-open':'candidate',dependencies,remainingGoal,step,candidates:[]});steps.push(step);continue;
     }
     if(p.kind==='define'){
      if(last)throw Error('A definition must be followed by a conclusion.');
      if(occupied.has(p.name))throw Error('This local name already exists.');
      if(choices.has(line))throw Error('A definition has no proof candidate choice.');
-     const free=new Set();
-     function visit(t){
-      if(t.kind==='free')free.add(t.name);
-      for(const v of Object.values(t))if(v&&typeof v==='object'){
-       if(Array.isArray(v))v.forEach(visit);else visit(v);
-      }
-     }
-     visit(compileFormula(p.type,{syntax:'lean'}).scoped);
-     visit(compileFormula(p.value,{syntax:'lean'}).scoped);
+     const free=freeNames(p.type,p.value);
      for(const n of free)if((planned.has(n)||occupied.has(n))&&!visible.has(n))throw Error('Ambiguous or forward reference in definition: '+n);
      const dependencies=[...free].filter(n=>openNames.has(n));
      const proofStatus=dependencies.length?'depends-on-open':'candidate';
@@ -173,6 +172,8 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
     }
     if(p.conclusion&&!last)throw Error('A conclusion must be the last inference.');
     if(last&&p.name)throw Error('The final inference must conclude the goal, not name a fact.');
+    const missing=unavailable(p.type);
+    if(missing)throw Error('Ambiguous or forward reference in proposition: '+missing);
     let application='?',candidates=[];
     function chosen(){
      if(!choices.has(line))return null;
@@ -211,7 +212,7 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
     }
     if(choices.has(line)&&!candidates.some(c=>c.term===choices.get(line)))throw Error('Selected candidate is no longer available.');
     const applicationPremises=candidates.find(c=>c.term===application)?.premises||application.split(/\s+/);
-    const dependencies=[...new Set(applicationPremises.filter(name=>openNames.has(name)))];
+    const dependencies=[...new Set([...applicationPremises,...freeNames(p.type)].filter(name=>openNames.has(name)))];
     const proofStatus=application==='?'?'open':dependencies.length?'depends-on-open':'candidate';
     const step=makeStep(p,last,application);
     if(step.kind==='establish'&&proofStatus!=='candidate')openNames.add(step.name);

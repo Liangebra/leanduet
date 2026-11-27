@@ -32,3 +32,30 @@ test('formula dependencies and candidate dependencies are distinguishable',()=>{
  assert.deepEqual(n.formula.refs,['context:0']);
  assert.deepEqual(n.dependencies,['context:0','context:1']);
 });
+
+test('downstream constraint edits invalidate earlier holes and their later dependents',()=>{
+ const facts=new Map([['h','P ∧ Q'],['f','P → R']]);
+ const r=draftProof('建立 hp : $?$,由 h\n由 hp 与 f 得到 $R$\n$R$ | from duet_h1',['P','Q','R','h','f'],facts);
+ assert.equal(r.complete,true);
+ assert.deepEqual(r.graph.nodes.find(n=>n.id==='line:1').constraintRefs,['line:2']);
+ assert.deepEqual(dependentNodes(r.graph,['line:2']),['line:1','line:2','line:3']);
+});
+test('candidate types have explicit dependencies even before type selection',()=>{
+ const r=draftProof('建立 hp : $?$,由 h\n$R$',['P','Q','R','h'],new Map([['h','P ∧ Q']]));
+ const n=r.graph.nodes.find(n=>n.id==='line:1');
+ assert.ok(n.typeDomain[0].dependencies.includes('context:0'));
+ assert.ok(n.typeDomain[1].dependencies.includes('context:1'));
+ assert.ok(dependentNodes(r.graph,['context:0']).includes('line:1'));
+});
+test('ordinary propositions reject future locals without creating invalid tentative facts',()=>{
+ const r=draftProof('建立 hp : $P(x)$\n令 x : $Nat$ := $1$\n$P(x)$ | hp',['P']);
+ assert.equal(r.complete,false);
+ assert.match(r.rows[0].reason,/forward reference in proposition: x/);
+ assert.equal(r.rows[0].step,undefined);
+});
+test('open dependencies appearing in proposition types are propagated',()=>{
+ const r=draftProof('建立 hp : $P$\n建立 hq : $Q(hp)$ | rule\n$Q(hp)$ | hq',['P','Q']);
+ assert.equal(r.rows[1].proofStatus,'depends-on-open');
+ assert.deepEqual(r.rows[1].dependencies,['hp']);
+ assert.equal(r.rows[2].proofStatus,'depends-on-open');
+});

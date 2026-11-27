@@ -19,10 +19,24 @@ function stableTree(t,ids){
 }
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 const contextSignature=nodes=>nodes.filter(n=>n.kind==='context').map(n=>[n.name,n.type,n.ambiguousName]);
-const lineKey=n=>JSON.stringify([n.kind,n.raw]);
+const lineKey=n=>JSON.stringify([n.origin||n.kind,n.raw]);
 function candidateKey(c,ids){
  if(c.dependencies.some(id=>!ids.has(id)))return null;
- return JSON.stringify([c.schema,c.term,c.type||null,c.dependencies.map(id=>ids.get(id)).sort()]);
+ if(c.type&&!c.formula?.tree)return null;
+ return JSON.stringify([c.schema,c.term,c.type?stableTree(c.formula.tree,ids):null,c.dependencies.map(id=>ids.get(id)).sort()]);
+}
+function matchingContent(a,b,oldIds,newIds){
+ const oldScope=(a.scopeRefs||[]).map(x=>oldIds.get(x));
+ const newScope=(b.scopeRefs||[]).map(x=>newIds.get(x));
+ if(oldScope.includes(undefined)||newScope.includes(undefined)||!same(oldScope,newScope))return false;
+ if(a.origin==='infer-proposition'&&b.origin===a.origin){
+  // The hole is the introduction; resolving its type is not a new
+  // introduction. Require the entire original candidate domain to match.
+  const left=(a.typeDomain||[]).map(c=>candidateKey(c,oldIds));
+  const right=(b.typeDomain||[]).map(c=>candidateKey(c,newIds));
+  return left.length>0&&!left.includes(null)&&!right.includes(null)&&same(left,right);
+ }
+ return !!a.formula.tree&&!!b.formula.tree&&same(stableTree(a.formula.tree,oldIds),stableTree(b.formula.tree,newIds))&&same(stableTree(a.value?.tree,oldIds),stableTree(b.value?.tree,newIds));
 }
 export function reconcileDraftIdentity(previous,graph){
  const ids=new Map(),matches=new Map();let next=previous?.next??1;
@@ -38,9 +52,9 @@ export function reconcileDraftIdentity(previous,graph){
   else if(sameContext){
    const k=lineKey(n),a=oldLines.get(k)||[],b=newLines.get(k)||[];
    // A repeated source occurrence has no reliable edit correspondence.
-   if(a.length===1&&b.length===1&&n.formula.tree&&a[0].formula.tree){
+   if(a.length===1&&b.length===1){
     try{
-     if(same(stableTree(a[0].formula.tree,previous.ids),stableTree(n.formula.tree,ids))&&same(stableTree(a[0].value?.tree,previous.ids),stableTree(n.value?.tree,ids))&&(n.scopeRefs||[]).every(x=>ids.has(x))&&same((a[0].scopeRefs||[]).map(x=>previous.ids.get(x)),(n.scopeRefs||[]).map(x=>ids.get(x))))prior=a[0];
+     if(matchingContent(a[0],n,previous.ids,ids))prior=a[0];
     }catch{}
    }
   }

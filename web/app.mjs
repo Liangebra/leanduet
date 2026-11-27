@@ -487,10 +487,17 @@ function previewDraft({edited=false}={}){
  try{
    const input=$('chainText').value,scope=(patchNode.scope||[]).map(d=>d.name),facts=factsFromScope(patchNode.scope);
     if(edited&&draftChoices.size){
-     const unselected=draftSession.evaluate(input,scope,facts,{goal:patchNode.type});
-     const correspondence=reconcileDraftIdentity(draftIdentity,unselected.graph);
-     const migrated=migrateDraftChoices(draftIdentity,correspondence,draftChoices);
-     draftChoices.clear();for(const [line,term] of migrated)draftChoices.set(line,term);
+     // Earlier restored choices can reveal later candidate domains. Replay
+     // until the choice map stabilizes; abandon migration on nonconvergence.
+     const original=new Map(draftChoices);let migrated=new Map(),stable=false;
+     for(let pass=0;pass<=original.size+1;pass++){
+      const probe=draftSession.evaluate(input,scope,facts,{goal:patchNode.type,choices:migrated});
+      const correspondence=reconcileDraftIdentity(draftIdentity,probe.graph);
+      const next=migrateDraftChoices(draftIdentity,correspondence,original);
+      if(JSON.stringify([...next])===JSON.stringify([...migrated])){stable=true;break;}
+      migrated=next;
+     }
+     draftChoices.clear();if(stable)for(const [line,term] of migrated)draftChoices.set(line,term);
     }
     const r=draftSession.evaluate(input,scope,facts,{choices:draftChoices,goal:patchNode.type});
     draftIdentity=reconcileDraftIdentity(draftIdentity,r.graph);
