@@ -1,4 +1,4 @@
-import {compileFormula} from './math-formula.mjs';
+import {compileFormula,sameScopedFormula} from './math-formula.mjs';
 import {buildDraftGraph} from './draft-graph.mjs';
 import {extendGoal,inferIntroduction,existentialBindings} from './context-extension.mjs';
 import {constrainPropositions,candidateChoice} from './proposition-constraints.mjs';
@@ -293,8 +293,13 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
    }catch(e){unresolved(p,raw,line,last,{reason:e.message});}
    finally{serials.push(serial);}
  }
+ let complete=lines.length>0&&!blocked&&steps.at(-1)?.kind==='conclude';
+ if(complete&&goal&&!sameScopedFormula(steps.at(-1).type,remainingGoal)){
+  blocked=true;complete=false;
+  const last=rows.at(-1);
+  if(last)rows[rows.length-1]={...last,status:'unresolved',proofStatus:'open',reason:'The conclusion does not structurally match the remaining goal.'};
+ }
  if(cache)cache.previous={key,signatures,rows,serials};
- const complete=lines.length>0&&!blocked&&steps.at(-1)?.kind==='conclude';
  return {rows,steps,complete,reusedRows,remainingGoal,openBindings:[...openNames],graph:buildDraftGraph(scope,context,rows,{goal}),term:complete?renderChain(steps):null};
 }
 export function createDraftSession(){

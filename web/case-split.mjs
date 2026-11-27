@@ -1,4 +1,4 @@
-import {compileFormula,renderFormula} from './math-formula.mjs';
+import {compileFormula,renderFormula,sameScopedFormula} from './math-formula.mjs';
 import {buildDraftGraph} from './draft-graph.mjs';
 import {closeProofScope,extendProofScope,forkProofScope,proofScopeFacts,proofScopeNames,resolveProofName} from './proof-scope.mjs';
 import {renderChain} from './proof-chain.mjs';
@@ -97,10 +97,6 @@ function graphNodes(graph){
  }
  return rows;
 }
-function sameProposition(left,right){
- return typeof left==='string'&&typeof right==='string'&&
-  JSON.stringify(compileFormula(left,{syntax:'lean'}).scoped)===JSON.stringify(compileFormula(right,{syntax:'lean'}).scoped);
-}
 function proofResultId(graph){
  return [...(graph?.nodes||[])].reverse().find(node=>node.kind!=='context')?.id||null;
 }
@@ -169,7 +165,7 @@ export function compileCaseProgram(input,frame,{goal=null,choices=new Map(),line
   // must match the remaining goal, not merely the original declaration.
   // This conservative structural check does not replace Lean elaboration.
   const conclusion=result.steps.at(-1);
-  if(conclusion?.kind!=='conclude'||!sameProposition(conclusion.type,result.remainingGoal??parsed.type)){
+  if(conclusion?.kind!=='conclude'||!sameScopedFormula(conclusion.type,result.remainingGoal??parsed.type)){
    const last=result.rows.at(-1);
    const reason='The branch conclusion does not structurally match its remaining goal.';
    firstOpen??={line:last?.line||branch.line,reason};
@@ -222,7 +218,7 @@ export function compileCaseProgram(input,frame,{goal=null,choices=new Map(),line
  if(parsed.tail.length){
   tailResult=compileSegment(parsed.tail.map(x=>x.raw).join('\n'),resultFrame,{goal,choices,lineOffset:parsed.tailLineOffset,closedNames:[...expired]});
  }else{
-  if(goal&&!sameProposition(parsed.type,goal))return incomplete(input,parsed,branchResults,frame,goal,
+  if(goal&&!sameScopedFormula(parsed.type,goal))return incomplete(input,parsed,branchResults,frame,goal,
    'The case result does not structurally match the enclosing goal; supply a parent continuation.');
   tailResult={rows:[],steps:[{kind:'conclude',type:goal||null,application:parsed.resultName}],complete:true,
    graph:remapProofGraph(buildDraftGraph(proofScopeNames(resultFrame),proofScopeFacts(resultFrame),[],{goal}),resultFrame),
