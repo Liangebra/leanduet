@@ -73,11 +73,12 @@ function parseLine(raw){
  }
  return {raw,formula,type:compileFormula(formula).lean,name,ruleText,conclusion,modifiers,forwardText};
 }
-export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),cache=null,goal=null,lineOffset=0}={}){
+export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),cache=null,goal=null,lineOffset=0,closedNames=[]}={}){
  const facts=new Map(context);
  if(typeof input!=='string'||input.length>12000)throw Error('Draft exceeds 12000 characters.');
  const lines=input.split(/\r?\n/).map((raw,i)=>({raw,line:i+1+lineOffset})).filter(x=>x.raw.trim());
  if(lines.length>16)throw Error('Use at most sixteen inference lines.');
+ const closed=new Set(closedNames);
  const occupied=new Set(scope),visible=new Set(scope.filter((x,i)=>scope.indexOf(x)===i&&scope.lastIndexOf(x)===i));
  // Cache syntax by exact text, independently of context. Cached errors are
  // deterministic syntax diagnostics, not semantic failures.
@@ -90,7 +91,7 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
  });
  const planned=new Set(parsed.flatMap(p=>[p.value?.name,p.value?.evidenceName]).filter(Boolean));
  const lookahead=parsed.some(p=>p.value?.kind==='infer-proposition')?JSON.stringify([input,[...choices]]):null;
- const key=JSON.stringify([scope,[...context],[...planned].sort(),goal,lineOffset,lookahead]);
+ const key=JSON.stringify([scope,[...context],[...planned].sort(),goal,lineOffset,lookahead,[...closed].sort()]);
  const signatures=lines.map(({raw,line},i)=>JSON.stringify([raw,line,i===lines.length-1,choices.has(line),choices.get(line)]));
  let remainingGoal=goal;
  const constraintResults=new Map();
@@ -121,7 +122,7 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
   }
   if(reusedRows)serial=serials.at(-1);
  }
- function unavailable(type){return freeNames(type).find(n=>(planned.has(n)||occupied.has(n))&&!visible.has(n));}
+ function unavailable(type){return freeNames(type).find(n=>(planned.has(n)||occupied.has(n)||closed.has(n))&&!visible.has(n));}
  function makeStep(p,last,application){
   if(last)return {kind:'conclude',type:p.type,application};
   let name=p.name;
@@ -194,7 +195,7 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
      if(!visible.has(p.source)||!facts.has(p.source))throw Error('Cite a visible typed existential premise.');
      if(p.name===p.evidenceName||occupied.has(p.name)||occupied.has(p.evidenceName))throw Error('Witness and evidence names must be distinct and fresh.');
      const types=existentialBindings(facts.get(p.source),p);
-     const missing=freeNames(types.type,types.evidenceType).find(n=>n!==p.name&&(planned.has(n)||occupied.has(n))&&!visible.has(n));
+     const missing=freeNames(types.type,types.evidenceType).find(n=>n!==p.name&&(planned.has(n)||occupied.has(n)||closed.has(n))&&!visible.has(n));
      if(missing)throw Error('Ambiguous or forward reference in existential elimination: '+missing);
      if(freeNames(types.type).includes(p.name))throw Error('Witness domain cannot refer to the new witness.');
      const stem='duet_exists_'+p.name.slice(0,40);
@@ -217,7 +218,7 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
      if(choices.has(line))throw Error('An introduction has no proof candidate choice.');
      p={...p,type:p.type||inferIntroduction(remainingGoal,p.kind)};
      const names=freeNames(p.type);
-     for(const n of names)if((planned.has(n)||occupied.has(n))&&!visible.has(n))throw Error('Ambiguous or forward reference in introduction: '+n);
+     for(const n of names)if((planned.has(n)||occupied.has(n)||closed.has(n))&&!visible.has(n))throw Error('Ambiguous or forward reference in introduction: '+n);
      remainingGoal=extendGoal(remainingGoal,p);
      const step={kind:p.kind,name:p.name,type:p.type};
      occupied.add(p.name);visible.add(p.name);facts.set(p.name,p.type);
@@ -230,7 +231,7 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
      if(occupied.has(p.name))throw Error('This local name already exists.');
      if(choices.has(line))throw Error('A definition has no proof candidate choice.');
      const free=freeNames(p.type,p.value);
-     for(const n of free)if((planned.has(n)||occupied.has(n))&&!visible.has(n))throw Error('Ambiguous or forward reference in definition: '+n);
+     for(const n of free)if((planned.has(n)||occupied.has(n)||closed.has(n))&&!visible.has(n))throw Error('Ambiguous or forward reference in definition: '+n);
      const dependencies=[...free].filter(n=>openNames.has(n));
      const proofStatus=dependencies.length?'depends-on-open':'candidate';
      const step={kind:'define',name:p.name,type:p.type,value:p.value};
@@ -268,7 +269,7 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
       else {
        const r=parseRuleIntent(p.ruleText,{ordered:true});
        if(!r.rule||r.required.some(x=>!visible.has(x)))throw Error('Unknown or ambiguous premise; check scope and wording.');
-       if((occupied.has(r.rule)||planned.has(r.rule))&&!visible.has(r.rule))throw Error('Ambiguous or forward local rule reference.');
+       if((occupied.has(r.rule)||planned.has(r.rule)||closed.has(r.rule))&&!visible.has(r.rule))throw Error('Ambiguous or forward local rule reference.');
        if(!r.required.length&&(structuralRules.has(r.rule)||visible.has(r.rule))){
          const resolution=implicitCandidates(p.type,[...visible],facts,{rule:r.rule});candidates=resolution.candidates;
          const picked=chosen();

@@ -140,7 +140,7 @@ function incomplete(input,parsed,branchResults,frame,goal,reason){
  * Compile one scoped disjunction block and its parent continuation. Each arm
  * is elaborated in a forked identity context; only the common result returns.
  */
-export function compileCaseProgram(input,frame,{goal=null,choices=new Map(),lineOffset=0}={},compileSegment){
+export function compileCaseProgram(input,frame,{goal=null,choices=new Map(),lineOffset=0,closedNames=[]}={},compileSegment){
  if((frame.id.match(/\/case:/g)||[]).length>=8)throw Error('Nested disjunction scope is limited to eight levels.');
  const parsed=parseBlock(input,lineOffset),sourceBinding=resolveProofName(frame,parsed.source);
  if(sourceBinding.status!=='resolved'||typeof sourceBinding.binding.type!=='string')
@@ -158,7 +158,7 @@ export function compileCaseProgram(input,frame,{goal=null,choices=new Map(),line
    id:childId+':binding',name:branch.name,type:branchTypes[branch.constructor],kind:'case-assumption'
   }});
   const body=branch.sourceLines.join('\n');
-  const result=compileSegment(body,child,{goal:parsed.type,choices,lineOffset:branch.bodyLineOffset});
+  const result=compileSegment(body,child,{goal:parsed.type,choices,lineOffset:branch.bodyLineOffset,closedNames:[...closedNames,...parsed.branches.filter(b=>b!==branch&&b.name!==branch.name).map(b=>b.name)]});
   if(!result.complete){
    const failed=result.rows.find(row=>row.status==='unresolved');
    firstOpen??=failed?{line:failed.line,reason:failed.reason}:{reason:'A case branch is still open.'};
@@ -192,11 +192,35 @@ export function compileCaseProgram(input,frame,{goal=null,choices=new Map(),line
  const step={kind:'cases',source:parsed.source,name:parsed.resultName,type:parsed.type,branches};
  const caseRow={kind:'cases',name:parsed.resultName,type:parsed.type,raw:parsed.head.raw.trim(),line:parsed.head.line,
   graphId:parentResultId,status:'translated',proofStatus:'candidate',step,branches,branchDependencies,branchProofIds,dependencies:[sourceBinding.binding.id,...branchDependencies,...branchProofIds]};
- const escapedName=parsed.branches.map(branch=>branch.name).find(name=>parsed.tail.some(row=>new RegExp("(^|[^A-Za-z0-9_'])"+name+"(?![A-Za-z0-9_'])").test(row.raw)));
- if(escapedName)throw Error('Branch-local name '+escapedName+' cannot be referenced after its case branch closes.');
+ // Names introduced in a branch cannot be reinterpreted as unqualified
+ // global rules after closure. Parent bindings retain their original meaning;
+ // a fresh parent introduction may deliberately reuse a spelling.
+ const parentIds=new Set(resultFrame.bindings.map(binding=>binding.id));
+ const expired=new Set(closedNames);
+ for(const {result} of branchResults){
+  for(const node of graphNodes(result.graph)){
+   if(node.name&&!parentIds.has(node.id))expired.add(node.name);
+  }
+ }
+ // A closed name may not occur in the result annotation itself. Resolve
+ // scoped free names, not spelling inside a bound quantifier.
+ const parentNames=new Set(proofScopeNames(frame));
+ function freeClosed(tree){
+  if(tree.kind==='free')return expired.has(tree.name)&&!parentNames.has(tree.name)?tree.name:null;
+  for(const value of Object.values(tree)){
+   if(value&&typeof value==='object'){
+    for(const child of Array.isArray(value)?value:[value]){
+     const name=freeClosed(child);if(name)return name;
+    }
+   }
+  }
+  return null;
+ }
+ const escaping=freeClosed(compileFormula(parsed.type,{syntax:'lean'}).scoped);
+ if(escaping)return incomplete(input,parsed,branchResults,frame,goal,'A branch-local name cannot occur in the parent result: '+escaping);
  let tailResult;
  if(parsed.tail.length){
-  tailResult=compileSegment(parsed.tail.map(x=>x.raw).join('\n'),resultFrame,{goal,choices,lineOffset:parsed.tailLineOffset});
+  tailResult=compileSegment(parsed.tail.map(x=>x.raw).join('\n'),resultFrame,{goal,choices,lineOffset:parsed.tailLineOffset,closedNames:[...expired]});
  }else{
   if(goal&&!sameProposition(parsed.type,goal))return incomplete(input,parsed,branchResults,frame,goal,
    'The case result does not structurally match the enclosing goal; supply a parent continuation.');

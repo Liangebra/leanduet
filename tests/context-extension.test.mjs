@@ -188,3 +188,18 @@ test('a case result different from the parent goal requires a continuation',()=>
  assert.equal(r.complete,false);assert.equal(r.term,null);
  assert.match(r.rows[0].reason,/enclosing goal/);
 });
+
+test('all branch-local declarations, not only case binders, expire after closure',()=>{
+ const facts=new Map([['P','Prop'],['Q','Prop'],['h','P ∨ Q'],['p','P']]);
+ const prefix='cases h, establish hR : $P$\n  left case hp\n    establish temporary : $P$ | hp\n    $P$ | temporary\n  right case hq\n    $P$ | p\n';
+ const scope=[...facts.keys()],session=createDraftSession();
+ const bad=session.evaluate(prefix+'$P$ | temporary',scope,facts,{goal:'P'});
+ assert.equal(bad.complete,false);
+ assert.match(bad.rows.at(-1).reason,/forward local rule reference/);
+ assert.equal(bad.term,null);
+ const reuse=session.evaluate(prefix+'establish temporary : $P$ | hR\n$P$ | temporary',scope,facts,{goal:'P'});
+ assert.equal(reuse.complete,true);
+ assert.match(reuse.term,/exact temporary$/);
+ const bound=session.evaluate(prefix+'$∀ temporary : Nat, P$ | external_rule',scope,facts,{goal:'∀ temporary : Nat, P'});
+ assert.equal(bound.complete,true,'a bound variable with the same spelling is not an escaping reference');
+});

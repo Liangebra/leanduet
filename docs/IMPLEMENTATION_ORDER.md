@@ -265,3 +265,8 @@ when the declared case result structurally matches the enclosing goal. These
 checks are conservative within the browser grammar, not a decision procedure
 for Lean definitional equality. Unsupported equivalent presentations may
 require a more explicit continuation or independent Lean checking.
+
+The continuation also receives the set of expired branch-local declaration
+names. Unqualified local references cannot silently become global rule
+references after scope closure; fresh introductions may reuse a display
+name. This remains conservative and does not certify global name resolution.
