@@ -253,3 +253,15 @@ tracing proof-only facts. Witnesses, universal introductions and local
 definitions use object tracing; evidence and established propositions retain
 the proposition check. This also repairs earlier structured-chain paths that
 incorrectly attempted to trace data as propositions.
+
+### Scoped draft address and closure audit
+
+Keep physical source line addresses across whitespace in nested branch bodies
+and parent continuations. Candidate selection remains revision-local by
+physical line, while identity reconciliation uses scoped object identities.
+A branch's explicit final proposition must structurally match its residual
+goal after introductions. An implicit parent conclusion is permitted only
+when the declared case result structurally matches the enclosing goal. These
+checks are conservative within the browser grammar, not a decision procedure
+for Lean definitional equality. Unsupported equivalent presentations may
+require a more explicit continuation or independent Lean checking.

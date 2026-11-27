@@ -47,13 +47,17 @@ function parseBlock(input,lineOffset){
    body.push({raw:next.raw.slice(4),index:next.index,line:next.line});pos++;
   }
   if(!body.length)throw Error('Each disjunction branch needs a proof of the common result.');
-  branches.push({constructor:kind,name,line:record.line,body,bodyLineOffset:body[0].line-1});
+  // Keep physical source addresses: blank lines inside an arm must not
+  // shift candidate-choice keys or collide with another scoped occurrence.
+  const first=body[0].index,last=body.at(-1).index;
+  const sourceLines=all.slice(first,last+1).map(line=>line.raw.trim()?line.raw.slice(4):'');
+  branches.push({constructor:kind,name,line:record.line,body,sourceLines,bodyLineOffset:all[first].line-1});
   if(tailStart!==null)break;
  }
  if(branches.length!==2||branches[0].constructor!=='inl'||branches[1].constructor!=='inr')
   throw Error('A disjunction split needs one left branch and one right branch, in that order.');
- const tail=tailStart===null?[]:all.slice(tailStart).filter(x=>x.raw.trim());
- if(tail.some(x=>x.indent!==0))throw Error('Statements after a case split return to the parent indentation.');
+ const tail=tailStart===null?[]:all.slice(tailStart);
+ if(tail.some(x=>x.raw.trim()&&x.indent!==0))throw Error('Statements after a case split return to the parent indentation.');
  return {head,source,resultName,type,typeText,branches,tail,tailLineOffset:tailStart===null?lineOffset:all[tailStart].line-1};
 }
 
@@ -92,6 +96,10 @@ function graphNodes(graph){
   for(const branch of node.branches||[]){rows.push(branch);rows.push(...graphNodes(branch.graph));}
  }
  return rows;
+}
+function sameProposition(left,right){
+ return typeof left==='string'&&typeof right==='string'&&
+  JSON.stringify(compileFormula(left,{syntax:'lean'}).scoped)===JSON.stringify(compileFormula(right,{syntax:'lean'}).scoped);
 }
 function proofResultId(graph){
  return [...(graph?.nodes||[])].reverse().find(node=>node.kind!=='context')?.id||null;
@@ -149,12 +157,24 @@ export function compileCaseProgram(input,frame,{goal=null,choices=new Map(),line
   const child=forkProofScope(frame,{id:childId,goal:parsed.type,binding:{
    id:childId+':binding',name:branch.name,type:branchTypes[branch.constructor],kind:'case-assumption'
   }});
-  const body=branch.body.map(x=>x.raw).join('\n');
+  const body=branch.sourceLines.join('\n');
   const result=compileSegment(body,child,{goal:parsed.type,choices,lineOffset:branch.bodyLineOffset});
   if(!result.complete){
    const failed=result.rows.find(row=>row.status==='unresolved');
    firstOpen??=failed?{line:failed.line,reason:failed.reason}:{reason:'A case branch is still open.'};
    branchResults.push({branch:{...branch,type:branchTypes[branch.constructor]},child,result});
+   continue;
+  }
+  // The arm may consume binders of its own goal. Its final annotation
+  // must match the remaining goal, not merely the original declaration.
+  // This conservative structural check does not replace Lean elaboration.
+  const conclusion=result.steps.at(-1);
+  if(conclusion?.kind!=='conclude'||!sameProposition(conclusion.type,result.remainingGoal??parsed.type)){
+   const last=result.rows.at(-1);
+   const reason='The branch conclusion does not structurally match its remaining goal.';
+   firstOpen??={line:last?.line||branch.line,reason};
+   branchResults.push({branch:{...branch,type:branchTypes[branch.constructor]},child,
+    result:{...result,complete:false,term:null,rows:result.rows.map(row=>row===last?{...row,status:'unresolved',proofStatus:'open',reason}:row)}});
    continue;
   }
   const localIds=graphNodes(result.graph).filter(node=>!frame.bindings.some(binding=>binding.id===node.id)).map(node=>node.id);
@@ -178,6 +198,8 @@ export function compileCaseProgram(input,frame,{goal=null,choices=new Map(),line
  if(parsed.tail.length){
   tailResult=compileSegment(parsed.tail.map(x=>x.raw).join('\n'),resultFrame,{goal,choices,lineOffset:parsed.tailLineOffset});
  }else{
+  if(goal&&!sameProposition(parsed.type,goal))return incomplete(input,parsed,branchResults,frame,goal,
+   'The case result does not structurally match the enclosing goal; supply a parent continuation.');
   tailResult={rows:[],steps:[{kind:'conclude',type:goal||null,application:parsed.resultName}],complete:true,
    graph:remapProofGraph(buildDraftGraph(proofScopeNames(resultFrame),proofScopeFacts(resultFrame),[],{goal}),resultFrame),
    openBindings:[],reusedRows:0,remainingGoal:goal};

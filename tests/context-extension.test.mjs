@@ -163,3 +163,28 @@ test('nested disjunctions preserve lexical branch scopes and match full recomput
  assert.notEqual(outer.branches[0].binding.id,outer.branches[1].binding.id);
  assert.equal(outer.branches[0].graph.nodes.some(n=>n.name==='hq'),false);
 });
+
+test('case branches check their actual terminal annotations against the remaining goal',()=>{
+ const facts=new Map([['P','Prop'],['Q','Prop'],['h','P ∨ Q'],['p','P']]);
+ const input='cases h, establish hR : $P$\n  left case hp\n    $P$ | hp\n  right case hq\n    $Q$ | hq\n$P$ | hR';
+ const result=createDraftSession().evaluate(input,[...facts.keys()],facts,{goal:'P'});
+ assert.equal(result.complete,false);
+ assert.equal(result.term,null);
+ const node=result.graph.nodes.find(n=>n.kind==='cases');
+ assert.deepEqual(node.branches.map(branch=>branch.status),['complete','open']);
+ assert.ok(result.rows.some(row=>row.line===5&&row.status==='unresolved'));
+});
+test('case branch introduction checks the residual goal, not the original universal',()=>{
+ const facts=new Map([['P','Prop'],['Q','Prop'],['h','P ∨ Q']]);
+ const input='cases h, establish hR : $∀ z : Nat, P → P$\n  left case hp\n    任取 x\n    假设 ha\n    $P$ | ha\n  right case hq\n    任取 x\n    假设 hb\n    $P$ | hb';
+ const r=compileNaturalDraft(input,[...facts.keys()],facts,{goal:'∀ z : Nat, P → P'});
+ assert.equal(r.complete,true);
+ assert.match(r.term,/intro x/);
+});
+test('a case result different from the parent goal requires a continuation',()=>{
+ const facts=new Map([['P','Prop'],['Q','Prop'],['h','P ∨ Q'],['p','P']]);
+ const input='cases h, establish hR : $P$\n  left case hp\n    $P$ | hp\n  right case hq\n    $P$ | p';
+ const r=createDraftSession().evaluate(input,[...facts.keys()],facts,{goal:'Q'});
+ assert.equal(r.complete,false);assert.equal(r.term,null);
+ assert.match(r.rows[0].reason,/enclosing goal/);
+});
