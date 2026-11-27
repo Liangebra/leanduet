@@ -37,3 +37,21 @@ class SemanticTests(unittest.TestCase):
         self.assertTrue(semantic._ordered_application("?"))
         for bad in ("f (g x", "f g)", "f (by exact h)", "f sorry", "f (g x); sorry", "f (g x)\\n#check Nat", "f " + "x "*9):
             self.assertFalse(semantic._ordered_application(bad),bad)
+
+    @patch("semantic._run_lean", return_value={"localType":"R","bindings":[{"name":"x","type":"Nat"},{"name":"hx","type":"P x"}]})
+    def test_existential_chain_traces_both_bindings(self, run):
+        step={"kind":"obtain","source":"h","copy":"duet_exists_x","name":"x","evidenceName":"hx","type":"Nat","evidenceType":"P x"}
+        result=semantic.infer_chain("theorem t : True := by\n  trivial","root",[step,{"kind":"conclude","type":"R","application":"f x hx"}])
+        self.assertEqual([b["name"] for b in result["bindings"]],["x","hx"])
+        self.assertIn("rcases duet_exists_x with ⟨x, hx⟩",result["term"])
+        self.assertIn("change P x at hx",result["term"])
+        self.assertIn("duet_trace_object x",run.call_args.args[0])
+        self.assertIn("duet_trace hx",run.call_args.args[0])
+
+    def test_existential_chain_rejects_malformed_bindings_before_lean(self):
+        step={"kind":"obtain","source":"h","copy":"duet_exists_x","name":"x","evidenceName":"hx","type":"Nat","evidenceType":"P x"}
+        for altered in ({"copy":"h"},{"evidenceName":"x"},{"name":"x; sorry"},{"evidenceType":"P x\n  sorry"}):
+            with self.subTest(altered=altered), patch("semantic._run_lean") as run:
+                with self.assertRaises(ValueError):
+                    semantic.infer_chain("theorem t : True := by\n  trivial","root",[{**step,**altered},{"kind":"conclude","application":"hx"}])
+                run.assert_not_called()

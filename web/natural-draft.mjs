@@ -1,6 +1,6 @@
 import {compileFormula} from './math-formula.mjs';
 import {buildDraftGraph} from './draft-graph.mjs';
-import {extendGoal} from './context-extension.mjs';
+import {extendGoal,inferIntroduction,existentialBindings} from './context-extension.mjs';
 import {constrainPropositions,candidateChoice} from './proposition-constraints.mjs';
 import {discourseFrame,discourseCandidates} from './discourse.mjs';
 import {parseRuleIntent} from './rule-intent.mjs';
@@ -23,6 +23,18 @@ function parseLine(raw){
   const [,name,source]=hole;
   if(compileFormula(name).ast.kind!=='id')throw Error('Invalid intermediate name.');
   return {raw,kind:'infer-proposition',name,source,modifiers};
+ }
+ const obtain=/^(?:由\s*([A-Za-z_][A-Za-z0-9_']{0,63})\s*取\s*|obtain\s+from\s+([A-Za-z_][A-Za-z0-9_']{0,63})\s+)([A-Za-z_][A-Za-z0-9_']{0,63})(?:\s*[:：]\s*(\$[^$\n]+\$|\\\([^]*?\\\)))?\s*[,，]\s*(?:记\s*|with\s+)?([A-Za-z_][A-Za-z0-9_']{0,63})\s*[。.]?$/iu.exec(body);
+ if(obtain){
+  const [,cn,en,name,annotation,evidenceName]=obtain;
+  for(const n of [name,evidenceName])if(compileFormula(n).ast.kind!=='id')throw Error('Invalid witness or evidence name.');
+  return {raw,kind:'obtain',source:cn||en,name,type:annotation?compileFormula(annotation).lean:null,evidenceName,modifiers};
+ }
+ const implicit=/^(任取|取任意|假设|设|take\s+|assume\s+)\s*([A-Za-z_][A-Za-z0-9_']{0,63})\s*[。.]?$/iu.exec(body);
+ if(implicit){
+  const [,word,name]=implicit;
+  if(compileFormula(name).ast.kind!=='id')throw Error('Invalid introduction name.');
+  return {raw,kind:/^(?:假设|设|assume)/iu.test(word)?'assume':'introduce',name,type:null,modifiers};
  }
  const intro=/^(任取|取任意|假设|设|take\s+|assume\s+)\s*([A-Za-z_][A-Za-z0-9_']{0,63})\s*[:：]\s*(\$[^$\n]+\$|\\\([^]*?\\\))\s*[。.]?$/iu.exec(body);
  if(intro){
@@ -73,7 +85,7 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
   if(syntax.size>=128)syntax.delete(syntax.keys().next().value);
   syntax.set(raw,entry);return entry;
  });
- const planned=new Set(parsed.map(p=>p.value?.name).filter(Boolean));
+ const planned=new Set(parsed.flatMap(p=>[p.value?.name,p.value?.evidenceName]).filter(Boolean));
  const lookahead=parsed.some(p=>p.value?.kind==='infer-proposition')?JSON.stringify([input,[...choices]]):null;
  const key=JSON.stringify([scope,[...context],[...planned].sort(),goal,lookahead]);
  const signatures=lines.map(({raw,line},i)=>JSON.stringify([raw,line,i===lines.length-1,choices.has(line),choices.get(line)]));
@@ -91,9 +103,14 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
    if(row.status==='unresolved')blocked=true;
    if(row.step){
     steps.push(row.step);
-    if(['establish','define','introduce','assume'].includes(row.step.kind)){
+    if(['establish','define','introduce','assume','obtain'].includes(row.step.kind)){
      const {name,type}=row.step;occupied.add(name);visible.add(name);facts.set(name,type);
      if(row.proofStatus!=='candidate')openNames.add(name);
+     if(row.step.kind==='obtain'){
+      const {evidenceName,evidenceType,copy}=row.step;
+      occupied.add(copy);occupied.add(evidenceName);visible.add(evidenceName);facts.set(evidenceName,evidenceType);
+      if(row.proofStatus!=='candidate')openNames.add(evidenceName);
+     }
      if(['introduce','assume'].includes(row.step.kind))remainingGoal=row.remainingGoal;
     }
    }
@@ -115,7 +132,7 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
   const row={...p,raw,line,status:'unresolved',proofStatus:'open',...details};
   // Keep a recognized proposition as a tentative local object. It is not
   // an established theorem and no incomplete draft is exported.
-  if(p&&!['define','introduce','assume','infer-proposition'].includes(p.kind)&&!last&&!p.conclusion&&(!p.name||!occupied.has(p.name))&&!unavailable(p.type)){
+  if(p&&!['define','introduce','assume','infer-proposition','obtain'].includes(p.kind)&&!last&&!p.conclusion&&(!p.name||!occupied.has(p.name))&&!unavailable(p.type)){
    const step=makeStep(p,false,'?');
    openNames.add(step.name);steps.push(step);row.step=step;
   }
@@ -168,11 +185,34 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
      if(dependencies.length)openNames.add(step.name);
      rows.push({...p,line,status:blocked?'provisional':'translated',proofStatus,dependencies,step,candidates,domain,constraints,constraintGroup:group});steps.push(step);continue;
     }
+    if(p.kind==='obtain'){
+     if(last)throw Error('An existential elimination must be followed by a conclusion.');
+     if(choices.has(line))throw Error('An existential elimination has no proof candidate choice.');
+     if(!visible.has(p.source)||!facts.has(p.source))throw Error('Cite a visible typed existential premise.');
+     if(p.name===p.evidenceName||occupied.has(p.name)||occupied.has(p.evidenceName))throw Error('Witness and evidence names must be distinct and fresh.');
+     const types=existentialBindings(facts.get(p.source),p);
+     const missing=freeNames(types.type,types.evidenceType).find(n=>n!==p.name&&(planned.has(n)||occupied.has(n))&&!visible.has(n));
+     if(missing)throw Error('Ambiguous or forward reference in existential elimination: '+missing);
+     if(freeNames(types.type).includes(p.name))throw Error('Witness domain cannot refer to the new witness.');
+     const stem='duet_exists_'+p.name.slice(0,40);
+     let copy=stem;
+     // Keep the original premise available; destructure a fresh copy.
+     let suffix=0;while(occupied.has(copy)||planned.has(copy))copy=stem+'_'+(++suffix);
+     const dependencies=[...new Set([p.source,...freeNames(types.type,types.evidenceType)].filter(n=>openNames.has(n)))];
+     const proofStatus=dependencies.length?'depends-on-open':'candidate';
+     const step={kind:'obtain',source:p.source,name:p.name,evidenceName:p.evidenceName,copy,...types};
+     occupied.add(copy);
+     for(const [name,type] of [[step.name,step.type],[step.evidenceName,step.evidenceType]]){
+      occupied.add(name);visible.add(name);facts.set(name,type);if(dependencies.length)openNames.add(name);
+     }
+     rows.push({...p,...types,line,status:blocked?'provisional':'translated',proofStatus,dependencies,step,candidates:[]});steps.push(step);continue;
+    }
     if(['introduce','assume'].includes(p.kind)){
      if(last)throw Error('An introduction must be followed by a conclusion.');
      if(blocked)throw Error('Resolve preceding incomplete wording before extending the goal.');
      if(occupied.has(p.name))throw Error('This local name already exists.');
      if(choices.has(line))throw Error('An introduction has no proof candidate choice.');
+     p={...p,type:p.type||inferIntroduction(remainingGoal,p.kind)};
      const names=freeNames(p.type);
      for(const n of names)if((planned.has(n)||occupied.has(n))&&!visible.has(n))throw Error('Ambiguous or forward reference in introduction: '+n);
      remainingGoal=extendGoal(remainingGoal,p);
