@@ -27,6 +27,15 @@ test('the built-in Lean negation spelling has one scoped form',()=>{
  assert.equal(sameScopedFormula('P','False'),false);
 });
 
+test('Lean targets accept Prop and Type as binder sorts without widening math input',()=>{
+ const target=compileFormula('∀ (P : Nat → Prop), ∀ (x : Nat), P x',{syntax:'lean'});
+ assert.equal(target.lean,'(∀ P : (Nat → Prop), (∀ x : Nat, (P x)))');
+ assert.equal(target.scoped.domain.left.name,'Nat');
+ assert.equal(target.scoped.domain.right.name,'Prop');
+ assert.throws(()=>compileFormula('∀ (P : Nat → Prop), ∀ (x : Nat), P x'));
+ assert.equal(compileFormula('∀ (α : Type), α → α',{syntax:'lean'}).lean,'(∀ α : Type, (α → α))');
+});
+
 test('bounded quantifiers preserve membership and reject capture',()=>{
  assert.equal(compileFormula('\\forall x \\in S, P(x)').lean,'(∀ x, (x ∈ S) → (P x))');
  assert.equal(compileFormula('\\exists x \\in S, P(x)').lean,'(∃ x, (x ∈ S) ∧ (P x))');
