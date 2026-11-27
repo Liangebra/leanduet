@@ -170,7 +170,8 @@ with TemporaryDirectory() as tmp:
 print("Mathlib linear algebra: original and variable-order edit candidates compile")
 
 linear_tree=extract(linear_source,project)["tree"]
-linear_node=next(n for n in walk(linear_tree) if n.get("reference")=="map_add")
+linear_node=next((n for n in walk(linear_tree) if n.get("reference","").split(".")[-1]=="map_add"),None)
+assert linear_node,linear_tree
 linear_needed=[d for d in linear_node["scope"] if d["neededForContext"]]
 needed_names={d["name"] for d in linear_needed}
 assert set(linear_case["expectedContextClosure"]).issubset(needed_names),linear_needed
