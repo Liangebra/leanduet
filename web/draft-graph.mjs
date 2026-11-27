@@ -85,6 +85,7 @@ export function buildDraftGraph(scope,facts,rows,{goal=null}={}){
    proofStatus:row.proofStatus||'open',resolutionStatus:row.resolutionStatus||'open-obligation',status:row.status,application,alternatives,value,...(row.domain?{origin:'infer-proposition',typeDomain:row.domain.map(alternative),constraints:row.constraints,constraintRefs,constraintGroup:group?.id||null}:{}),
    ...(branches?{branches}:{}),...(subgoals?{subgoals}:{}),...(goalOperation?{goalOperation}:{}),
    ...(row.operationConstraint?{operationConstraint:row.operationConstraint}:{}),...(row.rejectedCandidates?{rejectedCandidates:row.rejectedCandidates}:{}),
+   ...(row.kind==='element-request'||row.selectedElementCandidate?{origin:'element-request'}:{}),
    selectedCandidate:selected?.id||(row.selectedChoice?alternatives.find(c=>c.choice===row.selectedChoice)?.id:null)||null,
    scopeRefs:[...scopeRefs],dependencies:[...new Set([...scopeRefs,...parsed.refs,...(value?.refs||[]),...proofRefs,...caseRefs,...subgoalRefs])]};
   declare(node);
