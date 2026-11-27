@@ -141,7 +141,7 @@ with TemporaryDirectory() as tmp:
 print("Implicit introductions and existential elimination accepted by Lean")
 
 # Exercise the structured backend as well as standalone rendered Lean.
-from semantic import infer_chain
+from semantic import infer_chain,patch
 obtain_source="theorem backend_obtain (P : Nat → Prop) (R : Prop) (h : ∃ z : Nat, P z) (f : ∀ z : Nat, P z → R) : R := by\n  exact Exists.elim h f\n"
 # Select the proof occurrence by its actual elaborated local goal and scope.
 nodes=list(walk(extract(obtain_source)["tree"]))
@@ -151,3 +151,39 @@ backend=infer_chain(obtain_source,obtain_node["path"],[
     {"kind":"conclude","type":"R","application":"f x hx"}])
 assert [b["name"] for b in backend["bindings"]]==["x","hx"],backend
 print("Structured existential chain elaborates and traces both bindings")
+
+# Nested disjunction elimination preserves branch-local names, while the
+# structured Lean backend exports only the common result to the parent scope.
+case_script = """
+import {compileNaturalDraft} from './web/natural-draft.mjs';
+const facts=new Map([['P','Prop'],['Q','Prop'],['U','Prop'],['V','Prop'],['R','Prop'],['h','P ∨ Q'],['j','U ∨ V'],['f','P → U → R'],['g','P → V → R'],['k','Q → R']]);
+const input='分情况讨论 h，建立 hR : $R$\\n  左支 hp\\n    分情况讨论 j，建立 hpR : $R$\\n      左支 hu\\n        $R$ | f hp hu\\n      右支 hv\\n        $R$ | g hp hv\\n    $R$ | hpR\\n  右支 hq\\n    $R$ | k hq\\n$R$ | hR';
+console.log(JSON.stringify(compileNaturalDraft(input,[...facts.keys()],facts,{goal:'R'}).steps));
+"""
+case_steps=json.loads(subprocess.run(["node","--input-type=module"],input=case_script,text=True,cwd=root,check=True,capture_output=True).stdout)
+case_source="""theorem nested_disjunction (P Q U V R : Prop) (h : P ∨ Q) (j : U ∨ V)
+    (f : P → U → R) (g : P → V → R) (k : Q → R) : R := by
+  cases h with
+  | inl hp =>
+    cases j with
+    | inl hu => exact f hp hu
+    | inr hv => exact g hp hv
+  | inr hq => exact k hq
+"""
+case_node=next(n for n in walk(extract(case_source)["tree"]) if n.get("type")=="R" and {"P","Q","U","V","R","h","j","f","g","k"}.issubset({d.get("name") for d in n.get("scope",[])}))
+case_backend=infer_chain(case_source,case_node["path"],case_steps)
+assert [b["name"] for b in case_backend["bindings"]]==["hR"],case_backend
+assert "hpR" not in [b["name"] for b in case_backend["bindings"]]
+assert "cases j with" in case_backend["term"] and "exact hR" in case_backend["term"]
+case_preview=patch(case_source,case_node["path"],case_backend["term"])
+assert case_preview["status"]=="checked" and case_preview["proofShapePreserved"]
+try:
+    infer_chain(case_source,case_node["path"],[case_steps[0],{"kind":"conclude","type":"R","application":"hp"}])
+    raise AssertionError("a branch-local hypothesis escaped its case scope")
+except ValueError:
+    pass
+with TemporaryDirectory() as tmp:
+    target=Path(tmp)/"NestedDisjunction.lean"
+    target.write_text("theorem generated_nested (P Q U V R : Prop) (h : P ∨ Q) (j : U ∨ V) (f : P → U → R) (g : P → V → R) (k : Q → R) : R := "+case_backend["term"]+"\n",encoding="utf-8")
+    subprocess.run(["lean",str(target)],cwd=root,check=True)
+print("Nested branch-local case elimination elaborates in the structured backend; only the common result escapes")

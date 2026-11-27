@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {draftProof} from '../web/natural-draft.mjs';
+import {draftProof,compileNaturalDraft} from '../web/natural-draft.mjs';
 import {reconcileDraftIdentity,migrateDraftChoices} from '../web/draft-identity.mjs';
 const scope=['P','Q','h','f'];
 const facts=new Map([['h','P ∧ P'],['f','P → Q']]);
@@ -51,4 +51,16 @@ test('a selected type hole survives harmless source edits, but not contradictory
  const incompatible=reconcileDraftIdentity(old,draftProof('建立 hp : $?$,由 h\n由 hp 与 f 得到 $R$',sc,ctx).graph);
  assert.equal(incompatible.ids.get('line:1'),old.ids.get('line:1'));
  assert.equal(migrateDraftChoices(old,incompatible,choices).size,0);
+});
+
+test('branch-local candidate choices follow their scoped proof identity after line shifts',()=>{
+ const ctx=new Map([['P','Prop'],['Q','Prop'],['h','P ∨ Q'],['p1','P'],['p2','P']]);
+ const input='cases h, establish hR : $P$\n  left case hp\n    $P$\n  right case hq\n    $P$\n$P$ | hR';
+ const choices=new Map([[3,'hp'],[5,'p1']]);
+ const original=compileNaturalDraft(input,[...ctx.keys()],ctx,{goal:'P',choices});
+ const old=reconcileDraftIdentity(null,original.graph);
+ const shifted=reconcileDraftIdentity(old,compileNaturalDraft('\n'+input,[...ctx.keys()],ctx,{goal:'P'}).graph);
+ const migrated=migrateDraftChoices(old,shifted,choices);
+ assert.deepEqual([...migrated].sort((a,b)=>a[0]-b[0]),[[4,'hp'],[6,'p1']]);
+ assert.equal(shifted.ids.get('root/case:2:inl:binding'),old.ids.get('root/case:1:inl:binding'));
 });

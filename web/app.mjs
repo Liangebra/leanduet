@@ -527,7 +527,7 @@ $('suggestInterpretations').onclick=async()=>{
   finally{$('suggestInterpretations').disabled=false;}
 };
 function parseChainInput(text,scope){const mode=$('chainFormat').value;return mode==='formula'?compileFormulaSequence(text,scope):mode==='natural'?draftSession.compile(text,scope,factsFromScope(patchNode?.scope),{choices:draftChoices,goal:patchNode?.type}):compileChain(text,scope);}
-$('chainFormat').onchange=()=>{$('chainText').placeholder=$('chainFormat').value==='formula'?'$Q$\n$R$':$('chainFormat').value==='natural'?'建立 hq : $Q$，由 f，使用 p\n因此 $R$，由 g，使用 hq':'Establish hq | f using p\nConclude | g using hq';$('chainText').dispatchEvent(new Event('input'));};
+$('chainFormat').onchange=()=>{$('chainText').placeholder=$('chainFormat').value==='formula'?'$Q$\n$R$':$('chainFormat').value==='natural'?'建立 hq : $Q$，由 f，使用 p\n因此 $R$，由 g，使用 hq\n\n分情况讨论 h，建立 hR : $R$\n  左支 hp\n    $R$ | f hp\n  右支 hq\n    $R$ | g hq\n$R$ | hR':'Establish hq | f using p\nConclude | g using hq';$('chainText').dispatchEvent(new Event('input'));};
 $('chainText').addEventListener('input',()=>{draftChoiceVersion++;if($('chainFormat').value!=='natural')clearDraftChoices();$('chainBindings').replaceChildren();$('patchTerm').value='';$('patchTerm').dispatchEvent(new Event('input'));$('chainStatus').textContent='Narrative changed. Stage the new candidate.';previewDraft({edited:true});});
 function previewDraft({edited=false}={}){
  const target=$('draftTranslation');target.replaceChildren();
@@ -553,9 +553,14 @@ function previewDraft({edited=false}={}){
    function refreshChoice(){draftChoiceVersion++;$('chainBindings').replaceChildren();$('patchTerm').value='';$('patchTerm').dispatchEvent(new Event('input'));$('chainStatus').textContent='Candidate choice changed. Stage and check again.';previewDraft();}
    for(const x of r.rows){
      const d=element('div',undefined,'ruleResult');
-     d.dataset.objectId=draftIdentity.ids.get('line:'+x.line)||'';
+     d.dataset.objectId=draftIdentity.ids.get(x.graphId||'line:'+x.line)||'';
      d.append(element('small','Line '+x.line+' · '+x.status+(x.proofStatus?' · '+x.proofStatus:'')),element('span',x.raw));
-     if(x.step)d.append(element('code',['introduce','assume'].includes(x.step.kind)?'intro '+x.step.name:x.step.kind==='obtain'?'obtain ⟨'+x.step.name+', '+x.step.evidenceName+'⟩ from '+x.step.source+' : '+x.step.type+'; '+x.step.evidenceType:x.step.kind==='define'?'let '+x.step.name+' : '+x.step.type+' := '+x.step.value:x.step.kind==='establish'?'have '+x.step.name+' : '+x.step.type+' := '+x.step.application:'show '+x.step.type+'; '+x.step.application));
+     if(x.step)d.append(element('code',['introduce','assume'].includes(x.step.kind)?'intro '+x.step.name:x.step.kind==='obtain'?'obtain ⟨'+x.step.name+', '+x.step.evidenceName+'⟩ from '+x.step.source+' : '+x.step.type+'; '+x.step.evidenceType:x.step.kind==='define'?'let '+x.step.name+' : '+x.step.type+' := '+x.step.value:x.step.kind==='establish'?'have '+x.step.name+' : '+x.step.type+' := '+x.step.application:x.step.kind==='cases'?'cases '+x.step.source+' into '+x.step.branches.map(b=>b.constructor+' '+b.name+': '+b.type).join(' / ')+'; establish '+x.step.name+' : '+x.step.type:'show '+x.step.type+'; '+x.step.application));
+     if((x.step?.kind==='cases'||x.kind==='cases')&&x.branches?.length){
+      const branches=element('details');branches.append(element('summary','Branch-local assumptions · common result '+(x.step?.name||x.name)+' : '+x.type));
+      for(const branch of x.branches)branches.append(element('small',branch.constructor+' '+branch.name+' : '+branch.type+' ⊢ '+(branch.goal||x.type)+' · '+(branch.status||'open')));
+      d.append(branches);
+     }
      if(x.reason)d.append(element('small',x.reason));
      if(x.constraints?.length)d.append(element('small','Later structural constraints: '+x.constraints.map(c=>'line '+c.line+' ('+c.status+')').join(', ')));
      if(x.constraintGroup?.variables.length>1){

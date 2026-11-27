@@ -145,87 +145,149 @@ def infer_chain(source, path, steps, project=None):
     _safe_proof(source)
     if not isinstance(path,str) or not re.fullmatch(r"root(?:/(?:body|value|arg[0-9]+)){0,16}",path):
         raise ValueError("Invalid proof node path.")
+    def annotation(value, label, *, optional=False):
+        if optional and value is None:
+            return
+        if (not isinstance(value,str) or not value.strip() or len(value)>2000 or
+            re.search(r"[\r\n;{}]|/-|--|:=|\b(?:by|sorry|admit|sorryAx)\b",value)):
+            raise ValueError("Expected "+label+".")
+
+    emitted_steps=[0]
+    def emit_sequence(sequence, inherited, depth=1, trace_scope=True, case_depth=0):
+        if not isinstance(sequence,list) or not 1<=len(sequence)<=16 or depth>20:
+            raise ValueError("Each proof scope needs 1–16 steps and nesting is bounded.")
+        known=set(inherited)
+        lines_out=[]
+        trace_out=[]
+        introduced=[]
+        pad="  "*depth
+        def add(line):
+            lines_out.append(pad+line)
+            trace_out.append(pad+line)
+        for i,step in enumerate(sequence):
+            emitted_steps[0]+=1
+            if emitted_steps[0]>128:
+                raise ValueError("The nested proof exceeds the 128-step elaboration budget.")
+            if not isinstance(step,dict):
+                raise ValueError("Expected a structured proof step.")
+            kind=step.get("kind")
+            last=i==len(sequence)-1
+            if kind=="conclude" and last:
+                app=step.get("application")
+                if not _ordered_application(app):
+                    raise ValueError("Expected an ordered application of a named rule.")
+                ty=step.get("type")
+                annotation(ty,"a single conclusion proposition",optional=True)
+                if ty is not None:
+                    add("show "+ty)
+                add("exact?" if app=="?" else "exact "+app)
+                continue
+            if last:
+                raise ValueError("The chain must conclude exactly once, at its last step.")
+            if kind=="cases":
+                if case_depth>=8:
+                    raise ValueError("Nested disjunction scope is limited to eight levels.")
+                h,source,ty=step.get("name"),step.get("source"),step.get("type")
+                if not isinstance(h,str) or not re.fullmatch(_SIMPLE,h) or h in known:
+                    raise ValueError("Invalid or repeated case result name.")
+                if not isinstance(source,str) or not re.fullmatch(_SIMPLE,source):
+                    raise ValueError("A case split must cite a simple local premise name.")
+                annotation(ty,"a single case result proposition")
+                branches=step.get("branches")
+                if not isinstance(branches,list) or len(branches)!=2 or [b.get("constructor") for b in branches if isinstance(b,dict)]!=["inl","inr"]:
+                    raise ValueError("A disjunction split needs one inl and one inr branch.")
+                branch_lines=[pad+"have "+h+" : "+ty+" := by",pad+"  cases "+source+" with"]
+                branch_trace=list(branch_lines)
+                for branch in branches:
+                    binder,branch_type=branch.get("name"),branch.get("type")
+                    if not isinstance(binder,str) or not re.fullmatch(_SIMPLE,binder) or binder in known:
+                        raise ValueError("Invalid or repeated branch-local name.")
+                    annotation(branch_type,"a single branch assumption type")
+                    if branch.get("goal")!=ty:
+                        raise ValueError("Both case branches must prove the declared common result.")
+                    constructor=branch["constructor"]
+                    arm_pad=pad+"  "
+                    branch_lines.append(arm_pad+"| "+constructor+" "+binder+" =>")
+                    branch_trace.append(arm_pad+"| "+constructor+" "+binder+" =>")
+                    change=arm_pad+"  change "+branch_type+" at "+binder
+                    branch_lines.append(change)
+                    branch_trace.append(change)
+                    body,body_trace,_=emit_sequence(branch.get("steps"),known|{binder},depth+2,False,case_depth+1)
+                    branch_lines.extend(body)
+                    branch_trace.extend(body_trace)
+                lines_out.extend(branch_lines)
+                trace_out.extend(branch_trace)
+                known.add(h)
+                introduced.append(h)
+                if trace_scope:
+                    trace_out.append(pad+"duet_trace "+h)
+                continue
+            if kind=="obtain":
+                h,evidence,copy,premise=(step.get(k) for k in ("name","evidenceName","copy","source"))
+                if any(not isinstance(n,str) or not re.fullmatch(_SIMPLE,n) for n in (h,evidence,copy,premise)):
+                    raise ValueError("Expected simple existential binding names.")
+                if len({h,evidence,copy,premise})!=4 or any(n in known for n in (h,evidence,copy)):
+                    raise ValueError("Existential binding names must be fresh and distinct.")
+                ty,evidence_ty=step.get("type"),step.get("evidenceType")
+                annotation(ty,"a restricted existential witness type")
+                annotation(evidence_ty,"a restricted existential evidence type")
+                block=["have "+copy+" := "+premise,"rcases "+copy+" with ⟨"+h+", "+evidence+"⟩",
+                       "change "+ty+" at "+h,"change "+evidence_ty+" at "+evidence]
+                for line in block:
+                    lines_out.append(pad+line);trace_out.append(pad+line)
+                if trace_scope:
+                    trace_out.extend([pad+"duet_trace_object "+h,pad+"duet_trace "+evidence])
+                known.update((h,evidence));introduced.extend((h,evidence))
+                continue
+            if kind in ("introduce","assume"):
+                h,ty=step.get("name"),step.get("type")
+                if not isinstance(h,str) or not re.fullmatch(_SIMPLE,h) or h in known:
+                    raise ValueError("Invalid or repeated introduction name.")
+                annotation(ty,"an introduction type")
+                block=["intro "+h,"change "+ty+" at "+h]
+                for line in block:
+                    lines_out.append(pad+line);trace_out.append(pad+line)
+                if trace_scope:
+                    trace_out.append(pad+("duet_trace " if kind=="assume" else "duet_trace_object ")+h)
+                known.add(h);introduced.append(h)
+                continue
+            if kind=="define":
+                h,ty,value=step.get("name"),step.get("type"),step.get("value")
+                if not isinstance(h,str) or not re.fullmatch(_SIMPLE,h) or h in known:
+                    raise ValueError("Invalid or repeated local definition name.")
+                for expression in (ty,value):
+                    if (not isinstance(expression,str) or not expression.strip() or len(expression)>2000 or
+                        not re.fullmatch(r"[\w'().,: +*/^=<>∀∃∈⊆↔→∧∨¬≤≥≠\-]+",expression) or
+                        re.search(r"/-|--|:=|\b(?:by|sorry|admit|sorryAx|let|have|fun|match|do|where|import|theorem|def)\b",expression)):
+                        raise ValueError("Expected a restricted local definition expression.")
+                add("let "+h+" : "+ty+" := "+value)
+                if trace_scope:
+                    trace_out.append(pad+"duet_trace_object "+h)
+                known.add(h);introduced.append(h)
+                continue
+            if kind=="establish":
+                h,ty,app=step.get("name"),step.get("type"),step.get("application")
+                if not isinstance(h,str) or not re.fullmatch(_SIMPLE,h) or h in known:
+                    raise ValueError("Invalid or repeated intermediate name.")
+                annotation(ty,"a single proposition annotation or an inferred type",optional=True)
+                if not _ordered_application(app):
+                    raise ValueError("Expected an ordered application of a named rule.")
+                if app=="?" and ty is None:
+                    raise ValueError("An intermediate proof hole requires an explicit proposition.")
+                line="have "+h+(" : "+ty if ty is not None else "")+" := "+("by exact?" if app=="?" else app)
+                add(line)
+                if trace_scope:
+                    trace_out.append(pad+"duet_trace "+h)
+                known.add(h);introduced.append(h)
+                continue
+            raise ValueError("The chain must conclude exactly once, at its last step.")
+        return lines_out,trace_out,introduced
+
     if not isinstance(steps,list) or not 1<=len(steps)<=16:
         raise ValueError("Use 1–16 proof steps.")
-    lines, traced, names = ["by"], ["by"], []
-    for i,step in enumerate(steps):
-        if not isinstance(step,dict):
-            raise ValueError("Expected a structured proof step.")
-        if step.get("kind") == "obtain" and i < len(steps)-1:
-            h, evidence, copy, premise = (step.get(k) for k in ("name","evidenceName","copy","source"))
-            if any(not isinstance(n,str) or not re.fullmatch(_SIMPLE,n) for n in (h,evidence,copy,premise)):
-                raise ValueError("Expected simple existential binding names.")
-            if len({h,evidence,copy,premise}) != 4 or any(n in names for n in (h,evidence,copy)):
-                raise ValueError("Existential binding names must be fresh and distinct.")
-            ty, evidence_ty = step.get("type"), step.get("evidenceType")
-            for annotation in (ty,evidence_ty):
-                if (not isinstance(annotation,str) or not annotation.strip() or len(annotation)>2000 or
-                    re.search(r"[\r\n;{}]|/-|--|:=|\b(?:by|sorry|admit|sorryAx)\b",annotation)):
-                    raise ValueError("Expected restricted existential binding annotations.")
-            block = ["  have "+copy+" := "+premise,
-                     "  rcases "+copy+" with ⟨"+h+", "+evidence+"⟩",
-                     "  change "+ty+" at "+h,
-                     "  change "+evidence_ty+" at "+evidence]
-            names.extend([h,evidence])
-            lines.extend(block)
-            traced.extend(block+["  duet_trace_object "+h,"  duet_trace "+evidence])
-            continue
-        if step.get("kind") in ("introduce","assume") and i < len(steps)-1:
-            h, ty = step.get("name"), step.get("type")
-            if not isinstance(h,str) or not re.fullmatch(_SIMPLE,h) or h in names:
-                raise ValueError("Invalid or repeated introduction name.")
-            if (not isinstance(ty,str) or not ty.strip() or len(ty)>2000 or
-                re.search(r"[\r\n;{}]|/-|--|:=|\b(?:by|sorry|admit|sorryAx)\b",ty)):
-                raise ValueError("Expected an introduction type.")
-            names.append(h)
-            line = "  intro " + h
-            # Check the user's annotation by definitional equality in Lean.
-            check = "  change " + ty + " at " + h
-            lines.extend([line,check])
-            traced.extend([line,check,("  duet_trace " if step.get("kind")=="assume" else "  duet_trace_object ")+h])
-            continue
-        if step.get("kind") == "define" and i < len(steps)-1:
-            h, ty, value = step.get("name"), step.get("type"), step.get("value")
-            if not isinstance(h,str) or not re.fullmatch(_SIMPLE,h) or h in names:
-                raise ValueError("Invalid or repeated local definition name.")
-            for expression in (ty,value):
-                if (not isinstance(expression,str) or not expression.strip() or len(expression)>2000 or
-                    not re.fullmatch(r"[\w'().,: +*/^=<>∀∃∈⊆↔→∧∨¬≤≥≠\-]+",expression) or
-                    re.search(r"/-|--|:=|\b(?:by|sorry|admit|sorryAx|let|have|fun|match|do|where|import|theorem|def)\b",expression)):
-                    raise ValueError("Expected a restricted local definition expression.")
-            names.append(h)
-            line = "  let " + h + " : " + ty + " := " + value
-            lines.append(line)
-            traced.extend([line,"  duet_trace_object "+h])
-            continue
-        app = step.get("application")
-        if not _ordered_application(app):
-            raise ValueError("Expected an ordered application of a named rule.")
-        if step.get("kind")=="conclude" and i==len(steps)-1:
-            ty=step.get("type")
-            if ty is not None:
-                if not isinstance(ty,str) or not ty.strip() or len(ty)>2000 or re.search(r"[\r\n;{}]|/-|--|:=|\b(?:by|sorry|admit)\b",ty):
-                    raise ValueError("Expected a single conclusion proposition.")
-                lines.append("  show "+ty)
-                traced.append("  show "+ty)
-            line = "  exact?" if app=="?" else "  exact "+app
-            lines.append(line)
-            traced.append(line)
-        elif step.get("kind")=="establish" and i<len(steps)-1:
-            h,ty=step.get("name"),step.get("type")
-            if not isinstance(h,str) or not re.fullmatch(_SIMPLE,h) or h in names:
-                raise ValueError("Invalid or repeated intermediate name.")
-            if ty is not None and (not isinstance(ty,str) or not ty.strip() or len(ty)>2000 or
-                re.search(r"[\r\n;{}]|/-|--|:=|\b(?:by|sorry|admit)\b",ty)):
-                raise ValueError("Expected a single proposition annotation or an inferred type.")
-            if app=="?" and ty is None:
-                raise ValueError("An intermediate proof hole requires an explicit proposition.")
-            names.append(h)
-            line="  have "+h+(" : "+ty if ty is not None else "")+" := "+("by exact?" if app=="?" else app)
-            lines.append(line)
-            traced.extend([line,"  duet_trace "+h])
-        else:
-            raise ValueError("The chain must conclude exactly once, at its last step.")
+    emitted,emitted_trace,names=emit_sequence(steps,set(),1)
+    lines=["by"]+emitted
+    traced=["by"]+emitted_trace
     term=_safe_proof("\n".join(lines))
     instrumented=_safe_proof("\n".join(traced))
     args=" ".join(json.dumps(x,ensure_ascii=False) for x in (path,instrumented))
