@@ -168,7 +168,7 @@ def infer_chain(source, path, steps, project=None):
                      "  change "+evidence_ty+" at "+evidence]
             names.extend([h,evidence])
             lines.extend(block)
-            traced.extend(block+["  duet_trace "+h,"  duet_trace "+evidence])
+            traced.extend(block+["  duet_trace_object "+h,"  duet_trace "+evidence])
             continue
         if step.get("kind") in ("introduce","assume") and i < len(steps)-1:
             h, ty = step.get("name"), step.get("type")
@@ -182,7 +182,7 @@ def infer_chain(source, path, steps, project=None):
             # Check the user's annotation by definitional equality in Lean.
             check = "  change " + ty + " at " + h
             lines.extend([line,check])
-            traced.extend([line,check,"  duet_trace "+h])
+            traced.extend([line,check,("  duet_trace " if step.get("kind")=="assume" else "  duet_trace_object ")+h])
             continue
         if step.get("kind") == "define" and i < len(steps)-1:
             h, ty, value = step.get("name"), step.get("type"), step.get("value")
@@ -196,7 +196,7 @@ def infer_chain(source, path, steps, project=None):
             names.append(h)
             line = "  let " + h + " : " + ty + " := " + value
             lines.append(line)
-            traced.extend([line,"  duet_trace "+h])
+            traced.extend([line,"  duet_trace_object "+h])
             continue
         app = step.get("application")
         if not _ordered_application(app):

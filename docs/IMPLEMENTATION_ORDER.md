@@ -221,3 +221,9 @@ proof syntax, arbitrary dependent pattern matching or implicit type inference.
 
 See [research methods](RESEARCH_METHODS.md) for references mapped to this
 unchanged eight-stage plan.
+
+The Lean adapter distinguishes tracing arbitrary typed local objects from
+tracing proof-only facts. Witnesses, universal introductions and local
+definitions use object tracing; evidence and established propositions retain
+the proposition check. This also repairs earlier structured-chain paths that
+incorrectly attempted to trace data as propositions.

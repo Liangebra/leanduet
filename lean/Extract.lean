@@ -226,20 +226,27 @@ partial def mentions (e : Expr) (forbidden : Name) : Bool :=
   | .mdata _ b | .proj _ _ b => mentions b forbidden
   | _ => false
 
-/-- Read the actual type of an intermediate fact after Lean elaborates it.
-    This tactic only inspects the local context; it does not solve a goal. -/
-elab "duet_trace " n:ident : tactic => Elab.Tactic.withMainContext do
+/-- Inspect an elaborated local declaration, distinguishing proof obligations
+    from data bindings. Neither mode solves a goal. -/
+private def traceBinding (n : Name) (proofOnly : Bool) : MetaM Unit := do
   let mut found : Array LocalDecl := #[]
   for d in (← getLCtx) do
-    if !d.isImplementationDetail && d.userName == n.getId then
+    if !d.isImplementationDetail && d.userName == n then
       found := found.push d
-  unless found.size == 1 do throwError "Intermediate fact is missing or ambiguous: {n.getId}"
+  unless found.size == 1 do throwError "Intermediate binding is missing or ambiguous: {n}"
   let ty ← instantiateMVars found[0]!.type
   if ty.hasMVar || ty.hasLevelMVar then
-    throwError "The intermediate fact has unresolved type information: {n.getId}"
-  unless ← isProp ty do throwError "An intermediate fact must be a proposition: {n.getId}"
-  let j := Json.mkObj [("name", toJson n.getId.toString), ("type", toJson (← ppExpr ty).pretty)]
+    throwError "The intermediate binding has unresolved type information: {n}"
+  if proofOnly then
+    unless ← isProp ty do throwError "An intermediate fact must be a proposition: {n}"
+  let j := Json.mkObj [("name", toJson n.toString), ("type", toJson (← ppExpr ty).pretty)]
   logInfo m!"LEANDUET_BINDING:{j.compress}"
+
+elab "duet_trace " n:ident : tactic => Elab.Tactic.withMainContext do
+  traceBinding n.getId true
+
+elab "duet_trace_object " n:ident : tactic => Elab.Tactic.withMainContext do
+  traceBinding n.getId false
 
 elab "#duet_patch " n:ident path:str replacement:str : command => do
   liftTermElabM do

@@ -45,7 +45,7 @@ class SemanticTests(unittest.TestCase):
         self.assertEqual([b["name"] for b in result["bindings"]],["x","hx"])
         self.assertIn("rcases duet_exists_x with ⟨x, hx⟩",result["term"])
         self.assertIn("change P x at hx",result["term"])
-        self.assertIn("duet_trace x",run.call_args.args[0])
+        self.assertIn("duet_trace_object x",run.call_args.args[0])
         self.assertIn("duet_trace hx",run.call_args.args[0])
 
     def test_existential_chain_rejects_malformed_bindings_before_lean(self):
