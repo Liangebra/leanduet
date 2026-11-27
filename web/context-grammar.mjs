@@ -53,6 +53,7 @@ export function contextCandidates(goal,names,facts){
    if(equal(t.right,target))add('right conjunction elimination','And.right',[name]);
   }
   if(binary(t,'=')&&binary(target,'=')&&equal(t.left,target.right)&&equal(t.right,target.left))add('equality symmetry','Eq.symm',[name]);
+  if(equal(t,parse('False')))add('false elimination','False.elim',[name]);
  }
  if(entries.length===2){
   for(const [a,b] of [entries,[entries[1],entries[0]]]){
@@ -220,4 +221,4 @@ export function implicitCandidates(goal,scope,facts,{rule='',limit=8}={}){
  }
  return {candidates:out,overflow};
 }
-export const structuralRules=new Set(['And.left','And.right','And.intro','Eq.symm','Eq.trans','Iff.mp','Iff.mpr','le_trans','lt_trans','Exists.intro']);
+export const structuralRules=new Set(['And.left','And.right','And.intro','Eq.symm','Eq.trans','Iff.mp','Iff.mpr','le_trans','lt_trans','Exists.intro','False.elim']);
