@@ -73,7 +73,7 @@ function parseLine(raw){
  }
  return {raw,formula,type:compileFormula(formula).lean,name,ruleText,conclusion,modifiers,forwardText};
 }
-export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),cache=null,goal=null,lineOffset=0,closedNames=[]}={}){
+export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),cache=null,goal=null,lineOffset=0,closedNames=[],openBindings=[],incompleteContext=false}={}){
  const facts=new Map(context);
  if(typeof input!=='string'||input.length>12000)throw Error('Draft exceeds 12000 characters.');
  const lines=input.split(/\r?\n/).map((raw,i)=>({raw,line:i+1+lineOffset})).filter(x=>x.raw.trim());
@@ -91,11 +91,12 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
  });
  const planned=new Set(parsed.flatMap(p=>[p.value?.name,p.value?.evidenceName]).filter(Boolean));
  const lookahead=parsed.some(p=>p.value?.kind==='infer-proposition')?JSON.stringify([input,[...choices]]):null;
- const key=JSON.stringify([scope,[...context],[...planned].sort(),goal,lineOffset,lookahead,[...closed].sort()]);
+ const inheritedOpen=[...new Set(openBindings)];
+ const key=JSON.stringify([scope,[...context],[...planned].sort(),goal,lineOffset,lookahead,[...closed].sort(),inheritedOpen.sort(),incompleteContext]);
  const signatures=lines.map(({raw,line},i)=>JSON.stringify([raw,line,i===lines.length-1,choices.has(line),choices.get(line)]));
  let remainingGoal=goal;
  const constraintResults=new Map();
- let serial=1;const rows=[],steps=[],openNames=new Set(),serials=[];let blocked=false,reusedRows=0;
+ let serial=1;const rows=[],steps=[],openNames=new Set(inheritedOpen),serials=[];let blocked=false,reusedRows=0;
  // The context and all planned names affect the entire draft. Under the
  // same context, reuse only an identical prefix, including choice and
  // conclusion-vs-intermediate role. Reconstruct its local scope exactly.
@@ -293,12 +294,13 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
    }catch(e){unresolved(p,raw,line,last,{reason:e.message});}
    finally{serials.push(serial);}
  }
- let complete=lines.length>0&&!blocked&&steps.at(-1)?.kind==='conclude';
- if(complete&&goal&&!sameScopedFormula(steps.at(-1).type,remainingGoal)){
-  blocked=true;complete=false;
+ let structurallyComplete=lines.length>0&&!blocked&&steps.at(-1)?.kind==='conclude';
+ if(structurallyComplete&&goal&&!sameScopedFormula(steps.at(-1).type,remainingGoal)){
+  blocked=true;structurallyComplete=false;
   const last=rows.at(-1);
   if(last)rows[rows.length-1]={...last,status:'unresolved',proofStatus:'open',reason:'The conclusion does not structurally match the remaining goal.'};
  }
+ const complete=structurallyComplete&&!incompleteContext;
  if(cache)cache.previous={key,signatures,rows,serials};
  return {rows,steps,complete,reusedRows,remainingGoal,openBindings:[...openNames],graph:buildDraftGraph(scope,context,rows,{goal}),term:complete?renderChain(steps):null};
 }
