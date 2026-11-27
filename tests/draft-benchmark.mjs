@@ -15,7 +15,9 @@ const localEdit=lastH14.replace('establish h7 : $P$ | h6','establish h7 : $P$ | 
 function stripReuse(result){const {reusedRows,...structural}=result;return structural;}
 function distribution(times){
  const sorted=[...times].sort((a,b)=>a-b);
- return {medianMs:sorted[Math.floor((sorted.length-1)*0.5)],p95Ms:sorted[Math.ceil(sorted.length*0.95)-1]};
+ const middle=sorted.length>>1;
+ const medianMs=sorted.length%2?sorted[middle]:(sorted[middle-1]+sorted[middle])/2;
+ return {medianMs,p95Ms:sorted[Math.ceil(sorted.length*0.95)-1]};
 }
 function measure({name,evaluate,reference,inputAt,expectedReuse=null,beforeSample=()=>{}}){
  for(let i=0;i<warmup;i++)evaluate(inputAt(i));
