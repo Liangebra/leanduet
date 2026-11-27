@@ -7,7 +7,12 @@
     "naturalDraft": "因此 $IsCompact (f '' s)$，由紧集的连续像，使用 hs 和 hf",
     "localLemmaDraft": "local lemma himage : $IsCompact (f '' s)$\n  proof\n    因此 $IsCompact (f '' s)$，由紧集的连续像，使用 hs 和 hf\n$IsCompact (f '' s)$ | himage",
     "goal": "IsCompact (f '' s)",
-    "scope": ["f", "s", "hs", "hf"],
+    "scope": [
+      "f",
+      "s",
+      "hs",
+      "hf"
+    ],
     "context": {
       "hs": "IsCompact s",
       "hf": "Continuous f"
@@ -19,9 +24,21 @@
         "application": "IsCompact.image hs hf"
       }
     ],
-    "expectedStepKinds": ["conclude"],
-    "expectedContextClosure": ["X", "Y", "s", "f", "hs", "hf"],
-    "requiredTypeclassClosure": ["TopologicalSpace X", "TopologicalSpace Y"],
+    "expectedStepKinds": [
+      "conclude"
+    ],
+    "expectedContextClosure": [
+      "X",
+      "Y",
+      "s",
+      "f",
+      "hs",
+      "hf"
+    ],
+    "requiredTypeclassClosure": [
+      "TopologicalSpace X",
+      "TopologicalSpace Y"
+    ],
     "leanImport": "import Mathlib.Topology.Compactness.Compact",
     "leanTheoremHeader": "theorem compact_image_example (X Y : Type) [TopologicalSpace X] [TopologicalSpace Y] (s : Set X) (f : X → Y) (hs : IsCompact s) (hf : Continuous f) : IsCompact (f '' s)",
     "leanProofBody": "by\n  exact IsCompact.image hs hf",
@@ -34,7 +51,14 @@
     "naturalProof": "Because x and y both belong to H and H is a subgroup, their product xy belongs to H.",
     "naturalDraft": "因此 $x * y ∈ H$，由子群乘法封闭性，使用 H、hx 和 hy",
     "goal": "x * y ∈ H",
-    "scope": ["G", "H", "x", "y", "hx", "hy"],
+    "scope": [
+      "G",
+      "H",
+      "x",
+      "y",
+      "hx",
+      "hy"
+    ],
     "context": {
       "H": "Subgroup G",
       "hx": "x ∈ H",
@@ -47,10 +71,71 @@
         "application": "Subgroup.mul_mem H hx hy"
       }
     ],
-    "expectedStepKinds": ["conclude"],
+    "expectedStepKinds": [
+      "conclude"
+    ],
     "leanImport": "import Mathlib.Algebra.Group.Subgroup.Basic",
     "leanTheoremHeader": "theorem subgroup_mul_closure_example {G : Type} [Group G] (H : Subgroup G) {x y : G} (hx : x ∈ H) (hy : y ∈ H) : x * y ∈ H",
     "leanProofBody": "by\n  exact H.mul_mem hx hy",
     "alignmentStatus": "draft correspondence; explicit rule and premises are checked in the pinned Mathlib integration"
+  },
+  {
+    "id": "linear-map-additivity",
+    "domain": "linear algebra",
+    "description": "A linear map preserves addition.",
+    "naturalProof": "By the defining additivity law of a linear map, f(x + y) = f(x) + f(y).",
+    "naturalDraft": "因此 $f (x + y) = f x + f y$，由线性映射加法性，使用 f、x 和 y",
+    "editedNaturalDraft": "因此 $f (y + x) = f y + f x$，由线性映射加法性，使用 f、y 和 x",
+    "goal": "f (x + y) = f x + f y",
+    "editedGoal": "f (y + x) = f y + f x",
+    "scope": [
+      "R",
+      "M",
+      "N",
+      "f",
+      "x",
+      "y"
+    ],
+    "context": {
+      "f": "M →ₗ[R] N",
+      "x": "M",
+      "y": "M"
+    },
+    "expectedStructure": [
+      {
+        "kind": "conclude",
+        "claim": "f (x + y) = f x + f y",
+        "application": "map_add f x y"
+      }
+    ],
+    "editedExpectedStructure": [
+      {
+        "kind": "conclude",
+        "claim": "f (y + x) = f y + f x",
+        "application": "map_add f y x"
+      }
+    ],
+    "expectedStepKinds": [
+      "conclude"
+    ],
+    "expectedContextClosure": [
+      "R",
+      "M",
+      "N",
+      "f",
+      "x",
+      "y"
+    ],
+    "requiredTypeclassClosure": [
+      "Semiring R",
+      "AddCommMonoid M",
+      "AddCommMonoid N",
+      "Module R M",
+      "Module R N"
+    ],
+    "leanImport": "import Mathlib.Algebra.Module.LinearMap.Defs",
+    "leanTheoremHeader": "theorem linear_map_add_example {R M N : Type*} [Semiring R] [AddCommMonoid M] [AddCommMonoid N] [Module R M] [Module R N] (f : M →ₗ[R] N) (x y : M) : f (x + y) = f x + f y",
+    "leanProofBody": "by\n  exact map_add f x y",
+    "alignmentStatus": "draft correspondence; original and locally edited candidates are checked against pinned Mathlib 4.19, including the context dependency closure"
   }
 ]
