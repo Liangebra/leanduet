@@ -55,3 +55,27 @@ class SemanticTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     semantic.infer_chain("theorem t : True := by\n  trivial","root",[{**step,**altered},{"kind":"conclude","application":"hx"}])
                 run.assert_not_called()
+
+    @patch("semantic._run_lean",return_value={"localType":"R","bindings":[{"name":"localQ","type":"Q"}]})
+    def test_local_lemma_is_compiled_in_a_child_proof_scope(self,run):
+        step={"kind":"local-lemma","name":"localQ","type":"Q","subgoals":[
+            {"id":"proof","goal":"Q","steps":[{"kind":"conclude","type":"Q","application":"hq"}]}
+        ]}
+        result=semantic.infer_chain("theorem t : True := by\n  trivial","root",[step,{"kind":"conclude","type":"R","application":"gr localQ"}])
+        self.assertIn("have localQ : Q := by\n    show Q\n    exact hq",result["term"])
+        self.assertIn("exact gr localQ",result["term"])
+        self.assertEqual([binding["name"] for binding in result["bindings"]],["localQ"])
+        self.assertIn("duet_trace localQ",run.call_args.args[0])
+
+    def test_local_lemma_interface_rejects_wrong_goal_and_shadowing_before_lean(self):
+        valid={"kind":"local-lemma","name":"localQ","type":"Q","subgoals":[
+            {"id":"proof","goal":"Q","steps":[{"kind":"conclude","type":"Q","application":"hq"}]}
+        ]}
+        for altered,sequence in (({"subgoals":[{"id":"proof","goal":"R","steps":[{"kind":"conclude","application":"hq"}]}]},None),
+                                 ({"name":"localQ"},[{"kind":"establish","name":"localQ","type":"Q","application":"hq"},valid,{"kind":"conclude","type":"R","application":"gr localQ"}])):
+            step={**valid,**altered}
+            steps=sequence or [step,{"kind":"conclude","type":"R","application":"gr localQ"}]
+            with self.subTest(altered=altered),patch("semantic._run_lean") as run:
+                with self.assertRaises(ValueError):
+                    semantic.infer_chain("theorem t : True := by\n  trivial","root",steps)
+                run.assert_not_called()

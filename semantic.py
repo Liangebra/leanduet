@@ -222,6 +222,24 @@ def infer_chain(source, path, steps, project=None):
                 if trace_scope:
                     trace_out.append(pad+"duet_trace "+h)
                 continue
+            if kind=="local-lemma":
+                h,ty=step.get("name"),step.get("type")
+                if not isinstance(h,str) or not re.fullmatch(_SIMPLE,h) or h in known:
+                    raise ValueError("Invalid or repeated local lemma name.")
+                annotation(ty,"a local lemma proposition")
+                subgoals=step.get("subgoals")
+                if (not isinstance(subgoals,list) or len(subgoals)!=1 or
+                    not isinstance(subgoals[0],dict) or subgoals[0].get("id")!="proof" or
+                    subgoals[0].get("goal")!=ty):
+                    raise ValueError("A local lemma needs one proof subgoal matching its statement.")
+                block=[pad+"have "+h+" : "+ty+" := by"]
+                body,body_trace,_=emit_sequence(subgoals[0].get("steps"),known,depth+1,False,case_depth)
+                lines_out.extend(block);trace_out.extend(block)
+                lines_out.extend(body);trace_out.extend(body_trace)
+                known.add(h);introduced.append(h)
+                if trace_scope:
+                    trace_out.append(pad+"duet_trace "+h)
+                continue
             if kind=="obtain":
                 h,evidence,copy,premise=(step.get(k) for k in ("name","evidenceName","copy","source"))
                 if any(not isinstance(n,str) or not re.fullmatch(_SIMPLE,n) for n in (h,evidence,copy,premise)):

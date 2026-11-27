@@ -72,7 +72,7 @@ export function buildDraftGraph(scope,facts,rows,{goal=null}={}){
    binding:{id:branch.bindingId,name:branch.name,type:branch.type},
    dependencies:branch.dependencies||[],graph:branch.graph||null,status:branch.status||'open'
   })):undefined;
-  const subgoalKinds=new Set(['and-intro','iff-intro','exists-intro']);
+  const subgoalKinds=new Set(['and-intro','iff-intro','exists-intro','local-lemma']);
   const subgoalStep=subgoalKinds.has(step?.kind)||subgoalKinds.has(row.kind);
   const subgoals=subgoalStep?(row.subgoals||step?.subgoals||[]).map(subgoal=>({
    id:subgoal.id,key:subgoal.key||null,kind:'subgoal',goal:subgoal.goal,resultId:subgoal.resultId||null,
@@ -88,7 +88,7 @@ export function buildDraftGraph(scope,facts,rows,{goal=null}={}){
    selectedCandidate:selected?.id||(row.selectedChoice?alternatives.find(c=>c.choice===row.selectedChoice)?.id:null)||null,
    scopeRefs:[...scopeRefs],dependencies:[...new Set([...scopeRefs,...parsed.refs,...(value?.refs||[]),...proofRefs,...caseRefs,...subgoalRefs])]};
   declare(node);
-  if(['introduce','assume','cases'].includes(node.kind))scopeRefs.push(id);
+  if(['introduce','assume','cases','local-lemma'].includes(node.kind))scopeRefs.push(id);
  }
  return {schema:1,identity:'revision-local',goal,nodes,constraintGroups:[...constraintGroups.values()]};
 }

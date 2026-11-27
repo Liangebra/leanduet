@@ -61,6 +61,28 @@ The inspector now supports on-demand search at a particular Expr occurrence, usi
 
 The bilingual rule intent table is a reviewed finite lexicon, not free-language semantic understanding. Exact declaration names are accepted too. Mathlib entries are resolved against the actually loaded environment, not presumed available. The same search infrastructure can index Mathlib when used with a built compatible Lake project; CI currently tests core Lean only. See Lean upstream source at https://github.com/leanprover/lean4/blob/v4.19.0/src/Lean/Meta/Tactic/LibrarySearch.lean (Apache-2.0); no upstream source is copied.
 
+### Named local-lemma subproofs
+
+An explicit local claim now uses `local lemma h : $P$` and an indented `proof`
+body. English aliases are `prove lemma`; Chinese aliases are `局部引理` and
+`证明引理`. This reuses the proof-scope fork and closure boundary rather than
+treating the body as an ordinary linear sequence. The parent context is copied
+by object identity. Child-local declarations are discharged; only parent
+dependencies cross the boundary, and the lemma proposition becomes a new
+parent binding. The parser rejects a claim-name collision with its parent and
+self-reference in the introduced statement.
+
+The child target must match the explicit claim within the bounded surface
+formula view. An incomplete body remains represented, and later lines can be
+analyzed as depending on the open claim without producing a complete export.
+The backend produces a `have ... := by` block and checks it with Lean; this
+does not make browser structural closure a type check or assert that the
+selected claim mirrors the author's original reasoning. Regression cases
+cover return of parent dependencies, expiry of child names, sibling
+isolation, sequential/interleaved blocks, incomplete goals, line movement and
+incremental-versus-cold agreement. The block is currently recomputed as a
+whole after structural edits.
+
 ### Mathlib integration target
 
 The optional Mathlib topology workflow uses the upstream v4.19.0 tag, which declares exactly the same Lean toolchain as this repository. It retrieves the cache for Mathlib.Topology.Compactness.Compact and executes tests/mathlib_integration.py against that independent Lake project. The test targets IsCompact.image (confirmed in the tagged upstream file), not a guessed translation or hand-coded theorem. The normal CI remains lightweight; the Mathlib job runs for changes to its test/workflow and is manually runnable. Success must be confirmed from its workflow log; availability of the cache and hosted runner is external.

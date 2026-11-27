@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 9955)
+Total output lines: 542
+
 import {compileFormula,sameScopedFormula} from './math-formula.mjs';
 import {buildDraftGraph} from './draft-graph.mjs';
 import {planGoalOperation,existentialBindings} from './context-extension.mjs';
@@ -7,7 +10,7 @@ import {parseRuleIntent} from './rule-intent.mjs';
 import {renderChain} from './proof-chain.mjs';
 import {premiseFrame,contextCandidates,formulaPremiseSentence,citationCandidates,implicitCandidates,structuralRules} from './context-grammar.mjs';
 import {compileCaseProgram,hasCaseSplitHeader,remapProofGraph} from './case-split.mjs';
-import {compileGoalOperationProgram,goalOperationHeader} from './proof-subgoals.mjs';
+import {compileGoalOperationProgram,goalOperationHeader,localLemmaHeader,compileLocalLemmaProgram} from './proof-subgoals.mjs';
 import {extendProofScope,proofScopeBindings,proofScopeFacts,proofScopeNames,rootProofScope} from './proof-scope.mjs';
 import {elementInterpretationCandidates,parseElementRequest} from './element-interpretation.mjs';
 const marker=/^(?:(?:therefore|hence|thus|clearly|obviously|indeed|then)(?:\s*[,，:：]\s*|\s+)|(?:因此|从而|于是|显然|事实上|故|则)[，、：:\s]*)/iu;
@@ -219,103 +222,7 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
       continue;
      }
      operationCandidates=operationCandidates.map(candidate=>candidateChoice(candidate)===candidateChoice(selected)?selected:candidate);
-     p={...p,...selected,selectedElementCandidate:true,selectedChoice:candidateChoice(selected),
-      operationConstraint:resolution.targetConstraint,rejectedCandidates:resolution.rejectedCandidates};
-    }
-    if(p.kind==='infer-proposition'){
-     if(last)throw resolutionError('An inferred intermediate must be followed by a conclusion.','incompatible-target');
-     if(occupied.has(p.name))throw resolutionError('This intermediate name already exists.','incompatible-choice');
-     const future=lines.slice(i+1).map((x,j)=>({line:x.line,parsed:parsed[i+1+j].value}));
-     if(!constraintResults.has(line)){
-      const network=constrainPropositions({line,parsed:p},[...visible],facts,future,choices,new Set(constraintResults.keys()));
-      for(const [key,value] of network)if(!constraintResults.has(key))constraintResults.set(key,value);
-     }
-     const result=constraintResults.get(line);
-     const {domain,candidates,constraints,group}=result;
-     const picked=result.overflow?null:choices.has(line)?candidates.find(c=>candidateChoice(c)===choices.get(line)):candidates.length===1?candidates[0]:null;
-     if(!picked){
-      const sourceAvailable=visible.has(p.source)&&facts.has(p.source);
-      const resolutionStatus=result.overflow?'budget-exhausted':choices.has(line)?'incompatible-choice':candidates.length?'ambiguous':group?.status==='contradiction'?'incompatible-constraints':sourceAvailable?'no-supported-match':'needs-context';
-      const details={candidates,domain,constraints,constraintGroup:group,resolutionStatus,reason:result.reason||(choices.has(line)?'Selected proposition candidate is no longer compatible.':'Intermediate proposition is ambiguous; choose a candidate or add a structural constraint.')};
-      // A type can be known even when the proof is not. Preserve a typed
-      // open obligation if every surviving candidate has the same scoped
-      // type; do not choose a proof merely because the types coincide.
-      if(!result.overflow&&!choices.has(line)&&candidates.length>1){
-       const type=candidates[0].type;
-       const canonical=JSON.stringify(compileFormula(type,{syntax:'lean'}).scoped);
-       if(candidates.every(c=>JSON.stringify(compileFormula(c.type,{syntax:'lean'}).scoped)===canonical)&&!unavailable(type)){
-        p={...p,type};
-        const step=makeStep(p,false,'?',line);
-        openNames.add(step.name);steps.push(step);
-        details.step=step;
-        details.reason='The proposition type is determined, but its proof is ambiguous; choose a proof candidate.';
-       }
-      }
-      unresolved(p,raw,line,last,details);
-      continue;
-     }
-     p={...p,type:picked.type};
-     if(unavailable(p.type))throw Error('The inferred proposition refers to an unavailable local object.');
-     if(!visible.has(p.source)){
-      const step=makeStep(p,false,'?',line);openNames.add(step.name);steps.push(step);
-      unresolved(p,raw,line,last,{step,candidates,domain,constraints,constraintGroup:group,dependencies:[p.source],resolutionStatus:'needs-context',reason:'The proposition type is determined, but its projection source is still unresolved.'});continue;
-     }
-     const dependencies=[...new Set([...picked.premises,...freeNames(picked.type)].filter(n=>openNames.has(n)))];
-     const proofStatus=dependencies.length?'depends-on-open':'candidate';
-     const step=makeStep(p,false,picked.term,line);
-     if(dependencies.length)openNames.add(step.name);
-     rows.push({...p,line,status:blocked?'provisional':'translated',proofStatus,resolutionStatus:candidateResolution(proofStatus),dependencies,step,candidates,domain,constraints,constraintGroup:group});steps.push(step);continue;
-    }
-    if(p.kind==='obtain'){
-      if(last)throw resolutionError('An existential elimination must be followed by a conclusion.','incompatible-target');
-      if(choices.has(line)&&!p.selectedElementCandidate)throw resolutionError('An existential elimination has no proof candidate choice.','incompatible-choice');
-      if(!visible.has(p.source)||!facts.has(p.source))throw resolutionError('Cite a visible typed existential premise.','needs-context');
-      if(p.name===p.evidenceName||occupied.has(p.name)||occupied.has(p.evidenceName))throw resolutionError('Witness and evidence names must be distinct and fresh.','incompatible-choice');
-     const types=existentialBindings(facts.get(p.source),p);
-     const missing=freeNames(types.type,types.evidenceType).find(n=>n!==p.name&&(planned.has(n)||occupied.has(n)||closed.has(n))&&!visible.has(n));
-     if(missing)throw Error('Ambiguous or forward reference in existential elimination: '+missing);
-     if(freeNames(types.type).includes(p.name))throw Error('Witness domain cannot refer to the new witness.');
-     const stem='duet_exists_'+p.name.slice(0,40);
-     let copy=stem;
-     // Keep the original premise available; destructure a fresh copy.
-     let suffix=0;while(occupied.has(copy)||planned.has(copy))copy=stem+'_'+(++suffix);
-     const dependencies=[...new Set([p.source,...freeNames(types.type,types.evidenceType)].filter(n=>openNames.has(n)))];
-     const proofStatus=dependencies.length?'depends-on-open':'candidate';
-     const step={kind:'obtain',source:p.source,name:p.name,evidenceName:p.evidenceName,copy,...types};
-     occupied.add(copy);
-     for(const [name,type] of [[step.name,step.type],[step.evidenceName,step.evidenceType]]){
-      occupied.add(name);visible.add(name);facts.set(name,type);
-      remember(name,line,name===step.evidenceName?':evidence':'');
-      if(dependencies.length)openNames.add(name);
-     }
-     rows.push({...p,...types,line,status:blocked?'provisional':'translated',proofStatus,resolutionStatus:candidateResolution(proofStatus),dependencies,step,candidates:operationCandidates});steps.push(step);continue;
-    }
-    if(['introduce','assume'].includes(p.kind)){
-      if(last)throw resolutionError('An introduction must be followed by a conclusion.','incompatible-target');
-      if(blocked)throw resolutionError('Resolve preceding incomplete wording before extending the goal.','needs-context');
-      if(occupied.has(p.name))throw resolutionError('This local name already exists.','incompatible-choice');
-      if(choices.has(line)&&!p.selectedElementCandidate)throw resolutionError('An introduction has no proof candidate choice.','incompatible-choice');
-     const goalOperation=planGoalOperation(remainingGoal,{kind:p.kind,name:p.name,type:p.type});
-     p={...p,type:goalOperation.subgoals[0].contextDelta[0].type};
-     const names=freeNames(p.type);
-     for(const n of names)if((planned.has(n)||occupied.has(n)||closed.has(n))&&!visible.has(n))throw Error('Ambiguous or forward reference in introduction: '+n);
-     remainingGoal=goalOperation.subgoals[0].goal;
-     const scopedOperation={...goalOperation,subgoals:goalOperation.subgoals.map(subgoal=>({...subgoal,
-      contextDelta:subgoal.contextDelta.map(binding=>({...binding,id:'line:'+line}))
-     }))};
-     const step={kind:p.kind,name:p.name,type:p.type,goalOperation:scopedOperation};
-     occupied.add(p.name);visible.add(p.name);facts.set(p.name,p.type);
-     remember(p.name,line);
-     const dependencies=names.filter(n=>openNames.has(n));
-     if(dependencies.length)openNames.add(p.name);
-     const proofStatus=dependencies.length?'depends-on-open':'candidate';
-     rows.push({...p,line,status:'translated',proofStatus,resolutionStatus:candidateResolution(proofStatus),dependencies,remainingGoal,step,candidates:operationCandidates});steps.push(step);continue;
-    }
-    if(p.kind==='define'){
-      if(last)throw resolutionError('A definition must be followed by a conclusion.','incompatible-target');
-      if(occupied.has(p.name))throw resolutionError('This local name already exists.','incompatible-choice');
-      if(choices.has(line))throw resolutionError('A definition has no proof candidate choice.','incompatible-choice');
-     const free=freeNames(p.type,p.value);
+     p={...p,...selected,selectedElementCandidate:true,selectedChoice:candidateChoice(sel…1955 tokens truncated…(p.type,p.value);
      for(const n of free)if((planned.has(n)||occupied.has(n)||closed.has(n))&&!visible.has(n))throw Error('Ambiguous or forward reference in definition: '+n);
      const dependencies=[...free].filter(n=>openNames.has(n));
      const proofStatus=dependencies.length?'depends-on-open':'candidate';
@@ -474,8 +381,8 @@ function evaluateScopeAware(input,scope=[],context=new Map(),options={}){
   // keep the lighter row-prefix cache; cloning a whole inner graph on every
   // branch hit costs more than recompiling that bounded wrapper.
   const shared=currentFrame.id==='root'?segmentOptions.cache:null;
-  const rootBlock=String(text||'').split(/\r?\n/).some(line=>!line.startsWith(' ')&&!line.startsWith('\t')&&
-   (hasCaseSplitHeader(line.trim())||goalOperationHeader(line.trim())));
+  const isBlockHeader=line=>hasCaseSplitHeader(line.trim())||!!goalOperationHeader(line.trim())||!!localLemmaHeader(line.trim());
+  const rootBlock=String(text||'').split(/\r?\n/).some(line=>!line.startsWith(' ')&&!line.startsWith('\t')&&isBlockHeader(line));
   // Small linear fragments are cheaper to rebuild than to deep-clone. Reserve
   // whole-result memoization for scoped programs or substantial source text.
   if(!shared||(!rootBlock&&String(text||'').length<512))return compileSegmentFresh(text,currentFrame,segmentOptions);
@@ -498,10 +405,12 @@ function evaluateScopeAware(input,scope=[],context=new Map(),options={}){
   const names=proofScopeNames(currentFrame),facts=proofScopeFacts(currentFrame);
   const lines=String(text||'').split(/\r?\n/),first=lines.findIndex(line=>line.trim());
   const blockIndex=lines.findIndex(line=>!line.startsWith(' ')&&!line.startsWith('\t')&&
-   (hasCaseSplitHeader(line.trim())||goalOperationHeader(line.trim())));
-  const blockKind=blockIndex>=0&&hasCaseSplitHeader(lines[blockIndex].trim())?'cases':blockIndex>=0?goalOperationHeader(lines[blockIndex].trim())?.kind:'linear';
+   (hasCaseSplitHeader(line.trim())||goalOperationHeader(line.trim())||localLemmaHeader(line.trim())));
+  const blockKind=blockIndex<0?'linear':hasCaseSplitHeader(lines[blockIndex].trim())?'cases':
+   localLemmaHeader(lines[blockIndex].trim())?'local-lemma':goalOperationHeader(lines[blockIndex].trim())?.kind;
   if(blockIndex>=0&&blockIndex===first){
    if(blockKind==='cases')return compileCaseProgram(text,currentFrame,segmentOptions,compileSegment);
+   if(blockKind==='local-lemma')return compileLocalLemmaProgram(text,currentFrame,segmentOptions,compileSegment);
    return compileGoalOperationProgram(text,currentFrame,segmentOptions,compileSegment,parseLine);
   }
   if(blockIndex>first){
@@ -518,7 +427,13 @@ function evaluateScopeAware(input,scope=[],context=new Map(),options={}){
       openBindings:[...new Set([...(segmentOptions.openBindings||[]),...(prefix.openBindings||[])])],
       incompleteContext:!!segmentOptions.incompleteContext||hasOpenText
      },compileSegment)
-     :compileGoalOperationProgram(remainingText,nextFrame,{...segmentOptions,
+     :blockKind==='local-lemma'
+      ?compileLocalLemmaProgram(remainingText,nextFrame,{...segmentOptions,
+       goal:prefix.remainingGoal,lineOffset:lineOffset+blockIndex,
+       openBindings:[...new Set([...(segmentOptions.openBindings||[]),...(prefix.openBindings||[])])],
+       incompleteContext:!!segmentOptions.incompleteContext||hasOpenText,cache:segmentOptions.cache
+      },compileSegment)
+      :compileGoalOperationProgram(remainingText,nextFrame,{...segmentOptions,
       goal:prefix.remainingGoal,lineOffset:lineOffset+blockIndex,
       openBindings:[...new Set([...(segmentOptions.openBindings||[]),...(prefix.openBindings||[])])],
       incompleteContext:!!segmentOptions.incompleteContext||hasOpenText,cache:segmentOptions.cache
