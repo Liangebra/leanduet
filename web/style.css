@@ -96,3 +96,9 @@ html[data-theme=dark] .tok-keyword{color:#569cd6}html[data-theme=dark] .tok-comm
 .narrativePremises{display:flex;align-items:baseline;flex-wrap:wrap;gap:5px;margin:4px 0 2px;font-size:12px;color:var(--muted)}.premiseRef{border-bottom:1px solid var(--line);padding:1px 4px;font-family:var(--mono);overflow-wrap:anywhere}.inferenceNumber{color:var(--muted);font-variant-numeric:tabular-nums}
 
 #offlineTranslator input,#offlineTranslator textarea{display:block;width:100%;min-width:0;margin:5px 0 10px}#offlineTranslator textarea{min-height:100px}#offlineResult pre{white-space:pre-wrap;overflow-wrap:anywhere}
+
+/* Language controls share the existing workbench visual tokens. */
+#interfaceLanguage{font-size:12px;max-width:110px;white-space:nowrap}
+.narrative-language{display:flex;align-items:center;gap:5px;flex-wrap:wrap;font-size:12px}
+.narrative-language select{max-width:120px}
+@media(max-width:800px){#interfaceLanguage{font-size:11px;padding:4px 5px}.narrative-language{font-size:11px}}
