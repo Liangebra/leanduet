@@ -20,7 +20,7 @@ test('a typed False premise offers constructive ex-falso but not double-negation
  assert.equal(implicitCandidates('P',['hFalse'],facts).candidates[0].term,'False.elim hFalse');
  const draft=draftProof('From hFalse, we obtain $P$',['hFalse'],facts,{goal:'P'});
  assert.equal(draft.complete,true);
- assert.match(draft.term,/False\\.elim hFalse/);
+ assert.ok(draft.term.includes('False.elim hFalse'));
  const doubleNegationFacts=new Map([['hnn','¬¬ P']]);
  assert.equal(contextCandidates('P',['hnn'],doubleNegationFacts).length,0);
  assert.equal(implicitCandidates('P',['hnn'],doubleNegationFacts).candidates.length,0);
