@@ -281,7 +281,7 @@ let rejected=false;
 try { compileNaturalDraft('假设 hp\\n$False$ | hp',['P'],new Map(),{goal:'¬ P'}); }
 catch(error) { rejected=/Surface type of local premise hp .* differs structurally .* Lean definitional equality has not been checked/.test(error.message); }
 if(!rejected)throw new Error('A local proof of P was incorrectly accepted as a proof of False');
-const exfalso=compileNaturalDraft('From hFalse, we obtain $Q;
+const exfalso=compileNaturalDraft('From hFalse, we obtain $Q$',['hFalse'],new Map([['hFalse','False']]),{goal:'Q'});
 console.log(JSON.stringify([neg.term,not.term,exfalso.term,alias.term]));
 """
 neg_term,not_term,exfalso_term,alias_term=json.loads(subprocess.run(["node","--input-type=module"],input=logic_script,text=True,cwd=root,check=True,capture_output=True).stdout)
@@ -394,10 +394,7 @@ console.log(JSON.stringify(result.term));
                   and "∧" in node.get("type", ""))
         assert "hB" in pair["term"] and "hA" in pair["term"],pair
     print("Lean-compiled aligned set case:",real_math_case["id"])
-,['hFalse'],new Map([['hFalse','False']]),{goal:'Q'});
-console.log(JSON.stringify([neg.term,not.term,exfalso.term,alias.term]));
-"""
-neg_term,not_term,exfalso_term,alias_term=json.loads(subprocess.run(["node","--input-type=module"],input=logic_script,text=True,cwd=root,check=True,capture_output=True).stdout)
+
 with TemporaryDirectory() as tmp:
     target=Path(tmp)/"IntuitionisticNegation.lean"
     target.write_text("theorem negation_intro (P : Prop) (hnot : P → False) : ¬ P := "+neg_term+"\n"
