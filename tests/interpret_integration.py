@@ -304,16 +304,38 @@ const nested=compileNaturalDraft(`cases h, establish hab : $A ∧ B$
       second goal
         $B$ | gb hq
 $A ∧ B$ | hab`,['h','fa','fb','ga','gb'],new Map([['h','P ∨ Q'],['fa','P → A'],['fb','P → B'],['ga','Q → A'],['gb','Q → B']]),{goal:'A ∧ B'});
-console.log(JSON.stringify([pair.term,local.term,nested.term]));
+const iff=compileNaturalDraft(`prove equivalence
+  forward direction
+    assume hp : $P$
+    $Q$ | f hp
+  reverse direction
+    assume hq : $Q$
+    $P$ | g hq`,['f','g'],new Map([['f','P → Q'],['g','Q → P']]),{goal:'P ↔ Q'});
+const exists=compileNaturalDraft(`construct witness a
+  witness property
+    $P(a)$ | ha`,['a','ha'],new Map([['a','Nat'],['ha','P a']]),{goal:'∃ x : Nat, P x'});
+const nestedExists=compileNaturalDraft(`cases h, establish hex : $∃ x : Nat, P(x)$
+  left case hpa
+    construct witness a
+      witness property
+        $P(a)$ | hpa
+  right case hq
+    construct witness a
+      witness property
+        $P(a)$ | ha`,['a','ha','h'],new Map([['a','Nat'],['ha','P a'],['h','P a ∨ Q']]),{goal:'∃ x : Nat, P x'});
+console.log(JSON.stringify([pair.term,local.term,nested.term,iff.term,exists.term,nestedExists.term]));
 """
-pair_term,local_term,nested_pair_term=json.loads(subprocess.run(["node","--input-type=module"],input=subgoal_script,text=True,cwd=root,check=True,capture_output=True).stdout)
+pair_term,local_term,nested_pair_term,iff_term,exists_term,nested_exists_term=json.loads(subprocess.run(["node","--input-type=module"],input=subgoal_script,text=True,cwd=root,check=True,capture_output=True).stdout)
 with TemporaryDirectory() as tmp:
     target=Path(tmp)/"ConjunctionSubgoals.lean"
     target.write_text("theorem conjunction_subgoals (P Q : Prop) (hp : P) (hq : Q) : P ∧ Q := "+pair_term+"\n"
         +"theorem conjunction_local_intro (P : Prop) : P → P ∧ P := "+local_term+"\n"
-        +"theorem conjunction_inside_cases (A B P Q : Prop) (h : P ∨ Q) (fa : P → A) (fb : P → B) (ga : Q → A) (gb : Q → B) : A ∧ B := "+nested_pair_term+"\n",encoding="utf-8")
+        +"theorem conjunction_inside_cases (A B P Q : Prop) (h : P ∨ Q) (fa : P → A) (fb : P → B) (ga : Q → A) (gb : Q → B) : A ∧ B := "+nested_pair_term+"\n"
+        +"theorem iff_subgoals (P Q : Prop) (f : P → Q) (g : Q → P) : P ↔ Q := "+iff_term+"\n"
+        +"theorem exists_explicit_witness (P : Nat → Prop) (a : Nat) (ha : P a) : ∃ x : Nat, P x := "+exists_term+"\n"
+        +"theorem exists_inside_cases (P : Nat → Prop) (Q : Prop) (a : Nat) (ha : P a) (h : P a ∨ Q) : ∃ x : Nat, P x := "+nested_exists_term+"\n",encoding="utf-8")
     subprocess.run(["lean",str(target)],cwd=root,check=True)
-print("Conjunction child goals, local discharge and nested case composition accepted by Lean")
+print("Conjunction, equivalence and explicit existential child goals accepted by Lean")
 
 # An aligned set-theory case exercises presentation syntax, bounded context
 # introductions and the resulting Lean term. The minimal predicate-set model

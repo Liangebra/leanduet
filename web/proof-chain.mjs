@@ -83,13 +83,18 @@ export function renderChain(steps){
         lines.push(...body.map(line=>'    '+line));
       }
     }
-    else if(s.kind==='and-intro'){
+    else if(['and-intro','iff-intro'].includes(s.kind)){
       lines.push('  constructor');
       for(const subgoal of s.subgoals||[]){
         lines.push('  ·');
         const body=renderChain(subgoal.steps).split('\n').slice(1);
         lines.push(...body.map(line=>'  '+line));
       }
+    }
+    else if(s.kind==='exists-intro'){
+      lines.push('  refine ⟨'+s.witness+', ?_⟩','  ·');
+      const body=renderChain(s.subgoals?.[0]?.steps||[]).split('\n').slice(1);
+      lines.push(...body.map(line=>'  '+line));
     }
     else if(s.kind==='define')lines.push('  let '+s.name+' : '+s.type+' := '+s.value);
     else if(s.kind==='establish')lines.push('  have '+s.name+(s.type===null?'':' : '+s.type)+' := '+(s.application==='?'?'by exact?':s.application));

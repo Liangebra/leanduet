@@ -36,7 +36,7 @@ The [online editor](https://liangebra.github.io/leanduet/) is a static demo. Run
 - Enter a supported LaTeX formula for typed proof completion, or compose controlled mathematical sentences with intermediate propositions inferred by Lean.
 - Edit existential witnesses together with their dependent evidence.
 - Interleave ordinary proof lines with multiple nested two-branch proofs for explicit disjunctions; branch-local assumptions stay scoped, and only shared results return to the parent.
-- For a conjunction goal, use a bounded `split conjunction` block to prove each conjunct in an isolated child scope; open proof holes remain marked as obligations.
+- For conjunction and equivalence goals, bounded child-goal blocks prove each component or direction in an isolated scope. Existential goals accept an explicit, typed local witness and keep its property as a child obligation; open proof holes remain marked as obligations.
 - Preview a dependency-closed lemma and a checked refactoring that replaces the selected proof with its application. Multi-theorem editing remains experimental.
 - Save locally, export Lean or a portable workspace, and read typed narratives in English, Chinese or Japanese, or import [community language packs](docs/LANGUAGE_PACKS.md).
 
