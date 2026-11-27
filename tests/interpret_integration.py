@@ -274,6 +274,47 @@ with TemporaryDirectory() as tmp:
     subprocess.run(["lean",str(target)],cwd=root,check=True)
 print("Intuitionistic negation introduction and explicit False elimination accepted by Lean")
 
+# A conjunction goal opens two identity-isolated child scopes. Local assumptions
+# are discharged inside their child, and the same operation composes inside a
+# disjunction branch without exporting branch-local names.
+subgoal_script="""
+import {compileNaturalDraft} from './web/natural-draft.mjs';
+const pair=compileNaturalDraft(`split conjunction
+  first goal
+    $P$ | hp
+  second goal
+    $Q$ | hq`,['hp','hq'],new Map([['hp','P'],['hq','Q']]),{goal:'P ∧ Q'});
+const local=compileNaturalDraft(`假设 hp : $P$
+split conjunction
+  first goal
+    $P$ | hp
+  second goal
+    $P$ | hp`,[],new Map(),{goal:'P → (P ∧ P)'});
+const nested=compileNaturalDraft(`cases h, establish hab : $A ∧ B$
+  left case hp
+    split conjunction
+      first goal
+        $A$ | fa hp
+      second goal
+        $B$ | fb hp
+  right case hq
+    split conjunction
+      first goal
+        $A$ | ga hq
+      second goal
+        $B$ | gb hq
+$A ∧ B$ | hab`,['h','fa','fb','ga','gb'],new Map([['h','P ∨ Q'],['fa','P → A'],['fb','P → B'],['ga','Q → A'],['gb','Q → B']]),{goal:'A ∧ B'});
+console.log(JSON.stringify([pair.term,local.term,nested.term]));
+"""
+pair_term,local_term,nested_pair_term=json.loads(subprocess.run(["node","--input-type=module"],input=subgoal_script,text=True,cwd=root,check=True,capture_output=True).stdout)
+with TemporaryDirectory() as tmp:
+    target=Path(tmp)/"ConjunctionSubgoals.lean"
+    target.write_text("theorem conjunction_subgoals (P Q : Prop) (hp : P) (hq : Q) : P ∧ Q := "+pair_term+"\n"
+        +"theorem conjunction_local_intro (P : Prop) : P → P ∧ P := "+local_term+"\n"
+        +"theorem conjunction_inside_cases (A B P Q : Prop) (h : P ∨ Q) (fa : P → A) (fb : P → B) (ga : Q → A) (gb : Q → B) : A ∧ B := "+nested_pair_term+"\n",encoding="utf-8")
+    subprocess.run(["lean",str(target)],cwd=root,check=True)
+print("Conjunction child goals, local discharge and nested case composition accepted by Lean")
+
 # An aligned set-theory case exercises presentation syntax, bounded context
 # introductions and the resulting Lean term. The minimal predicate-set model
 # uses Lean's core Membership and Inter classes; no copied Mathlib source is

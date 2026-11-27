@@ -21,33 +21,72 @@ function negationBody(ast){
  if(ast.kind==='call'&&ast.fn?.kind==='id'&&ast.fn.value==='Not'&&ast.args.length===1)return ast.args[0];
  return null;
 }
-export function extendGoal(goal,{kind,name,type}){
- if(!goal)throw Error('An introduction needs the current goal.');
- const ast=compileFormula(goal,{syntax:'lean'}).ast;
- const domain=compileFormula(type,{syntax:'lean'}).scoped;
- if(kind==='introduce'){
-  if(ast.kind!=='binder'||ast.op!=='∀'||(ast.domain&&!same(scopedFormula(ast.domain),domain)))
-   throw Error('The current goal is not a matching universal.');
-  if(name!==ast.name&&containsName(ast.body,name))throw Error('Introduction name may capture an existing occurrence; choose a fresh name.');
-  return renderFormula(rename(ast.body,ast.name,name));
- }
- if(kind==='assume'){
-  if(ast.kind==='binary'&&ast.op==='→'&&same(scopedFormula(ast.left),domain))return renderFormula(ast.right);
-  const negative=negationBody(ast);
-  if(negative&&same(scopedFormula(negative),domain))return 'False';
-  throw Error('The current goal is not a matching implication or negation.');
- }
- throw Error('Unknown context extension.');
-}
-
-export function inferIntroduction(goal,kind){
- if(!goal)throw Error('An introduction needs the current goal.');
- const ast=compileFormula(goal,{syntax:'lean'}).ast;
+function inferredIntroductionType(ast,kind){
  if(kind==='introduce'&&ast.kind==='binder'&&ast.op==='∀'&&ast.domain)return renderFormula(ast.domain);
  if(kind==='assume'&&ast.kind==='binary'&&ast.op==='→')return renderFormula(ast.left);
  const negative=kind==='assume'?negationBody(ast):null;
  if(negative)return renderFormula(negative);
  throw Error('The current goal does not determine a supported introduction type; supply an annotation.');
+}
+
+/** Describe a goal operation before opening its child proof obligations. */
+export function planGoalOperation(goal,{kind,name=null,type=null,source=null,sourceType=null,branchNames=['hp','hq']}={}){
+ if(!goal)throw Error('A proof operation needs the current goal.');
+ const ast=compileFormula(goal,{syntax:'lean'}).ast;
+ if(kind==='disjunction-elimination'){
+  if(typeof sourceType!=='string')throw Error('Disjunction elimination needs a typed source.');
+  const sourceAst=compileFormula(sourceType,{syntax:'lean'}).ast;
+  let parts=null;
+  if(sourceAst.kind==='binary'&&sourceAst.op==='∨')parts=[sourceAst.left,sourceAst.right];
+  else if(sourceAst.kind==='call'&&sourceAst.fn?.kind==='id'&&sourceAst.fn.value==='Or'&&sourceAst.args.length===2)parts=sourceAst.args;
+  if(!parts)throw Error('The cited source is not a supported disjunction.');
+  return {kind:'disjunction-elimination',parentGoal:goal,logic:'intuitionistic',source,
+   subgoals:parts.map((part,index)=>({id:index===0?'left':'right',goal,contextDelta:[{
+    name:branchNames[index],type:renderFormula(part),kind:'case-assumption'
+   }]})),
+   closure:{kind:'eliminator',name:'Or.elim',source}};
+ }
+ if(kind==='conjunction-introduction'){
+  let parts=null;
+  if(ast.kind==='binary'&&ast.op==='∧')parts=[ast.left,ast.right];
+  else if(ast.kind==='call'&&ast.fn?.kind==='id'&&ast.fn.value==='And'&&ast.args.length===2)parts=ast.args;
+  if(!parts)throw Error('The current goal is not a supported conjunction.');
+  return {kind:'conjunction-introduction',parentGoal:goal,logic:'intuitionistic',
+   subgoals:parts.map((part,index)=>({id:index===0?'first':'second',goal:renderFormula(part),contextDelta:[]})),
+   closure:{kind:'constructor',name:'And.intro'}};
+ }
+ if(!['introduce','assume'].includes(kind))throw Error('Unknown goal operation.');
+ const introType=type||inferredIntroductionType(ast,kind);
+ if(typeof name!=='string'||!name)name=ast.kind==='binder'?ast.name:'h';
+ const domain=compileFormula(introType,{syntax:'lean'}).scoped;
+ if(kind==='introduce'){
+  if(ast.kind!=='binder'||ast.op!=='∀'||(ast.domain&&!same(scopedFormula(ast.domain),domain)))
+   throw Error('The current goal is not a matching universal.');
+  if(name!==ast.name&&containsName(ast.body,name))throw Error('Introduction name may capture an existing occurrence; choose a fresh name.');
+  return {kind:'universal-introduction',parentGoal:goal,logic:'dependent-function',
+   subgoals:[{id:'body',goal:renderFormula(rename(ast.body,ast.name,name)),contextDelta:[{name,type:introType,kind:'universal-variable'}]}],
+   closure:{kind:'binder-introduction',name}};
+ }
+ if(ast.kind==='binary'&&ast.op==='→'&&same(scopedFormula(ast.left),domain))return {
+  kind:'implication-introduction',parentGoal:goal,logic:'intuitionistic',
+  subgoals:[{id:'body',goal:renderFormula(ast.right),contextDelta:[{name,type:introType,kind:'assumption'}]}],
+  closure:{kind:'binder-introduction',name}
+ };
+ const negative=negationBody(ast);
+ if(negative&&same(scopedFormula(negative),domain))return {
+  kind:'negation-introduction',parentGoal:goal,logic:'intuitionistic',
+  subgoals:[{id:'contradiction',goal:'False',contextDelta:[{name,type:introType,kind:'assumption'}]}],
+  closure:{kind:'binder-introduction',name}
+ };
+ throw Error('The current goal is not a matching implication or negation.');
+}
+
+export function extendGoal(goal,introduction){
+ return planGoalOperation(goal,introduction).subgoals[0].goal;
+}
+
+export function inferIntroduction(goal,kind,name=null){
+ return planGoalOperation(goal,{kind,name}).subgoals[0].contextDelta[0].type;
 }
 export function existentialBindings(sourceType,{name,type=null}){
  if(!sourceType)throw Error('The cited existential premise has no known type.');

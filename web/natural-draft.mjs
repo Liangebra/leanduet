@@ -1,12 +1,16 @@
+Warning: truncated output (original token count: 8342)
+Total output lines: 460
+
 import {compileFormula,sameScopedFormula} from './math-formula.mjs';
 import {buildDraftGraph} from './draft-graph.mjs';
-import {extendGoal,inferIntroduction,existentialBindings} from './context-extension.mjs';
+import {planGoalOperation,existentialBindings} from './context-extension.mjs';
 import {constrainPropositions,candidateChoice} from './proposition-constraints.mjs';
 import {discourseFrame,discourseCandidates} from './discourse.mjs';
 import {parseRuleIntent} from './rule-intent.mjs';
 import {renderChain} from './proof-chain.mjs';
 import {premiseFrame,contextCandidates,formulaPremiseSentence,citationCandidates,implicitCandidates,structuralRules} from './context-grammar.mjs';
 import {compileCaseProgram,hasCaseSplitHeader,remapProofGraph} from './case-split.mjs';
+import {compileConjunctionGoal,hasConjunctionGoalHeader} from './proof-subgoals.mjs';
 import {extendProofScope,proofScopeFacts,proofScopeNames,rootProofScope} from './proof-scope.mjs';
 const marker=/^(?:(?:therefore|hence|thus|clearly|obviously|indeed|then)(?:\s*[,，:：]\s*|\s+)|(?:因此|从而|于是|显然|事实上|故|则)[，、：:\s]*)/iu;
 const formulaPattern=/\$[^$\n]+\$|\\\([^]*?\\\)|\\\[[^]*?\\\]/g;
@@ -165,116 +169,7 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
      if(!picked){
       const sourceAvailable=visible.has(p.source)&&facts.has(p.source);
       const resolutionStatus=result.overflow?'budget-exhausted':choices.has(line)?'incompatible-choice':candidates.length?'ambiguous':group?.status==='contradiction'?'incompatible-constraints':sourceAvailable?'no-supported-match':'needs-context';
-      const details={candidates,domain,constraints,constraintGroup:group,resolutionStatus,reason:result.reason||(choices.has(line)?'Selected proposition candidate is no longer compatible.':'Intermediate proposition is ambiguous; choose a candidate or add a structural constraint.')};
-      // A type can be known even when the proof is not. Preserve a typed
-      // open obligation if every surviving candidate has the same scoped
-      // type; do not choose a proof merely because the types coincide.
-      if(!result.overflow&&!choices.has(line)&&candidates.length>1){
-       const type=candidates[0].type;
-       const canonical=JSON.stringify(compileFormula(type,{syntax:'lean'}).scoped);
-       if(candidates.every(c=>JSON.stringify(compileFormula(c.type,{syntax:'lean'}).scoped)===canonical)&&!unavailable(type)){
-        p={...p,type};
-        const step=makeStep(p,false,'?');
-        openNames.add(step.name);steps.push(step);
-        details.step=step;
-        details.reason='The proposition type is determined, but its proof is ambiguous; choose a proof candidate.';
-       }
-      }
-      unresolved(p,raw,line,last,details);
-      continue;
-     }
-     p={...p,type:picked.type};
-     if(unavailable(p.type))throw Error('The inferred proposition refers to an unavailable local object.');
-     if(!visible.has(p.source)){
-      const step=makeStep(p,false,'?');openNames.add(step.name);steps.push(step);
-      unresolved(p,raw,line,last,{step,candidates,domain,constraints,constraintGroup:group,dependencies:[p.source],resolutionStatus:'needs-context',reason:'The proposition type is determined, but its projection source is still unresolved.'});continue;
-     }
-     const dependencies=[...new Set([...picked.premises,...freeNames(picked.type)].filter(n=>openNames.has(n)))];
-     const proofStatus=dependencies.length?'depends-on-open':'candidate';
-     const step=makeStep(p,false,picked.term);
-     if(dependencies.length)openNames.add(step.name);
-     rows.push({...p,line,status:blocked?'provisional':'translated',proofStatus,resolutionStatus:candidateResolution(proofStatus),dependencies,step,candidates,domain,constraints,constraintGroup:group});steps.push(step);continue;
-    }
-    if(p.kind==='obtain'){
-      if(last)throw resolutionError('An existential elimination must be followed by a conclusion.','incompatible-target');
-      if(choices.has(line))throw resolutionError('An existential elimination has no proof candidate choice.','incompatible-choice');
-      if(!visible.has(p.source)||!facts.has(p.source))throw resolutionError('Cite a visible typed existential premise.','needs-context');
-      if(p.name===p.evidenceName||occupied.has(p.name)||occupied.has(p.evidenceName))throw resolutionError('Witness and evidence names must be distinct and fresh.','incompatible-choice');
-     const types=existentialBindings(facts.get(p.source),p);
-     const missing=freeNames(types.type,types.evidenceType).find(n=>n!==p.name&&(planned.has(n)||occupied.has(n)||closed.has(n))&&!visible.has(n));
-     if(missing)throw Error('Ambiguous or forward reference in existential elimination: '+missing);
-     if(freeNames(types.type).includes(p.name))throw Error('Witness domain cannot refer to the new witness.');
-     const stem='duet_exists_'+p.name.slice(0,40);
-     let copy=stem;
-     // Keep the original premise available; destructure a fresh copy.
-     let suffix=0;while(occupied.has(copy)||planned.has(copy))copy=stem+'_'+(++suffix);
-     const dependencies=[...new Set([p.source,...freeNames(types.type,types.evidenceType)].filter(n=>openNames.has(n)))];
-     const proofStatus=dependencies.length?'depends-on-open':'candidate';
-     const step={kind:'obtain',source:p.source,name:p.name,evidenceName:p.evidenceName,copy,...types};
-     occupied.add(copy);
-     for(const [name,type] of [[step.name,step.type],[step.evidenceName,step.evidenceType]]){
-      occupied.add(name);visible.add(name);facts.set(name,type);if(dependencies.length)openNames.add(name);
-     }
-     rows.push({...p,...types,line,status:blocked?'provisional':'translated',proofStatus,resolutionStatus:candidateResolution(proofStatus),dependencies,step,candidates:[]});steps.push(step);continue;
-    }
-    if(['introduce','assume'].includes(p.kind)){
-      if(last)throw resolutionError('An introduction must be followed by a conclusion.','incompatible-target');
-      if(blocked)throw resolutionError('Resolve preceding incomplete wording before extending the goal.','needs-context');
-      if(occupied.has(p.name))throw resolutionError('This local name already exists.','incompatible-choice');
-      if(choices.has(line))throw resolutionError('An introduction has no proof candidate choice.','incompatible-choice');
-     p={...p,type:p.type||inferIntroduction(remainingGoal,p.kind)};
-     const names=freeNames(p.type);
-     for(const n of names)if((planned.has(n)||occupied.has(n)||closed.has(n))&&!visible.has(n))throw Error('Ambiguous or forward reference in introduction: '+n);
-     remainingGoal=extendGoal(remainingGoal,p);
-     const step={kind:p.kind,name:p.name,type:p.type};
-     occupied.add(p.name);visible.add(p.name);facts.set(p.name,p.type);
-     const dependencies=names.filter(n=>openNames.has(n));
-     if(dependencies.length)openNames.add(p.name);
-     const proofStatus=dependencies.length?'depends-on-open':'candidate';
-     rows.push({...p,line,status:'translated',proofStatus,resolutionStatus:candidateResolution(proofStatus),dependencies,remainingGoal,step,candidates:[]});steps.push(step);continue;
-    }
-    if(p.kind==='define'){
-      if(last)throw resolutionError('A definition must be followed by a conclusion.','incompatible-target');
-      if(occupied.has(p.name))throw resolutionError('This local name already exists.','incompatible-choice');
-      if(choices.has(line))throw resolutionError('A definition has no proof candidate choice.','incompatible-choice');
-     const free=freeNames(p.type,p.value);
-     for(const n of free)if((planned.has(n)||occupied.has(n)||closed.has(n))&&!visible.has(n))throw Error('Ambiguous or forward reference in definition: '+n);
-     const dependencies=[...free].filter(n=>openNames.has(n));
-     const proofStatus=dependencies.length?'depends-on-open':'candidate';
-     const step={kind:'define',name:p.name,type:p.type,value:p.value};
-     occupied.add(p.name);visible.add(p.name);facts.set(p.name,p.type);
-     if(dependencies.length)openNames.add(p.name);
-     rows.push({...p,line,status:blocked?'provisional':'translated',proofStatus,resolutionStatus:candidateResolution(proofStatus),dependencies,step,candidates:[]});steps.push(step);continue;
-    }
-     if(p.conclusion&&!last)throw resolutionError('A conclusion must be the last inference.','incompatible-target');
-     if(last&&p.name)throw resolutionError('The final inference must conclude the goal, not name a fact.','incompatible-target');
-    const missing=unavailable(p.type);
-    if(missing)throw Error('Ambiguous or forward reference in proposition: '+missing);
-    let application='?',candidates=[];
-    function chosen(){
-     if(!choices.has(line))return null;
-     const candidate=candidates.find(c=>c.term===choices.get(line));
-     if(!candidate)throw resolutionError('Selected candidate is no longer available.','incompatible-choice');
-     return candidate.term;
-    }
-    const frame=premiseFrame(p.forwardText||p.ruleText,[...visible]);
-    const discourse=discourseFrame(p.forwardText||p.ruleText);
-    if(p.citation||frame||discourse){
-      const resolution=p.citation?citationCandidates(p.citation,[...visible],facts):discourse?discourseCandidates(discourse,p.type,rows,[...visible],facts):{candidates:contextCandidates(p.type,frame.premises,facts),overflow:false};
-      candidates=resolution.candidates;
-      const picked=chosen();
-      if(!picked&&resolution.overflow){unresolved(p,raw,line,last,{candidates,resolutionStatus:'budget-exhausted',reason:'Too many matching formula citations; name a specific premise.'});continue;}
-      if(!picked&&candidates.length!==1){
-       const missingType=(discourse||frame)?.premises?.some(name=>!facts.has(name));
-       const resolutionStatus=candidates.length?'ambiguous':missingType?'needs-context':'no-supported-match';
-       unresolved(p,raw,line,last,{frame:discourse||frame,candidates,resolutionStatus,reason:candidates.length?'Multiple structural interpretations; specify the rule and ordered premises.':missingType?'A cited premise has no available type; add its context before resolving this inference.':'No structural match under the supported rules for these premises.'});continue;
-      }
-      application=picked||candidates[0].term;
-    }else if(p.ruleText&&p.ruleText!=='?'){
-      const words=p.ruleText.split(/\s+/);
-      if(words.length<=9&&words.every(w=>namePattern.test(w)&&visible.has(w)))application=words.join(' ');
-      else if(words.length<=9&&words.every(w=>namePattern.test(w))&&words.some(w=>visible.has(w))&&words.some(w=>!visible.has(w)&&!ruleGlueWords.has(w.toLowerCase()))){
-       const missing=words.find(w=>!visible.has(w)&&!ruleGlueWords.has(w.toLowerCase()));
+      const details={candidates,domai…2342 tokens truncated…as(w.toLowerCase()));
        throw resolutionError('Unknown or unavailable local premise: '+missing+'.','needs-context');
       }
       else {
@@ -395,10 +290,11 @@ function evaluateScopeAware(input,scope=[],context=new Map(),options={}){
   // keep the lighter row-prefix cache; cloning a whole inner graph on every
   // branch hit costs more than recompiling that bounded wrapper.
   const shared=currentFrame.id==='root'?segmentOptions.cache:null;
-  const rootCase=String(text||'').split(/\r?\n/).some(line=>!line.startsWith(' ')&&!line.startsWith('\t')&&hasCaseSplitHeader(line.trim()));
+  const rootBlock=String(text||'').split(/\r?\n/).some(line=>!line.startsWith(' ')&&!line.startsWith('\t')&&
+   (hasCaseSplitHeader(line.trim())||hasConjunctionGoalHeader(line.trim())));
   // Small linear fragments are cheaper to rebuild than to deep-clone. Reserve
   // whole-result memoization for scoped programs or substantial source text.
-  if(!shared||(!rootCase&&String(text||'').length<512))return compileSegmentFresh(text,currentFrame,segmentOptions);
+  if(!shared||(!rootBlock&&String(text||'').length<512))return compileSegmentFresh(text,currentFrame,segmentOptions);
   const key=segmentCacheKey(text,currentFrame,segmentOptions),memo=shared.segmentResults??=new Map();
   const cached=memo.get(key);
   if(cached){
@@ -417,20 +313,32 @@ function evaluateScopeAware(input,scope=[],context=new Map(),options={}){
  function compileSegmentFresh(text,currentFrame,segmentOptions={}){
   const names=proofScopeNames(currentFrame),facts=proofScopeFacts(currentFrame);
   const lines=String(text||'').split(/\r?\n/),first=lines.findIndex(line=>line.trim());
-  const caseIndex=lines.findIndex((line,index)=>index>=0&&!line.startsWith(' ')&&!line.startsWith('\t')&&hasCaseSplitHeader(line.trim()));
-  if(caseIndex>=0&&caseIndex===first)return compileCaseProgram(text,currentFrame,segmentOptions,compileSegment);
-  if(caseIndex>first){
+  const blockIndex=lines.findIndex(line=>!line.startsWith(' ')&&!line.startsWith('\t')&&
+   (hasCaseSplitHeader(line.trim())||hasConjunctionGoalHeader(line.trim())));
+  const blockKind=blockIndex>=0&&hasCaseSplitHeader(lines[blockIndex].trim())?'cases':'conjunction';
+  if(blockIndex>=0&&blockIndex===first){
+   if(blockKind==='cases')return compileCaseProgram(text,currentFrame,segmentOptions,compileSegment);
+   return compileConjunctionGoal(text,currentFrame,segmentOptions,compileSegment,parseLine);
+  }
+  if(blockIndex>first){
    const lineOffset=segmentOptions.lineOffset||0;
-   const prefix=draftProof(lines.slice(0,caseIndex).join('\n'),names,facts,{...segmentOptions,lineOffset,continuation:true,
+   const prefix=draftProof(lines.slice(0,blockIndex).join('\n'),names,facts,{...segmentOptions,lineOffset,continuation:true,
     cache:cacheForFrame(currentFrame,segmentOptions.cache),scopeIds:currentFrame.bindings.map(binding=>binding.id)});
    prefix.graph=remapProofGraph(prefix.graph,currentFrame);
    const nextFrame=extendFromDraft(currentFrame,prefix);
    const hasOpenText=prefix.rows.some(row=>row.status==='unresolved');
-   const following=compileCaseProgram(lines.slice(caseIndex).join('\n'),nextFrame,{...segmentOptions,
-    goal:prefix.remainingGoal,lineOffset:lineOffset+caseIndex,
-    openBindings:[...new Set([...(segmentOptions.openBindings||[]),...(prefix.openBindings||[])])],
-    incompleteContext:!!segmentOptions.incompleteContext||hasOpenText
-   },compileSegment);
+   const remainingText=lines.slice(blockIndex).join('\n');
+   const following=blockKind==='cases'
+    ?compileCaseProgram(remainingText,nextFrame,{...segmentOptions,
+      goal:prefix.remainingGoal,lineOffset:lineOffset+blockIndex,
+      openBindings:[...new Set([...(segmentOptions.openBindings||[]),...(prefix.openBindings||[])])],
+      incompleteContext:!!segmentOptions.incompleteContext||hasOpenText
+     },compileSegment)
+     :compileConjunctionGoal(remainingText,nextFrame,{...segmentOptions,
+      goal:prefix.remainingGoal,lineOffset:lineOffset+blockIndex,
+      openBindings:[...new Set([...(segmentOptions.openBindings||[]),...(prefix.openBindings||[])])],
+      incompleteContext:!!segmentOptions.incompleteContext||hasOpenText,cache:segmentOptions.cache
+     },compileSegment,parseLine);
    return combineSegments(prefix,following);
   }
   const result=draftProof(text,names,facts,{...segmentOptions,lineOffset:segmentOptions.lineOffset||0,

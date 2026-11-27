@@ -79,3 +79,16 @@ test('candidate selection and graph identities use physical lines inside branche
  const shifted=reconcileDraftIdentity(before,compileNaturalDraft(edited,[...ctx.keys()],ctx,{goal:'P',choices:new Map([[6,'hp'],[8,'p1'],[11,'hR']])}).graph);
  assert.deepEqual([...migrateDraftChoices(before,shifted,choices)].sort((a,b)=>a[0]-b[0]),[[6,'hp'],[8,'p1'],[11,'hR']]);
 });
+
+test('candidate choices inside child goals follow a unique unchanged subgoal after line shifts',()=>{
+ const ctx=new Map([['p1','P'],['p2','P'],['q','Q']]),sc=[...ctx.keys()];
+ const input='split conjunction\n  first goal\n    $P$\n  second goal\n    $Q$ | q';
+ const choices=new Map([[3,'p1']]);
+ const oldResult=compileNaturalDraft(input,sc,ctx,{goal:'P ∧ Q',choices});
+ const old=reconcileDraftIdentity(null,oldResult.graph);
+ const shiftedText=input.replace('  first goal\n','  first goal\n\n');
+ const shiftedResult=compileNaturalDraft(shiftedText,sc,ctx,{goal:'P ∧ Q'});
+ const shifted=reconcileDraftIdentity(old,shiftedResult.graph);
+ assert.equal(shifted.ids.get('root/subgoal:1:first/line:4'),old.ids.get('root/subgoal:1:first/line:3'));
+ assert.deepEqual([...migrateDraftChoices(old,shifted,choices)],[[4,'p1']]);
+});

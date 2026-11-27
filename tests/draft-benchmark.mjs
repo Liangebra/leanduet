@@ -67,6 +67,11 @@ const interleaved=['establish hr : $R$ | f p',
 const interleavedEdit=interleaved.replace('$T$ | jT','$T$ | ht');
 const sequenceSession=createDraftSession();
 
+const conjunctionFacts=new Map([['hp','P'],['hq','Q'],['hq2','Q']]),conjunctionScope=[...conjunctionFacts.keys()];
+const conjunction=`split conjunction\n  first goal\n    $P$ | hp\n  second goal\n    $Q$ | hq`;
+const conjunctionEdit=conjunction.replace('$Q$ | hq','$Q$ | hq2');
+const conjunctionSession=createDraftSession();
+
 const results=[
  measure({name:'cold full evaluation · 16 proof lines / 62 typed locals',evaluate:cold.evaluate,reference:cold.reference,inputAt:()=>lastH14}),
  measure({name:'warm exact replay · 16 proof lines / 62 typed locals',evaluate:text=>warm.evaluate(text,scope,facts),reference:cold.reference,inputAt:()=>lastH14,expectedReuse:16}),
@@ -76,7 +81,9 @@ const results=[
  measure({name:'nested case scopes · exact replay',evaluate:text=>caseDraft.evaluate(text,caseScope,caseFacts,{goal:'P'}),reference:text=>compileNaturalDraft(text,caseScope,caseFacts,{goal:'P'}),inputAt:()=>deepCase}),
  measure({name:'nested case scopes · one branch conclusion edit',evaluate:text=>caseDraft.evaluate(text,caseScope,caseFacts,{goal:'P'}),reference:text=>compileNaturalDraft(text,caseScope,caseFacts,{goal:'P'}),inputAt:()=>deepCaseEdited,beforeSample:()=>{caseDraft.reset();caseDraft.evaluate(deepCase,caseScope,caseFacts,{goal:'P'});}}),
  measure({name:'interleaved sequence · cold / 2 case blocks',evaluate:text=>compileNaturalDraft(text,sequenceScope,sequenceFacts,{goal:'T'}),reference:text=>compileNaturalDraft(text,sequenceScope,sequenceFacts,{goal:'T'}),inputAt:()=>interleaved}),
- measure({name:'interleaved sequence · replay and terminal edit',evaluate:text=>sequenceSession.evaluate(text,sequenceScope,sequenceFacts,{goal:'T'}),reference:text=>compileNaturalDraft(text,sequenceScope,sequenceFacts,{goal:'T'}),inputAt:()=>interleavedEdit,beforeSample:()=>{sequenceSession.reset();sequenceSession.evaluate(interleaved,sequenceScope,sequenceFacts,{goal:'T'});}})
+ measure({name:'interleaved sequence · replay and terminal edit',evaluate:text=>sequenceSession.evaluate(text,sequenceScope,sequenceFacts,{goal:'T'}),reference:text=>compileNaturalDraft(text,sequenceScope,sequenceFacts,{goal:'T'}),inputAt:()=>interleavedEdit,beforeSample:()=>{sequenceSession.reset();sequenceSession.evaluate(interleaved,sequenceScope,sequenceFacts,{goal:'T'});}}),
+ measure({name:'conjunction child goals · cold',evaluate:text=>compileNaturalDraft(text,conjunctionScope,conjunctionFacts,{goal:'P ∧ Q'}),reference:text=>compileNaturalDraft(text,conjunctionScope,conjunctionFacts,{goal:'P ∧ Q'}),inputAt:()=>conjunction}),
+ measure({name:'conjunction child goals · second-goal edit',evaluate:text=>conjunctionSession.evaluate(text,conjunctionScope,conjunctionFacts,{goal:'P ∧ Q'}),reference:text=>compileNaturalDraft(text,conjunctionScope,conjunctionFacts,{goal:'P ∧ Q'}),inputAt:()=>conjunctionEdit,beforeSample:()=>{conjunctionSession.reset();conjunctionSession.evaluate(conjunction,conjunctionScope,conjunctionFacts,{goal:'P ∧ Q'});}})
 ];
 
 textOutput({node:process.version,platform:process.platform,architecture:process.arch,warmup,samples,results});
