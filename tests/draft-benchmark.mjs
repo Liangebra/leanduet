@@ -1,23 +1,64 @@
-// Opt-in synthetic latency comparison: node tests/draft-benchmark.mjs
+// Opt-in synthetic latency and cache-equivalence checks: node tests/draft-benchmark.mjs
 import {performance} from 'node:perf_hooks';
 import assert from 'node:assert/strict';
 import {draftProof,createDraftSession} from '../web/natural-draft.mjs';
-const facts=new Map([['p','P'],['f','P → P']]);
+
+const warmup=24,samples=160;
+const facts=new Map([['p','P'],['h15','P']]);
 for(let i=0;i<60;i++)facts.set('irrelevant'+i,'T'+i);
 const scope=['P',...facts.keys()];
-const prefix=Array.from({length:15},(_,i)=>'establish h'+i+' : $P$ | from '+(i?'h'+(i-1):'p')).join('\n');
-const texts=[prefix+'\n$P$ | from h14',prefix+'\n$P$ | h14'];
-function measure(evaluate){
- const times=[];let reused=0;
- for(let i=0;i<120;i++){
-  const start=performance.now(),r=evaluate(texts[i%2]);
-  const elapsed=performance.now()-start;
-  assert.equal(r.complete,true);
-  assert.match(r.term,/exact h14$/);
-  if(i>=20){times.push(elapsed);reused+=r.reusedRows||0;}
- }
- times.sort((a,b)=>a-b);
- return {medianMs:times[50],p95Ms:times[95],meanReusedRows:reused/times.length};
+const prefix=Array.from({length:15},(_,i)=>'establish h'+i+' : $P$ | '+(i?'h'+(i-1):'p')).join('\n');
+const lastH14=prefix+'\n$P$ | h14';
+const lastH15=prefix+'\n$P$ | h15';
+const localEdit=lastH14.replace('establish h7 : $P$ | h6','establish h7 : $P$ | h15');
+
+function stripReuse(result){const {reusedRows,...structural}=result;return structural;}
+function distribution(times){
+ const sorted=[...times].sort((a,b)=>a-b);
+ return {medianMs:sorted[Math.floor((sorted.length-1)*0.5)],p95Ms:sorted[Math.ceil(sorted.length*0.95)-1]};
 }
-const session=createDraftSession();
-console.log(JSON.stringify({case:'16 lines / 62 typed locals / last-line edit',full:measure(s=>draftProof(s,scope,facts)),incremental:measure(s=>session.evaluate(s,scope,facts))},null,2));
+function measure({name,evaluate,reference,inputAt,expectedReuse=null}){
+ for(let i=0;i<warmup;i++)evaluate(inputAt(i));
+ const times=[],reuse=[];
+ for(let i=0;i<samples;i++){
+  const input=inputAt(i),start=performance.now(),actual=evaluate(input),elapsed=performance.now()-start;
+  const expected=reference(input);
+  assert.deepEqual(stripReuse(actual),stripReuse(expected),name+' incremental/full result mismatch at sample '+i);
+  if(expectedReuse!==null)assert.equal(actual.reusedRows,expectedReuse,name+' reused-prefix count');
+  times.push(elapsed);reuse.push(actual.reusedRows||0);
+ }
+ return {case:name,...distribution(times),meanReusedRows:Number((reuse.reduce((a,b)=>a+b,0)/reuse.length).toFixed(2)),samples};
+}
+
+const warm=createDraftSession();
+const toggle=createDraftSession();
+const edit=createDraftSession();
+const cold={evaluate:text=>draftProof(text,scope,facts),reference:text=>draftProof(text,scope,facts)};
+
+function nestedCases(depth,max){
+ const header='cases h'+depth+', establish r'+depth+' : $P$';
+ const leftBody=depth+1===max?'$P$ | p':nestedCases(depth+1,max);
+ return [header,
+  '  left case l'+depth,
+  ...leftBody.split('\n').map(line=>'    '+line),
+  '  right case rr'+depth,
+  '    $P$ | p',
+  '$P$ | r'+depth
+ ].join('\n');
+}
+const caseFacts=new Map([['P','Prop'],['p','P']]);
+for(let i=0;i<8;i++)caseFacts.set('h'+i,'P ∨ P');
+const caseScope=[...caseFacts.keys()],deepCase=nestedCases(0,8),caseDraft=createDraftSession(),caseReference=createDraftSession();
+const caseLineCount=deepCase.split('\n').filter(line=>line.trim()).length;
+assert.ok(caseLineCount<=64,'nested case benchmark must remain inside the supported source bound');
+
+const results=[
+ measure({name:'cold full evaluation · 16 proof lines / 62 typed locals',evaluate:cold.evaluate,reference:cold.reference,inputAt:()=>lastH14}),
+ measure({name:'warm exact replay · 16 proof lines / 62 typed locals',evaluate:text=>warm.evaluate(text,scope,facts),reference:cold.reference,inputAt:()=>lastH14,expectedReuse:16}),
+ measure({name:'single-character final premise edit · 15-row prefix',evaluate:text=>toggle.evaluate(text,scope,facts),reference:cold.reference,inputAt:i=>i%2?lastH14:lastH15,expectedReuse:15}),
+ measure({name:'local proof-dependency edit · 7-row prefix',evaluate:text=>edit.evaluate(text,scope,facts),reference:cold.reference,inputAt:i=>i%2?lastH14:localEdit,expectedReuse:7}),
+ measure({name:'nested case scopes · '+caseLineCount+' lines / 8 levels',evaluate:()=>caseDraft.evaluate(deepCase,caseScope,caseFacts,{goal:'P'}),reference:()=>caseReference.evaluate(deepCase,caseScope,caseFacts,{goal:'P'}),inputAt:()=>deepCase})
+];
+
+textOutput({node:process.version,platform:process.platform,architecture:process.arch,warmup,samples,results});
+function textOutput(value){console.log(JSON.stringify(value,null,2));}
