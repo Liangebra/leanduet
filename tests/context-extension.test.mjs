@@ -164,6 +164,22 @@ test('an open branch preserves the parent continuation as dependent semantic str
  assert.ok(conclusion.dependencies.includes(intermediate.id),'later prose remains connected to its local result');
 });
 
+test('resolving an open branch closes the provisional dependency and matches a cold evaluation',()=>{
+ const facts=new Map([['P','Prop'],['Q','Prop'],['R','Prop'],['h','P ∨ Q'],['f','P → R'],['g','Q → R']]);
+ const open='cases h, establish hR : $R$\n  left case hp\n    unsupported ⊛\n  right case hq\n    $R$ | g hq\n$R$ | hR';
+ const resolved=open.replace('unsupported ⊛','$R$ | f hp');
+ const session=createDraftSession();
+ assert.equal(session.evaluate(open,[...facts.keys()],facts,{goal:'R'}).complete,false);
+ const incremental=session.evaluate(resolved,[...facts.keys()],facts,{goal:'R'});
+ const cold=createDraftSession().evaluate(resolved,[...facts.keys()],facts,{goal:'R'});
+ assert.equal(incremental.complete,true);
+ assert.ok(incremental.term);
+ assert.equal(incremental.rows.at(-1).proofStatus,'candidate');
+ assert.equal(incremental.reusedRows,0,'case blocks currently use a full block evaluation');
+ assert.deepEqual(incremental.graph,cold.graph);
+ assert.deepEqual(incremental.rows,cold.rows);
+});
+
 test('a branch local name remains unavailable in a continuation after its branch is open',()=>{
  const facts=new Map([['P','Prop'],['Q','Prop'],['R','Prop'],['h','P ∨ Q'],['g','Q → R']]);
  const input='cases h, establish hR : $R$\n  left case hp\n    unsupported ⊛\n  right case hq\n    $R$ | g hq\n$R$ | hp';
