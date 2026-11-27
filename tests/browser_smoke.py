@@ -236,7 +236,7 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
             case_page.locator("#inferChain").click()
             expect(case_page.locator("#draftTranslation")).to_contain_text("exact And.left hx")
             case_page.locator("#compileChain").click()
-            expect(case_page.locator("#patchTerm")).to_contain_text("exact And.left hx")
+            expect(case_page.locator("#patchTerm")).to_have_value(__import__("re").compile(r"exact And\.left hx"))
             case_page.locator("#checkPatch").click()
             expect(case_page.locator("#applyPatch")).to_be_enabled(timeout=120000)
             case_page.close()
