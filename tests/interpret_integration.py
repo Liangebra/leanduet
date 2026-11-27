@@ -363,11 +363,11 @@ print("Conjunction, equivalence and explicit existential child goals accepted by
 # requested predicate. Both fragments come from the browser's actual parser.
 restricted_script = """
 import {compileNaturalDraft} from './web/natural-draft.mjs';
-const universalFacts=new Map([['A','Set Nat'],['hall','∀ x : Nat, x ∈ A → P x']]);
+const universalFacts=new Map([['A','List Nat'],['hall','∀ x : Nat, x ∈ A → P x']]);
 const universal=compileNaturalDraft(`take an arbitrary element x : $Nat$ in A satisfying $P(x)$
 assume hx : $x ∈ A$
 $P(x)$ | hall x hx`,['A','hall'],universalFacts,{goal:'∀ x ∈ A, P x'});
-const existentialFacts=new Map([['A','Set Nat'],['h','∃ x ∈ A, P x'],['hq','Q']]);
+const existentialFacts=new Map([['A','List Nat'],['h','∃ x ∈ A, P x'],['hq','Q']]);
 const existential=compileNaturalDraft(`take an element x : $Nat$ in A satisfying $P(x)$ from h
 $Q$ | hq`,['A','h','hq'],existentialFacts,{goal:'Q'});
 console.log(JSON.stringify([universal.term,existential.term]));
@@ -380,10 +380,10 @@ assert "rcases duet_exists_x with ⟨x, h_x⟩" in restricted_existential, restr
 with TemporaryDirectory() as tmp:
     target = Path(tmp) / "RestrictedElements.lean"
     target.write_text(
-        "theorem restricted_forall (A : Set Nat) (P : Nat → Prop) "
+        "theorem restricted_forall (A : List Nat) (P : Nat → Prop) "
         "(hall : ∀ x : Nat, x ∈ A → P x) : ∀ x ∈ A, P x := "
         + restricted_universal + "\n"
-        + "theorem restricted_exists (A : Set Nat) (P : Nat → Prop) (Q : Prop) "
+        + "theorem restricted_exists (A : List Nat) (P : Nat → Prop) (Q : Prop) "
         + "(h : ∃ x ∈ A, P x) (hq : Q) : Q := "
         + restricted_existential + "\n", encoding="utf-8")
     subprocess.run(["lean", str(target)], cwd=root, check=True)
