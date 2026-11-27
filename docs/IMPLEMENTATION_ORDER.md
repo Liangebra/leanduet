@@ -124,6 +124,11 @@ text and checks that subsequent edits invalidate the staged patch.
 latency comparison; results are environment-dependent and do not establish a
 real-world latency guarantee. More realistic mathematical corpora and
 cross-version bidirectional testing are still required.
+`tests/fixtures/mathlib-cases.json` stores the compact-image topology example with
+its prose, controlled draft, expected structure, theorem header and context
+closure. The JavaScript structural test and pinned Mathlib integration consume
+the same record; Mathlib CI compiles the generated candidate. This single
+case is a corpus seed, not broad analysis or algebra coverage.
 
 ## Cross-revision draft correspondence (conservative subset)
 
