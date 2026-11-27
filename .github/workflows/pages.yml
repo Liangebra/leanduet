@@ -25,7 +25,15 @@ jobs:
         with:
           python-version: '3.12'
       - run: node --test tests/*.test.mjs
-      - run: |
+      - name: Disable unrelated Microsoft apt feed
+        run: |
+          for source in /etc/apt/sources.list.d/*; do
+            if [ -f "$source" ] && grep -q 'packages.microsoft.com' "$source"; then
+              sudo mv "$source" "$source.disabled"
+            fi
+          done
+      - name: Install Playwright Chromium
+        run: |
           python -m pip install playwright==1.51.0
           python -m playwright install --with-deps chromium
       - name: Install pinned Lean toolchain for static proof trees

@@ -20,8 +20,14 @@ export function rootProofScope(names,facts,{goal=null,id='root'}={}){
 
 export function resolveProofName(scope,name){
  const matches=scope.bindings.filter(binding=>binding.name===name);
+ if(!matches.length)return {status:'missing',bindings:[]};
+ // A local declaration is the nearest lexical binding in this flattened
+ // scope. Root-context duplicates have no such ordering information and stay
+ // ambiguous until a child scope explicitly shadows them.
+ const locals=matches.filter(binding=>binding.local);
+ if(locals.length)return {status:'resolved',binding:locals.at(-1),shadowed:matches.filter(binding=>binding!==locals.at(-1))};
  return matches.length===1?{status:'resolved',binding:matches[0]}:
-  {status:matches.length?'ambiguous':'missing',bindings:matches};
+  {status:'ambiguous',bindings:matches};
 }
 
 export function extendProofScope(scope,binding){
@@ -32,10 +38,14 @@ export function extendProofScope(scope,binding){
  return {...scope,bindings:[...scope.bindings,{...binding,local:true}]};
 }
 
-export function forkProofScope(parent,{id,goal,binding}){
+export function forkProofScope(parent,{id,goal,binding,allowShadow=false}){
  if(typeof id!=='string'||!id||id===parent.id)throw Error('A child proof scope needs a distinct identity.');
  const child={id,parentId:parent.id,goal:formulaKey(goal),goalText:goal,bindings:[...parent.bindings]};
- const extended=extendProofScope(child,binding);
+ if(!binding||typeof binding.id!=='string'||!identifier.test(binding.name||'')||typeof binding.type!=='string')
+  throw Error('Invalid proof-scope binding.');
+ if(child.bindings.some(item=>item.id===binding.id))throw Error('Proof-scope identity already exists.');
+ if(!allowShadow&&resolveProofName(child,binding.name).status!=='missing')throw Error('A binding with this name is already visible.');
+ const extended={...child,bindings:[...child.bindings,{...binding,local:true}]};
  return {...extended,localBindingIds:[binding.id]};
 }
 
@@ -57,5 +67,23 @@ export function closeProofScope(parent,child,{proofType,dependencies=[],localIds
  return {type:child.goalText,dependencies:[...returned],discharged:[...childIds]};
 }
 
-export function proofScopeNames(scope){return scope.bindings.map(binding=>binding.name);}
-export function proofScopeFacts(scope){return new Map(scope.bindings.filter(binding=>binding.type!==null).map(binding=>[binding.name,binding.type]));}
+/**
+ * Return the context presentation consumed by the draft graph builder. An
+ * unshadowed duplicate root name appears more than once so the graph can mark
+ * it ambiguous. A lexical local binding replaces every older spelling.
+ */
+export function proofScopeBindings(scope){
+ const byName=new Map();
+ for(const binding of scope.bindings){
+  if(!byName.has(binding.name))byName.set(binding.name,[]);
+  byName.get(binding.name).push(binding);
+ }
+ const visible=[];
+ for(const bindings of byName.values()){
+  const locals=bindings.filter(binding=>binding.local);
+  visible.push(...(locals.length?[locals.at(-1)]:bindings));
+ }
+ return visible.sort((left,right)=>scope.bindings.indexOf(left)-scope.bindings.indexOf(right));
+}
+export function proofScopeNames(scope){return proofScopeBindings(scope).map(binding=>binding.name);}
+export function proofScopeFacts(scope){return new Map(proofScopeBindings(scope).filter(binding=>binding.type!==null).map(binding=>[binding.name,binding.type]));}

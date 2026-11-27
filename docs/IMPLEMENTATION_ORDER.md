@@ -40,6 +40,17 @@ possible candidate dependencies by default. This is a dependency index, not
 yet an incremental scheduler. The native kernel judgment is not reconstructed
 from this speculative graph.
 
+## Small interpreted syntax fragment
+
+`lean/Scoped.lean` first proves substitution laws for an untyped scope-indexed
+operator tree, then adds a separate, intrinsically typed fragment with
+natural-number expressions and first-order propositions. Its Lean denotation
+is preserved by capture-avoiding substitution, including under universal
+binders; an erasure map into the generic tree also preserves substitution.
+This is an initial semantic correspondence, not a conversion from the browser
+AST to Lean `Expr`, and it excludes dependent object types, predicates beyond
+equality, arbitrary constants, and incomplete terms.
+
 ## Explicit candidate resolution
 
 A draft choice is a line-local selection of a currently available candidate;
@@ -218,8 +229,10 @@ edges; cache replay restores both bindings. Conditional projection lookahead
 stops at this scope boundary. An assumption can also consume a matching
 negated goal, leaving `False` as the residual obligation. This is intuitionistic:
 classical double-negation elimination is never inserted. A bare local reference
-whose type is known is compared structurally with its stated conclusion;
-nontrivial applications still require Lean's independent check. From `False`,
+whose type is known is compared in the scoped surface grammar, including the
+built-in equivalence between `Not P` and `¬ P`; other structural mismatches
+remain unresolved and explicitly state that Lean definitional equality was not
+checked. Nontrivial applications still require Lean's independent check. From `False`,
 users can apply an explicit rule such as `False.elim`. The structured backend
 checks the annotations with Lean. Existential elimination remains a linear scope extension; it is
 not arbitrary dependent pattern matching or implicit type inference.

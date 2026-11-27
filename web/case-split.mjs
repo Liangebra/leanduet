@@ -1,6 +1,6 @@
 import {compileFormula,renderFormula,sameScopedFormula} from './math-formula.mjs';
 import {buildDraftGraph} from './draft-graph.mjs';
-import {closeProofScope,extendProofScope,forkProofScope,proofScopeFacts,proofScopeNames,resolveProofName} from './proof-scope.mjs';
+import {closeProofScope,extendProofScope,forkProofScope,proofScopeBindings,proofScopeFacts,proofScopeNames,resolveProofName} from './proof-scope.mjs';
 import {renderChain} from './proof-chain.mjs';
 
 const ident='[A-Za-z_][A-Za-z0-9_\']{0,63}';
@@ -17,6 +17,16 @@ function disjunction(sourceType){
  if(ast.kind==='binary'&&ast.op==='∨')return [ast.left,ast.right];
  if(ast.kind==='call'&&ast.fn?.kind==='id'&&ast.fn.value==='Or'&&ast.args.length===2)return ast.args;
  throw Error('The cited local premise must have a supported disjunction type P ∨ Q.');
+}
+
+function hasFreeName(text,name){
+ const tree=compileFormula(text,{syntax:'lean'}).scoped;
+ function visit(node){
+  if(!node||typeof node!=='object')return false;
+  if(node.kind==='free'&&node.name===name)return true;
+  return Object.values(node).some(value=>Array.isArray(value)?value.some(visit):visit(value));
+ }
+ return visit(tree);
 }
 
 function parseBlock(input,lineOffset){
@@ -64,7 +74,7 @@ function parseBlock(input,lineOffset){
 function mapId(id,frame){
  if(typeof id!=='string')return id;
  const context=/^context:(\d+)$/.exec(id);
- if(context)return frame.bindings[Number(context[1])]?.id||id;
+ if(context)return proofScopeBindings(frame)[Number(context[1])]?.id||id;
  if(frame.id!=='root'&&/^(?:line:|constraint:)/.test(id))return frame.id+'/'+id;
  return id;
 }
@@ -167,11 +177,13 @@ export function compileCaseProgram(input,frame,{goal=null,choices=new Map(),line
  const branchTypes={inl:leftType,inr:rightType};
  const branchResults=[];let firstOpen=null;
  for(const branch of parsed.branches){
-  if(resolveProofName(frame,branch.name).status!=='missing')throw Error('A branch-local name must be fresh in its parent context.');
+  const hidden=resolveProofName(frame,branch.name);
+  if(hidden.status!=='missing'&&(hasFreeName(parsed.type,branch.name)||hasFreeName(branchTypes[branch.constructor],branch.name)))
+   throw Error('A branch-local name would capture a parent reference in the branch goal or assumption type; use a fresh spelling.');
   const childId=frame.id+'/case:'+parsed.head.line+':'+branch.constructor;
   const child=forkProofScope(frame,{id:childId,goal:parsed.type,binding:{
    id:childId+':binding',name:branch.name,type:branchTypes[branch.constructor],kind:'case-assumption'
-  }});
+  },allowShadow:true});
   const body=branch.sourceLines.join('\n');
   const result=compileSegment(body,child,{goal:parsed.type,choices,lineOffset:branch.bodyLineOffset,closedNames:[...closedNames,...parsed.branches.filter(b=>b!==branch&&b.name!==branch.name).map(b=>b.name)],openBindings});
   if(!result.complete){

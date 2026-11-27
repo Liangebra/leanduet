@@ -18,13 +18,19 @@ uses the Lean precedences for `+` and union (65), and `*` and intersection
 (70), so mixed expressions preserve the parsed tree. This is syntax support;
 it does not by itself add union reasoning rules.
 
-A second aligned case now targets Mathlib 4.19's `IsCompact.image`. The formula
-grammar represents `f '' s` using the pinned Mathlib `infixl:80` notation, and
-the Chinese rule alias “紧集的连续像” can select `IsCompact.image` with the
-explicit premises `hs` and `hf`. A targeted Mathlib integration compiles the
-generated theorem and checks the extracted dependent context closure, including
-both topology instances. This is one bounded theorem path, not general Mathlib
-prose translation; the Mathlib workflow run remains required before merge.
+A second aligned case targets Mathlib 4.19's `IsCompact.image`. The formula grammar represents `f '' s` using pinned Mathlib notation, and the Chinese alias “紧集的连续像” selects `IsCompact.image` with explicit premises `hs` and `hf`. Mathlib CI compiles this generated theorem and checks dependent context closure, including topology instances. This is one bounded theorem path, not general Mathlib prose translation.
+
+Case scopes now resolve a branch-local declaration by lexical identity even
+when it shadows a parent spelling. Closing the branch discharges that local
+identity; a later parent continuation again resolves the original parent
+object. Repeated names in the root context remain ambiguous, and siblings may
+reuse a display name without sharing identity. The graph's positional context
+IDs are remapped through the visible scope projection, so a shadow does not
+redirect an inherited object to the wrong declaration. The bounded formula
+view still cannot preserve a parent free-name identity through arbitrary
+shadowing, so it refuses a shadow that would capture a name in the case goal
+or arm type; generated Lean remains a candidate until the separate compiler
+checks it.
 
 ## Merged foundation
 

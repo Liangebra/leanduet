@@ -7,7 +7,7 @@ properties. No upstream source is copied.
 
 | Stage | Reference | Adopt selectively |
 | --- | --- | --- |
-| 1 | Ranta, [Type theory and the informal language of mathematics](https://ncatlab.org/nlab/files/InfLang.pdf); GF/Informath; [Hazelnut](https://arxiv.org/abs/1607.04180) | Typed abstract syntax, incomplete expressions, separate concrete realization |
+| 1 | Ranta, [Type theory and the informal language of mathematics](https://ncatlab.org/nlab/files/InfLang.pdf); GF/Informath; [Hazelnut](https://arxiv.org/abs/1607.04180) | Typed abstract syntax, incomplete expressions, separate concrete realization; check substitution against a small denotational interpretation |
 | 2 | [FaithAlign](https://arxiv.org/abs/2610.18498); [LeanArchitect](https://doi.org/10.4230/LIPIcs.ITP.2026.25) | Object identity and region-to-object links; preserve author wording separately |
 | 3 | [Pistis](https://arxiv.org/abs/2608.15432); [FaithSieve](https://arxiv.org/abs/2608.26310) | Local obligations and explicit inference provenance; distinguish cited from necessary premises |
 | 4 | [AmbiQT / LogicalBeam](https://aclanthology.org/2023.emnlp-main.436/); shared parse forests | Multiple structural plans; bounded joins, scope-aware candidate constraints; no neural decoder required |
@@ -30,6 +30,10 @@ properties. No upstream source is copied.
   erase proof bodies; they cannot serve as full proof round-trip gold data.
 - Treat the cited preprints as research leads; verify their definitions and
   source implementations before asserting compatibility or reproducing metrics.
+- The typed fragment in `lean/Scoped.lean` is deliberately narrow, over
+  `Nat` and `Prop`. Its substitution theorem checks semantic preservation for
+  that grammar only; it neither serializes nor interprets arbitrary Lean
+  `Expr`, and it is distinct from the browser's incomplete surface AST.
 
 ## Next implementation gates
 

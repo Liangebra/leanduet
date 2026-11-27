@@ -285,13 +285,13 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
       // even when a limited schema finds just one possible proof.
     }
     if(choices.has(line)&&!candidates.some(c=>c.term===choices.get(line)))throw Error('Selected candidate is no longer available.');
-    // A bare local reference has a known type without asking Lean to elaborate
-    // an application. Reject mismatches here; nontrivial applications still
-    // require the independent Lean check.
+    // A bare local reference is the one proof shape whose surface type is
+    // available without elaborating an application. A mismatch blocks export,
+    // but does not decide Lean definitional equality.
     if(namePattern.test(application)&&facts.has(application)){
      let localTypeMatches=null;
      try{localTypeMatches=sameScopedFormula(facts.get(application),p.type);}catch{}
-     if(localTypeMatches===false)throw Error('Known local premise '+application+' has type '+facts.get(application)+', not '+p.type+'.');
+     if(localTypeMatches===false)throw Error('Surface type of local premise '+application+' ('+facts.get(application)+') differs structurally from conclusion ('+p.type+'); Lean definitional equality has not been checked.');
     }
     const applicationPremises=candidates.find(c=>c.term===application)?.premises||application.split(/\s+/);
     const dependencies=[...new Set([...applicationPremises,...freeNames(p.type)].filter(name=>openNames.has(name)))];
