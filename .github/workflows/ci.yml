@@ -38,6 +38,9 @@ jobs:
           python -m pip install playwright==1.51.0
           python -m playwright install --with-deps chromium
       - run: python tests/browser_smoke.py
+      - run: python tests/static_browser.py
+      - run: python scripts/build_demo_trees.py
+      - run: python tests/static_browser.py
       - name: Upload browser screenshot
         if: always()
         uses: actions/upload-artifact@v4
