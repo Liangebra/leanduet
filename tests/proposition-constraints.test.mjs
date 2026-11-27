@@ -96,3 +96,27 @@ test('a globally inconsistent cycle can have locally supported relations',async(
  const r=solveFiniteRelations(vars,relations);
  assert.equal(r.status,'contradiction');assert.deepEqual(r.assignments,[]);
 });
+
+test('a later explicit choice migrates across harmless edits without losing correlation',async()=>{
+ const {reconcileDraftIdentity,migrateDraftChoices}=await import('../web/draft-identity.mjs');
+ const ctx=new Map([['h','P ∧ Q'],['k','(P → R) ∧ (Q → R)']]);
+ const text='建立 hp : $?$,由 h\n建立 hf : $?$,由 k\n由 hp 与 hf 得到 $R$';
+ const choices=new Map([[2,'And.right k']]);
+ const old=reconcileDraftIdentity(null,draftProof(text,[...ctx.keys()],ctx,{choices}).graph);
+ const next='\n'+text;
+ const current=reconcileDraftIdentity(old,draftProof(next,[...ctx.keys()],ctx).graph);
+ const migrated=migrateDraftChoices(old,current,choices);
+ assert.deepEqual([...migrated],[[3,'And.right k']]);
+ const r=draftProof(next,[...ctx.keys()],ctx,{choices:migrated});
+ assert.equal(r.complete,true);
+ assert.equal(r.rows[0].step.application,'And.right h');
+});
+test('a changed downstream choice invalidates earlier cached assignments',()=>{
+ const ctx=new Map([['h','P ∧ Q'],['k','(P → R) ∧ (Q → R)']]);
+ const text='建立 hp : $?$,由 h\n建立 hf : $?$,由 k\n由 hp 与 hf 得到 $R$';
+ const s=createDraftSession(),scope=[...ctx.keys()];
+ assert.equal(s.evaluate(text,scope,ctx,{choices:new Map([[2,'And.left k']])}).rows[0].step.type,'P');
+ const r=s.evaluate(text,scope,ctx,{choices:new Map([[2,'And.right k']])});
+ assert.equal(r.reusedRows,0);assert.equal(r.rows[0].step.type,'Q');
+ assert.deepEqual(r.rows,draftProof(text,scope,ctx,{choices:new Map([[2,'And.right k']])}).rows);
+});

@@ -177,3 +177,8 @@ Scope introductions and definitions are barriers; dependent-source holes,
 implicit inference, arbitrary theorem search and full Lean type inference
 remain outside this subset. Joint constraint edges participate in fixed-point
 invalidation, separately from proof dependencies.
+
+The cross-layer integration fixture compiles both correlated assignments using
+Lean and checks that inconsistent selections produce no exported fragment.
+Identity migration and cache replay tests exercise downstream choices that
+change an earlier inferred proposition.
