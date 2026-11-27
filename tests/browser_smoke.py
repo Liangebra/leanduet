@@ -330,7 +330,7 @@ $P(x)$ | hp""")
             restricted_page.locator('[data-view="typed"]').click()
             restricted_page.locator("#extractTerm").click()
             expect(restricted_page.locator("#typedStatus")).to_contain_text("Extracted from Lean elaboration",timeout=60000)
-            select_typed_edit(restricted_page,includes=("∀","P x"),summary="Use hypothesis",term="hall")
+            select_typed_edit(restricted_page,includes=("∀","P x"),summary="Introduce x",term="fun x hx => hall x hx")
             expect(restricted_page.locator("#patchTarget")).to_contain_text("∀")
             if not restricted_page.locator("#chainEditor").evaluate("(editor) => editor.open"):
                 restricted_page.locator("#chainEditor summary").click()
