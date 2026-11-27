@@ -180,8 +180,8 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
             case_page=browser.new_page(viewport={"width":1440,"height":900})
             case_page.on("pageerror",lambda error:errors.append(str(error)))
             case_page.goto(url)
-            case_source="""theorem interleaved_demo (P Q U V R T : Prop) (h : P ∨ Q) (j : U ∨ V) (p : P)
-    (f : P → R) (g : P → T) (k : Q → T) (l : U → T) (m : V → T) : T := by
+            case_source="""theorem interleaved_demo (h : True ∨ True) (j : True ∨ True) (p : True)
+    (f g k l m : True → True) : True := by
   exact Or.elim h (fun hp => g hp) (fun hq => k hq)
 """
             case_page.locator("#lean").fill(case_source)
