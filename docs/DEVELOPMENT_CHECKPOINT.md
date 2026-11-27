@@ -2,86 +2,95 @@
 
 Updated 2026-11-27 (Asia/Shanghai).
 
-## Upstream and review state
+## Repository and PR state
 
-The latest observed `main` is `324411b`, the squash merge of PR #35. PR #22
-and PRs #32–#35 are merged. PR #36 (`ee64768`,
-`research/goal-operation-extensions`) is based on this `main`; its Mathlib
-workflow passed, but its complete Tests workflow exposed a browser smoke
-failure: after adopting a new existential theorem, the test filled `#chainText`
-while its enclosing editor was collapsed. This is fixed on PR #36 at head
-`4a6628a`; no workflow result for that new head was visible at the last check,
-so it must pass before merge. The failed run passed JavaScript, Python, Lean
-models, backend integration and generated Lean integration; only the browser
-smoke step failed.
+The latest observed `main` is `324411b`, which includes PR #35. PR #22 is
+merged; its branch-source positions, residual-goal checks, and branch-local
+declaration lifetime rules remain in the current base. The original eight-stage
+implementation order is unchanged.
 
-The current local branch, `research/element-operation-candidates`, is based on
-PR #36's prior head `ee64768` and contains the next stacked change, including
-the same browser-test correction as #36. PR #37 is open with head
-`12aaa6e` and targets the #36 branch at `4a6628a`; its Tests workflow
-`46012468016` and Mathlib workflow `46012468038` were in progress at the last
-check. Its dependency is explicit: it uses the constructive equivalence and
-existential child-goal operations introduced by #36 in neighboring integration
-tests, while the operation-candidate resolver itself also reuses main's scope,
-identity and existential-elimination machinery.
+PR #36 adds equivalence and explicit existential child goals. Its branch now
+contains a two-parent synchronization commit, `3e390ca`, with current `main`;
+the merged tree preserves the PR implementation and resolves the textual
+overlap with #35. The current Tests workflow is queued as run `46016092798`.
+It must complete before merge.
 
-## Current mathematical problem
+PR #37 adds bounded structural candidates for element requests. Its latest
+head is `96a2488`. At the preceding head, the Mathlib workflow passed, but the
+full workflow failed in browser smoke at `tests/browser_smoke.py:259`: the new
+fixture used `:= hall`, while this editor accepts theorem bodies in `:= by`
+form. The fixture now uses `by / exact hall` and the local Lean-source parser
+accepts it. Tests run `46016046831` and Mathlib run `46016046804` are in
+progress. PR #37 still needs its base refreshed after #36 is integrated.
 
-One short utterance such as “take an element `x` satisfying `P(x)`” can state
-different mathematical operations. The current change models one shared
-request with a bounded family of structurally justified readings: introduce a
-variable from a matching universal goal, or extract a witness and evidence
-from a visible typed existential premise. The goal and a later explicit
-conclusion can constrain the family. If both readings remain possible, the
-request remains unresolved and introduces no local object until the user
-chooses. Object-source identity, rather than its displayed name, is part of
-existential choice identity.
+The current unpushed local layer extends #37 with set-restricted universal
+introduction and existential witness extraction. It is intended as a separate
+stacked PR after #37; it has not yet been published.
 
-This is a narrow first step in original stage 4 (candidate forest), dependent
-on stages 2–3 and the stage 5 proof-operation contract. It is not an unrestricted
-shared parse forest or a general natural-language parser. Local definitions,
-subtype objects, unresolved existence proofs and arbitrary quantifier inference
-remain unimplemented.
+## Mathematical contract and current capabilities
+
+The element request keeps the utterance separate from its operational
+readings. A matching universal goal can justify introducing an arbitrary
+variable; a visible typed existential premise can justify witness extraction.
+The source object's identity is part of the witness choice. If multiple
+readings remain, the draft adds no speculative local object. Only supported
+later structure may constrain a candidate. Local definitions, subtype
+coercions, and open existence obligations are not inferred.
+
+For the bounded subset, `∀ x ∈ A, P x` introduces `x` and leaves
+`x ∈ A → P x`; the membership proof stays an explicit assumption. Extracting
+from `∃ x ∈ A, P x` produces a witness and evidence of `(x ∈ A) ∧ P x`. The
+request must explicitly name the set and annotate the element type. If a
+visible set identifier has a simple known carrier (`Set`, `List`, `Finset`, or
+`Multiset` applied to one type), an incompatible annotation is rejected. The
+browser does not infer coercions or carriers for compound expressions. Lean
+elaboration remains necessary.
+
+This advances stages 2–4 of the original plan: the bounded subset reuses the
+goal-operation and scope machinery from stage 2, and the distinct
+universal/witness readings advance stage 3's structural ambiguity work. It is
+not a general shared parse forest, type elaborator, or natural-language parser.
 
 ## Verification
 
-- JavaScript unit suite: 238/238 passed after the candidate-graph null-selection
-  regression was fixed.
-- Python unit suite: 17/17 passed.
-- Python byte-compilation, `git diff --check`, and `node --check` for changed
-  modules: passed after the latest edits.
-- Opt-in synthetic benchmark: Node v24.22.3, Linux x64, 24 warmups and 160
-  samples; candidate evaluation over 50 typed context entries measured 0.678 ms
-  median / 1.124 ms P95 cold and 0.461 / 0.735 ms on exact replay. A property
-  edit measured 0.622 / 1.148 ms; adding another existential premise measured
-  0.696 / 1.162 ms. Every incremental case matched a fresh full evaluation.
-  These are synthetic local measurements, not browser latency guarantees.
-- Local Playwright is installed but its Chromium executable is absent; Lean is
-  also absent locally. The generated Lean compilation and browser interaction
-  therefore require CI. PR #36's current head and PR #37's workflows still need
-  green results before merge.
+- Local full JavaScript suite: 246/246 passed, including eight new bounded
+  element tests and the existing scope, identity, and candidate regressions.
+- Local Python unit suite: 17/17 passed.
+- Python byte-compilation, `node --check` on changed modules, and
+  `git diff --check` passed.
+- Generated bounded Lean terms were inspected, and integration cases were
+  added to compile them in CI. Lean is not installed in this workspace, so
+  those new terms have not yet been independently compiled here.
+- Playwright is installed, but no local Chromium executable is available.
+  The previous remote browser failure and corrected fixture are recorded
+  above; the new head's browser run is pending.
+- The earlier #37 synthetic benchmark recorded 0.678 ms median / 1.124 ms P95
+  for cold evaluation over 50 context entries, and 0.461 / 0.735 ms for exact
+  replay (Node v24.22.3; 24 warmups, 160 samples). These figures predate the
+  restricted-quantifier extension and are not browser-latency guarantees.
 
 ## Next dependency-ready work
 
-1. Wait for #36's head `4a6628a` CI result. If its browser path now passes,
-   merge #36, retarget #37 to `main`, and rerun #37 against the merged base.
-2. Review #37's Lean-generated terms and the actual browser candidate-selection
-   path from its CI; merge only when both workflows pass and the base is current.
-3. Audit the shared goal-operation contract for proof-local assumptions,
-   conjunction/iff children, and return behavior before adding another
-   operation. The intuitionistic negation introduction subset is already
-   present; classical reductio and general local-lemma blocks are not.
-4. Add one reviewed real analysis or linear-algebra proof fixture with prose,
-   semantic structure, Lean compilation, and local-edit regression coverage.
+1. Inspect run `46016092798` for #36. Merge only after its full Tests workflow
+   passes, including Lean integration and browser smoke.
+2. Let #37's latest Tests and Mathlib workflows finish; repair any concrete
+   failure, then retarget it to `main` after #36 merges and rerun CI there.
+3. Publish the bounded-quantifier layer as a separate PR stacked on #37. Keep
+   the local carrier check explicitly partial and test the generated terms in
+   Lean CI.
+4. Continue stage 2 with local-lemma return and classical reductio only after
+   keeping intuitionistic negation introduction distinct. Continue stage 3
+   with shared structural candidates and bounded constraint propagation.
+5. Add a reviewed analysis or linear-algebra proof fixture with natural
+   language, semantic structure, generated Lean, and local-edit regressions.
 
 ## Boundaries
 
-`complete` still means only that the bounded structure can render a Lean
-candidate. It does not establish Lean elaboration, kernel verification,
-author-intent fidelity, or mathematical correctness. Formula compatibility is
-conservative scoped surface structure, not Lean definitional equality. The
-current operation resolver recognizes only a small English/Chinese phrase
-fragment and scans at most 64 local entries; more than eight candidates reports
-budget exhaustion rather than truncating. Typed object dependencies and proof
-dependencies remain distinct. Browser goal conversion, backend inference and
-Lean's final validation are separate paths.
+`complete` means only that a bounded structure can render a Lean candidate. It
+does not assert elaboration, kernel verification, author-intent fidelity, or
+mathematical correctness. Formula matching is conservative scoped surface
+structure, not Lean definitional equality. Candidate budget exhaustion,
+missing context, unsupported interpretations, and incompatible choices remain
+distinct outcomes. Browser conversion, backend inference, and Lean validation
+are separate paths. Case and child-goal blocks retain their existing nesting
+and line budgets.

@@ -357,6 +357,38 @@ with TemporaryDirectory() as tmp:
     subprocess.run(["lean",str(target)],cwd=root,check=True)
 print("Conjunction, equivalence and explicit existential child goals accepted by Lean")
 
+# Restricted element requests preserve the two constructors hidden by Lean's
+# bounded-quantifier notation: universal introduction leaves membership as a
+# premise, while existential elimination exposes membership together with the
+# requested predicate. Both fragments come from the browser's actual parser.
+restricted_script = """
+import {compileNaturalDraft} from './web/natural-draft.mjs';
+const universalFacts=new Map([['A','Set Nat'],['hall','∀ x : Nat, x ∈ A → P x']]);
+const universal=compileNaturalDraft(`take an arbitrary element x : $Nat$ in A satisfying $P(x)$
+assume hx : $x ∈ A$
+$P(x)$ | hall x hx`,['A','hall'],universalFacts,{goal:'∀ x ∈ A, P x'});
+const existentialFacts=new Map([['A','Set Nat'],['h','∃ x ∈ A, P x'],['hq','Q']]);
+const existential=compileNaturalDraft(`take an element x : $Nat$ in A satisfying $P(x)$ from h
+$Q$ | hq`,['A','h','hq'],existentialFacts,{goal:'Q'});
+console.log(JSON.stringify([universal.term,existential.term]));
+"""
+restricted_universal, restricted_existential = json.loads(subprocess.run(
+    ["node", "--input-type=module"], input=restricted_script, text=True,
+    cwd=root, check=True, capture_output=True).stdout)
+assert "intro x" in restricted_universal and "intro hx" in restricted_universal, restricted_universal
+assert "rcases duet_exists_x with ⟨x, h_x⟩" in restricted_existential, restricted_existential
+with TemporaryDirectory() as tmp:
+    target = Path(tmp) / "RestrictedElements.lean"
+    target.write_text(
+        "theorem restricted_forall (A : Set Nat) (P : Nat → Prop) "
+        "(hall : ∀ x : Nat, x ∈ A → P x) : ∀ x ∈ A, P x := "
+        + restricted_universal + "\n"
+        + "theorem restricted_exists (A : Set Nat) (P : Nat → Prop) (Q : Prop) "
+        + "(h : ∃ x ∈ A, P x) (hq : Q) : Q := "
+        + restricted_existential + "\n", encoding="utf-8")
+    subprocess.run(["lean", str(target)], cwd=root, check=True)
+print("Generated bounded universal introduction and existential extraction accepted by Lean")
+
 # An aligned set-theory case exercises presentation syntax, bounded context
 # introductions and the resulting Lean term. The minimal predicate-set model
 # uses Lean's core Membership and Inter classes; no copied Mathlib source is

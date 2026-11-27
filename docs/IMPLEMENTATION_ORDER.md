@@ -408,3 +408,16 @@ versus cold recomputation. Lean compilation and browser selection run in CI.
 This advances the original candidate-forest stage and uses the identity,
 partial-graph and goal-operation work; it is not a general shared parse forest,
 local-definition resolver, or unrestricted natural-language parser.
+
+The same structural request supports bounded set forms such as
+`take an arbitrary element x : $Nat$ in A satisfying $P(x)$`. For a goal
+`∀ x ∈ A, P x`, introduction opens `x ∈ A → P x`; the membership proof remains
+an ordinary child assumption and must be supplied before proving `P x`.
+Extraction from `∃ x ∈ A, P x` gives separate local witness and evidence
+objects, with evidence type `(x ∈ A) ∧ P x`. The request must name the set and
+include an element type. When that set is a visible identifier with a simple
+known carrier (`Set`, `List`, `Finset`, or `Multiset` applied to one type), a
+conflicting annotation is rejected before emitting Lean. This is a narrow
+surface check; compound set expressions, coercions, aliases, and other
+container types are not inferred. The emitted candidate still needs Lean
+elaboration, and unresolved carrier information is not treated as a match.

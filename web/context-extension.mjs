@@ -86,6 +86,16 @@ export function planGoalOperation(goal,{kind,name=null,type=null,source=null,sou
    closure:{kind:'constructor',name:'Exists.intro',witness}};
  }
  if(!['introduce','assume'].includes(kind))throw Error('Unknown goal operation.');
+ if(kind==='introduce'&&ast.kind==='bounded'&&ast.op==='∀'){
+  if(typeof type!=='string'||!type)throw Error('A set-restricted universal needs an explicit element type annotation.');
+  if(typeof name!=='string'||!name)name=ast.name;
+  if(name!==ast.name&&(containsName(ast.body,name)||containsName(ast.set,name)))throw Error('Introduction name may capture an existing occurrence; choose a fresh name.');
+  const set=renderFormula(ast.set),property=renderFormula(rename(ast.body,ast.name,name));
+  const membership='('+name+' ∈ '+set+')';
+  return {kind:'bounded-universal-introduction',parentGoal:goal,logic:'intuitionistic',restrictionSet:set,focusProperty:property,
+   subgoals:[{id:'restricted-body',goal:'('+membership+' → '+property+')',contextDelta:[{name,type,kind:'universal-variable'}]}],
+   closure:{kind:'bounded-binder-introduction',name,requiredCondition:membership}};
+ }
  const introType=type||inferredIntroductionType(ast,kind);
  if(typeof name!=='string'||!name)name=ast.kind==='binder'?ast.name:'h';
  const domain=compileFormula(introType,{syntax:'lean'}).scoped;
@@ -121,10 +131,18 @@ export function inferIntroduction(goal,kind,name=null){
 export function existentialBindings(sourceType,{name,type=null}){
  if(!sourceType)throw Error('The cited existential premise has no known type.');
  const ast=compileFormula(sourceType,{syntax:'lean'}).ast;
+ if(ast.kind==='bounded'&&ast.op==='∃'){
+  if(typeof type!=='string'||!type)throw Error('A set-restricted existential needs an explicit witness type annotation.');
+  if(name!==ast.name&&(containsName(ast.body,name)||containsName(ast.set,name)))throw Error('Witness name may capture an existing occurrence; choose a fresh name.');
+  const restrictionSet=renderFormula(ast.set),propertyType=renderFormula(rename(ast.body,ast.name,name));
+  const membership='('+name+' ∈ '+restrictionSet+')';
+  return {type,evidenceType:'('+membership+' ∧ '+propertyType+')',restrictionSet,propertyType};
+ }
  if(ast.kind!=='binder'||ast.op!=='∃')throw Error('The cited premise is not a supported existential.');
  if(ast.domain&&type&&!same(scopedFormula(ast.domain),compileFormula(type,{syntax:'lean'}).scoped))throw Error('Witness type does not match the existential domain.');
  const domain=type||(ast.domain?renderFormula(ast.domain):null);
  if(!domain)throw Error('Supply the witness type for an existential with an implicit domain.');
  if(name!==ast.name&&containsName(ast.body,name))throw Error('Witness name may capture an existing occurrence; choose a fresh name.');
- return {type:domain,evidenceType:renderFormula(rename(ast.body,ast.name,name))};
+ const evidenceType=renderFormula(rename(ast.body,ast.name,name));
+ return {type:domain,evidenceType,restrictionSet:null,propertyType:evidenceType};
 }
