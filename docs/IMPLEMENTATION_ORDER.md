@@ -44,10 +44,18 @@ An unresolved prefix remains visible in the semantic graph and prevents the
 combined draft from being complete, even when later case blocks are structurally
 usable. This is still a bounded parser for supported inference lines and
 explicit binary disjunctions, not general mathematical prose or arbitrary
-inductive case analysis. Case bodies are recomputed after edits; only the
-existing linear draft cache is reused where its context key permits. Tests
-compare the edited sequence with a cold evaluation, and the structured backend
-integration compiles a generated interleaved sequence with Lean in CI.
+inductive case analysis. Case frames now have separate bounded row-prefix
+caches whose keys include parent binding identities and types, goal, source
+offsets, choices, and open/closed continuation state. A bounded exact-result
+cache handles replay of a complete root scoped program. The graph is still
+rebuilt after structural edits. Tests compare edited sequences with cold
+evaluation, including a newly added same-typed premise that must invalidate
+candidate sets. In one local synthetic run, exact replay of an eight-level,
+41-line case program measured 1.273 ms median / 1.568 ms P95 versus 6.186 /
+8.503 ms before scoped caching; ordinary linear replay and edited structures
+did not show a speedup. These measurements are workload-specific, not a
+general latency guarantee. The structured backend integration compiles a
+generated interleaved sequence with Lean in CI.
 
 ## First graph implementation
 
@@ -89,13 +97,14 @@ not inferred by the browser: Lean elaboration remains necessary.
 
 ## Conservative incremental evaluator
 
-The browser uses a bounded exact-text syntax cache and a semantic prefix
-cache. Context, planned local names, source line position, conclusion role and
-explicit choices are part of reuse conditions. A reused prefix restores the
-scope, generated-name counter and open obligations before recomputing the
-remaining suffix. The graph is rebuilt for each evaluation. Regression tests
-compare incremental and full results. This is not arbitrary DAG scheduling,
-cross-revision identity reconciliation or a measured latency guarantee.
+The browser uses bounded syntax, semantic row-prefix, per-scope, and exact
+root-result caches. Context, object identities and types, planned local names,
+source line position, conclusion role and explicit choices are part of reuse
+conditions. A reused prefix restores the scope, generated-name counter and
+open obligations before recomputing the remaining suffix. The graph is rebuilt
+for each structural edit. Regression tests compare incremental and full
+results, including negative candidate dependencies. This is not arbitrary DAG
+scheduling or general cross-revision identity reconciliation.
 
 ## Conservative wording repair
 
@@ -111,15 +120,15 @@ proof of semantic equivalence. It does not rewrite the Lean source.
 and independently compiles its generated bounded-quantifier proof with Lean.
 The browser smoke test selects a proof candidate without changing the raw
 text and checks that subsequent edits invalidate the staged patch.
-`tests/fixtures/mathlib-cases.json` stores the compact-image topology example with
-its prose, controlled draft, expected structure, theorem header and context
-closure. The JavaScript structural test and pinned Mathlib integration consume
-the same fixture; Mathlib CI compiles the generated candidate. This single
-case is a corpus seed, not broad analysis or algebra coverage.
 `node tests/draft-benchmark.mjs` is an opt-in synthetic full-vs-incremental
 latency comparison; results are environment-dependent and do not establish a
 real-world latency guarantee. More realistic mathematical corpora and
 cross-version bidirectional testing are still required.
+`tests/fixtures/mathlib-cases.json` stores the compact-image topology example with
+its prose, controlled draft, expected structure, theorem header and context
+closure. The JavaScript structural test and pinned Mathlib integration consume
+the same record; Mathlib CI compiles the generated candidate. This single
+case is a corpus seed, not broad analysis or algebra coverage.
 
 ## Cross-revision draft correspondence (conservative subset)
 

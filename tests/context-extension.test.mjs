@@ -268,9 +268,70 @@ test('resolving an open branch closes the provisional dependency and matches a c
  assert.equal(incremental.complete,true);
  assert.ok(incremental.term);
  assert.equal(incremental.rows.at(-1).proofStatus,'candidate');
- assert.equal(incremental.reusedRows,0,'case blocks currently use a full block evaluation');
+ assert.equal(incremental.reusedRows,1,'the unaffected sibling branch is reused');
  assert.deepEqual(incremental.graph,cold.graph);
  assert.deepEqual(incremental.rows,cold.rows);
+});
+
+test('editing a branch conclusion reuses its unchanged scoped prefix and matches cold evaluation',()=>{
+ const facts=new Map([['P','Prop'],['Q','Prop'],['U','Prop'],['R','Prop'],['h','P ∨ Q'],
+  ['toU','P → U'],['f','P → U → R'],['f2','P → U → R'],['q','Q → R']]);
+ const scope=[...facts.keys()];
+ const input='cases h, establish hR : $R$\n  left case hp\n    establish hu : $U$ | toU hp\n    establish rr : $R$ | f hp hu\n    $R$ | rr\n  right case hq\n    $R$ | q hq\n$R$ | hR';
+ const edited=input.replace('$R$ | rr','$R$ | f2 hp hu');
+ const session=createDraftSession();
+ assert.equal(session.evaluate(input,scope,facts,{goal:'R'}).complete,true);
+ const incremental=session.evaluate(edited,scope,facts,{goal:'R'});
+ const cold=compileNaturalDraft(edited,scope,facts,{goal:'R'});
+ assert.equal(incremental.complete,true);
+ assert.ok(incremental.reusedRows>=3,'two unchanged rows in the edited branch and its sibling should be reused');
+ assert.deepEqual(incremental.rows,cold.rows);
+ assert.deepEqual(incremental.steps,cold.steps);
+ assert.deepEqual(incremental.graph,cold.graph);
+ assert.equal(incremental.term,cold.term);
+});
+
+test('adding a same-typed premise invalidates branch candidates that depended on absence',()=>{
+ const facts=new Map([['P','Prop'],['Q','Prop'],['R','Prop'],['h','P ∨ Q'],['r1','R']]);
+ const scope=[...facts.keys()];
+ const input='cases h, establish hR : $R$\n  left case hp\n    $R$\n  right case hq\n    $R$\n$R$ | r1';
+ const session=createDraftSession();
+ const first=session.evaluate(input,scope,facts,{goal:'R'});
+ assert.deepEqual(first.rows.filter(row=>row.raw==='$R$').map(row=>row.candidates.map(c=>c.term)),[['r1'],['r1']]);
+ facts.set('r2','R');scope.push('r2');
+ const updated=session.evaluate(input,scope,facts,{goal:'R'});
+ const cold=compileNaturalDraft(input,scope,facts,{goal:'R'});
+ assert.equal(updated.reusedRows,0,'the branch context changed, so cached candidate sets must be rebuilt');
+ assert.deepEqual(updated.rows.filter(row=>row.raw==='$R$').map(row=>row.candidates.map(c=>c.term)),[['r1','r2'],['r1','r2']]);
+ assert.deepEqual(updated.rows,cold.rows);
+ assert.deepEqual(updated.graph,cold.graph);
+});
+
+test('a memoized scoped result is isolated from caller mutation',()=>{
+ const facts=new Map([['P','Prop'],['Q','Prop'],['R','Prop'],['h','P ∨ Q'],['f','P → R'],['g','Q → R']]);
+ const scope=[...facts.keys()];
+ const input='cases h, establish hR : $R$\n  left case hp\n    $R$ | f hp\n  right case hq\n    $R$ | g hq\n$R$ | hR';
+ const session=createDraftSession(),first=session.evaluate(input,scope,facts,{goal:'R'});
+ first.rows[0].name='mutated by caller';first.graph.nodes.find(node=>node.kind==='cases').name='mutated graph';
+ const replay=session.evaluate(input,scope,facts,{goal:'R'}),cold=compileNaturalDraft(input,scope,facts,{goal:'R'});
+ assert.equal(replay.reusedRows,replay.rows.length);
+ assert.deepEqual(replay.rows,cold.rows);
+ assert.deepEqual(replay.graph,cold.graph);
+});
+
+test('changing only a parent object identity invalidates the scoped memo',()=>{
+ const facts=new Map([['P','Prop'],['Q','Prop'],['R','Prop'],['h','P ∨ Q'],['f','P → R'],['g','Q → R']]);
+ const scope=[...facts.keys()];
+ const input='cases h, establish hR : $R$\n  left case hp\n    $R$ | f hp\n  right case hq\n    $R$ | g hq\n$R$ | hR';
+ const original=rootProofScope(scope,facts,{goal:'R'});
+ const revised={...original,bindings:original.bindings.map((binding,index)=>({...binding,id:'context:'+(index+20)}))};
+ const session=createDraftSession();
+ session.evaluate(input,scope,facts,{goal:'R',_proofScope:original});
+ const incremental=session.evaluate(input,scope,facts,{goal:'R',_proofScope:revised});
+ const cold=compileNaturalDraft(input,scope,facts,{goal:'R',_proofScope:revised});
+ assert.equal(incremental.reusedRows,0);
+ assert.deepEqual(incremental.rows,cold.rows);
+ assert.deepEqual(incremental.graph,cold.graph);
 });
 
 test('a branch local name remains unavailable in a continuation after its branch is open',()=>{
