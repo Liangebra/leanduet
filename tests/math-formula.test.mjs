@@ -27,6 +27,19 @@ test('bounded quantifiers preserve membership and reject capture',()=>{
  assert.throws(()=>compileFormula('∀ x ∈ f(x), P(x)'));
 });
 
+test('set intersection and union bind inside membership and subset relations',()=>{
+ const intersection=compileFormula(String.raw`x \in A \cap B`);
+ assert.equal(intersection.lean,'(x ∈ (A ∩ B))');
+ assert.deepEqual(intersection.scoped,{kind:'binary',op:'∈',left:{kind:'free',name:'x'},right:{kind:'binary',op:'∩',left:{kind:'free',name:'A'},right:{kind:'free',name:'B'}}});
+ assert.equal(compileFormula(String.raw`A \cap B \subseteq C`).lean,'((A ∩ B) ⊆ C)');
+ assert.equal(compileFormula(String.raw`A \cup B \cap C`).lean,'(A ∪ (B ∩ C))');
+ assert.equal(compileFormula(String.raw`a + b \cap c`).lean,'(a + (b ∩ c))');
+ assert.equal(compileFormula(String.raw`A \cup B + C`).lean,'((A ∪ B) + C)','equal-precedence Lean operators associate to the left');
+ assert.equal(compileFormula(String.raw`a + b * c`).lean,'(a + (b * c))');
+ for(const input of [String.raw`x \in A \cap B`,String.raw`A \cup B \subseteq C`])
+  assert.deepEqual(compileFormula(compileFormula(input).lean,{syntax:'lean'}).scoped,compileFormula(input).scoped,input);
+});
+
 test('Lean presentation round trips preserve application and binder structure',()=>{
  for(const input of ['P(x)','f(g(x), y)=z','f(x)(y)','∀ x : Nat, P(x)','∀ x ∈ S, P(x)','∃ x ∈ S, P(x)','∀ S : Set, ∀ x ∈ S, P(x)']){
   const math=compileFormula(input);

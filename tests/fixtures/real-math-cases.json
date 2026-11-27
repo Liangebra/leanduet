@@ -1,0 +1,36 @@
+[
+  {
+    "id": "predicate-intersection-left",
+    "domain": "set theory",
+    "description": "Membership in an intersection projects to membership in its left set.",
+    "goal": "∀ x : α, x ∈ A ∩ B → x ∈ A",
+    "naturalDraft": "任取 x\n假设 hx\n$ x ∈ A $ | And.left using hx",
+    "scope": ["α", "A", "B"],
+    "context": {
+      "α": "Type",
+      "A": "PredSet α",
+      "B": "PredSet α"
+    },
+    "focusTerm": "And.left hx",
+    "expectedLastType": "(x ∈ A)",
+    "expectedStepKinds": ["introduce", "assume", "conclude"],
+    "expectedContextClosure": ["α", "A", "B", "x", "hx"],
+    "leanPrelude": "abbrev PredSet (α : Type) := α → Prop\ninstance predicateMembership {α : Type} : Membership α (PredSet α) := ⟨fun s x => s x⟩\ninstance predicateIntersection {α : Type} : Inter (PredSet α) := ⟨fun A B x => A x ∧ B x⟩\n",
+    "leanDeclaration": "theorem generated_intersection_left {α : Type} (A B : PredSet α) : ∀ x : α, x ∈ A ∩ B → x ∈ A := "
+  },
+  {
+    "id": "predicate-intersection-commutativity",
+    "domain": "set theory",
+    "description": "A point in an intersection belongs to the intersection in either order.",
+    "goal": "∀ x : α, x ∈ A ∩ B → x ∈ B ∩ A",
+    "naturalDraft": "任取 x\n假设 hx\n建立 hB : $x ∈ B$ | And.right using hx\n建立 hA : $x ∈ A$ | And.left using hx\n$ x ∈ B ∩ A $ | And.intro using hB and hA",
+    "scope": ["α", "A", "B"],
+    "context": {"α": "Type", "A": "PredSet α", "B": "PredSet α"},
+    "focusTerm": "And.intro hB hA",
+    "expectedLastType": "(x ∈ (B ∩ A))",
+    "expectedStepKinds": ["introduce", "assume", "establish", "establish", "conclude"],
+    "expectedContextClosure": ["α", "A", "B", "x", "hB", "hA"],
+    "leanPrelude": "abbrev PredSet (α : Type) := α → Prop\ninstance predicateMembership {α : Type} : Membership α (PredSet α) := ⟨fun s x => s x⟩\ninstance predicateIntersection {α : Type} : Inter (PredSet α) := ⟨fun A B x => A x ∧ B x⟩\n",
+    "leanDeclaration": "theorem generated_intersection_commute {α : Type} (A B : PredSet α) : ∀ x : α, x ∈ A ∩ B → x ∈ B ∩ A := "
+  }
+]

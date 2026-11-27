@@ -211,3 +211,33 @@ with TemporaryDirectory() as tmp:
         +"theorem exfalso (Q : Prop) (hFalse : False) : Q := "+exfalso_term+"\n",encoding="utf-8")
     subprocess.run(["lean",str(target)],cwd=root,check=True)
 print("Intuitionistic negation introduction and explicit False elimination accepted by Lean")
+
+# An aligned set-theory case exercises presentation syntax, bounded context
+# introductions and the resulting Lean term. The minimal predicate-set model
+# uses Lean's core Membership and Inter classes; no copied Mathlib source is
+# needed for this fixture.
+real_math_cases=json.loads((root/"tests/fixtures/real-math-cases.json").read_text(encoding="utf-8"))
+for real_math_case in real_math_cases:
+    case_script="""
+import {compileNaturalDraft} from './web/natural-draft.mjs';
+const example="""+json.dumps(real_math_case,ensure_ascii=False)+""";
+const result=compileNaturalDraft(example.naturalDraft,example.scope,new Map(Object.entries(example.context)),{goal:example.goal});
+console.log(JSON.stringify(result.term));
+"""
+    case_term=json.loads(subprocess.run(["node","--input-type=module"],input=case_script,text=True,cwd=root,check=True,capture_output=True).stdout)
+    with TemporaryDirectory() as tmp:
+        target=Path(tmp)/(real_math_case["id"]+".lean")
+        case_source=real_math_case["leanPrelude"]+real_math_case["leanDeclaration"]+case_term+"\n"
+        target.write_text(case_source,encoding="utf-8")
+        subprocess.run(["lean",str(target)],cwd=root,check=True)
+    case_tree=extract(case_source)["tree"]
+    reference=real_math_case["focusTerm"].split()[0]
+    focus=next(node for node in walk(case_tree) if node.get("reference","").endswith(reference)
+               and real_math_case["focusTerm"] in node.get("term",""))
+    context={binding["name"]:binding for binding in focus["scope"]}
+    closure={binding["name"] for binding in focus["scope"] if binding["neededForContext"]}
+    assert set(real_math_case["expectedContextClosure"]).issubset(closure),(real_math_case["id"],closure)
+    assert real_math_case["focusTerm"] in focus["term"],(real_math_case["id"],focus)
+    if real_math_case["id"]=="predicate-intersection-left":
+        assert context["hx"]["usedInTerm"] and context["A"]["usedInType"] and context["x"]["usedInType"],context
+    print("Lean-compiled aligned set case:",real_math_case["id"])
