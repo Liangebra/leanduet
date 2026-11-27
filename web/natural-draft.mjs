@@ -194,9 +194,10 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
      const missing=freeNames(types.type,types.evidenceType).find(n=>n!==p.name&&(planned.has(n)||occupied.has(n))&&!visible.has(n));
      if(missing)throw Error('Ambiguous or forward reference in existential elimination: '+missing);
      if(freeNames(types.type).includes(p.name))throw Error('Witness domain cannot refer to the new witness.');
-     let copy='duet_exists_'+p.name;
+     const stem='duet_exists_'+p.name.slice(0,40);
+     let copy=stem;
      // Keep the original premise available; destructure a fresh copy.
-     let suffix=0;while(occupied.has(copy)||planned.has(copy))copy='duet_exists_'+p.name+'_'+(++suffix);
+     let suffix=0;while(occupied.has(copy)||planned.has(copy))copy=stem+'_'+(++suffix);
      const dependencies=[...new Set([p.source,...freeNames(types.type,types.evidenceType)].filter(n=>openNames.has(n)))];
      const proofStatus=dependencies.length?'depends-on-open':'candidate';
      const step={kind:'obtain',source:p.source,name:p.name,evidenceName:p.evidenceName,copy,...types};

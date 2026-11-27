@@ -139,3 +139,15 @@ with TemporaryDirectory() as tmp:
         +"theorem preserve_exists (P : Nat → Prop) (h : ∃ z : Nat, P z) : ∃ z : Nat, P z := "+preserve_term+"\n",encoding="utf-8")
     subprocess.run(["lean",str(target)],cwd=root,check=True)
 print("Implicit introductions and existential elimination accepted by Lean")
+
+# Exercise the structured backend as well as standalone rendered Lean.
+from semantic import infer_chain
+obtain_source="theorem backend_obtain (P : Nat → Prop) (R : Prop) (h : ∃ z : Nat, P z) (f : ∀ z : Nat, P z → R) : R := by\n  exact Exists.elim h f\n"
+# Select the proof occurrence by its actual elaborated local goal and scope.
+nodes=list(walk(extract(obtain_source)["tree"]))
+obtain_node=next(n for n in nodes if n.get("type")=="R" and {"P","R","h","f"}.issubset({d.get("name") for d in n.get("scope",[])}))
+backend=infer_chain(obtain_source,obtain_node["path"],[
+    {"kind":"obtain","source":"h","copy":"duet_exists_x","name":"x","evidenceName":"hx","type":"Nat","evidenceType":"P x"},
+    {"kind":"conclude","type":"R","application":"f x hx"}])
+assert [b["name"] for b in backend["bindings"]]==["x","hx"],backend
+print("Structured existential chain elaborates and traces both bindings")

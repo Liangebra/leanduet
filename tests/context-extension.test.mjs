@@ -87,3 +87,13 @@ test('an existential witness inherits the open source dependency',()=>{
  assert.equal(r.rows[1].proofStatus,'depends-on-open');
  assert.equal(r.rows[2].proofStatus,'depends-on-open');
 });
+
+test('generated existential copy avoids source and planned names and stays backend-compatible',()=>{
+ const witness='x'.repeat(64),stem='duet_exists_'+witness.slice(0,40);
+ const ctx=new Map([['h','∃ z : Nat, P z'],[stem,'Nat']]);
+ const text='由 h 取 '+witness+'，记 hx\n$P('+witness+')$ | hx';
+ const r=draftProof(text,['P',...ctx.keys()],ctx);
+ assert.equal(r.complete,true);
+ assert.equal(r.rows[0].step.copy,stem+'_1');
+ assert.ok(r.rows[0].step.copy.length<=64);
+});
