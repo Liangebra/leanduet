@@ -247,7 +247,7 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
             set_source="""theorem predicate_intersection_left {α : Type} (A B : α → Prop) :
     ∀ x : α, A x ∧ B x → A x := by
   intro x
-  intro hx
+  intro hz
   exact And.left hx
 """
             case_page.locator("#lean").fill(set_source)
@@ -340,7 +340,7 @@ $P$ | hp""")
             expect(bounded_row).to_contain_text("arbitrary element introduction under a set restriction")
             expect(bounded_row).to_contain_text("After introduction, establish (z ∈ A)")
             restricted_page.locator("#compileChain").click()
-            expect(restricted_page.locator("#patchTerm")).to_have_value(__import__("re").compile(r"intro z[\s\S]*intro hx[\s\S]*exact hall x hx"))
+            expect(restricted_page.locator("#patchTerm")).to_have_value(__import__("re").compile(r"intro z[\s\S]*intro hz[\s\S]*exact hall z hz"))
             restricted_page.locator("#checkPatch").click()
             expect(restricted_page.locator("#applyPatch")).to_be_enabled(timeout=120000)
 
