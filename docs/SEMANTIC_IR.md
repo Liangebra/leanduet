@@ -23,7 +23,7 @@ Do not conflate these. The next integration target is a versioned typed semantic
 
 lean/Scoped.lean defines Term n with Fin n variables and binders whose bodies are in Term (n+1). Renaming lifts under binders; simultaneous substitution shifts inserted terms to avoid capture. The model states renaming identity/composition and identity substitution. The concrete families model defines reindexing, its identity/composition and the projection/eta equations for dependent context extension. These are small scope and context laws, not an initiality theorem, complete CwF formalization, or full Lean calculus.
 
-The browser formula parser also produces a canonical scoped view using de Bruijn indices; it retains original names in the surface AST for display and source output. Alpha-equivalent bound names produce identical scoped views, while free names remain unresolved until Lean. The JS implementation is tested but has not been proved equivalent to the Lean model.
+The browser formula parser also produces a canonical scoped view using de Bruijn indices; it retains original names in the surface AST for display and source output. Alpha-equivalent bound names produce identical scoped views, while free names remain unresolved until Lean. The built-in unary spellings `Not P` and `¬ P` share one scoped form; this is a syntax alias, not general definitional equality. The JS implementation is tested but has not been proved equivalent to the Lean model.
 
 `lean/Scoped.lean` also defines a separate intrinsically typed fragment for
 natural-number expressions and first-order propositions with equality,
