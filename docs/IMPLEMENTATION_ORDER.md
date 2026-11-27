@@ -150,3 +150,15 @@ resulting proof.
 
 The integration fixture compiles both left- and right-projection solutions
 selected by distinct downstream constraints using the actual browser compiler.
+
+## Context consistency audit
+
+Type holes retain introduction identity independently of their selected type,
+provided the original domain and scope still agree. Candidate migration also
+checks normalized candidate types and premise IDs. The browser iterates
+migration so earlier recovered choices can expose later domains, invalidating
+staged output regardless. Candidate-type references and backward constraint
+references participate in a fixed-point invalidation closure, not the acyclic
+proof dependency graph. Ordinary proposition annotations reject known
+forward/ambiguous local references and propagate type-level open dependencies.
+These are conservative scope and cache invariants, not Lean type checking.

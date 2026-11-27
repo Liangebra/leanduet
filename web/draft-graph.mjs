@@ -7,7 +7,7 @@ export function buildDraftGraph(scope,facts,rows,{goal=null}={}){
  function declare(node){
   nodes.push(node);
   if(node.name&&counts.get(node.name)!==undefined&&counts.get(node.name)!==1)return;
-  if(node.name)bindings.set(node.name,node.id);
+  if(node.name&&node.kind!=='unresolved')bindings.set(node.name,node.id);
  }
  const refs=names=>[...new Set(names.map(name=>bindings.get(name)).filter(Boolean))];
  function formula(type){
@@ -36,14 +36,17 @@ export function buildDraftGraph(scope,facts,rows,{goal=null}={}){
  const scopeRefs=[];
  for(const row of rows){
   const id='line:'+row.line,step=row.step,parsed=formula(row.type),value=step?.kind==='define'?formula(step.value):null;
-  const alternatives=(row.candidates||[]).map((c,i)=>({
-   id:id+':candidate:'+i,schema:c.schema,term:c.term,...(c.type?{type:c.type,formula:formula(c.type)}:{}),dependencies:refs(c.premises||[])
-  }));
+  function alternative(c){
+   const candidateFormula=c.type?formula(c.type):null;
+   return {schema:c.schema,term:c.term,...(c.type?{type:c.type,formula:candidateFormula}:{}),
+    dependencies:[...new Set([...refs(c.premises||[]),...(candidateFormula?.refs||[])])]};
+  }
+  const alternatives=(row.candidates||[]).map((c,i)=>({id:id+':candidate:'+i,...alternative(c)}));
   const application=step?.application||null;
   const selected=application&&application!=='?'?alternatives.find(c=>c.term===application):null;
   const proofRefs=application&&application!=='?'?(selected?.dependencies||refs(application.split(/\s+/))):[];
-  const node={id,kind:step?.kind||'unresolved',name:step?.name||null,type:row.type||null,raw:row.raw,modifiers:row.modifiers||[],formula:parsed,
-   proofStatus:row.proofStatus||'open',status:row.status,application,alternatives,value,...(row.domain?{typeDomain:row.domain.map(c=>({type:c.type,term:c.term,formula:formula(c.type),dependencies:refs(c.premises)})),constraints:row.constraints}:{}),
+  const node={id,kind:step?.kind||'unresolved',name:step?.name||(row.kind==='infer-proposition'?row.name:null),type:row.type||null,raw:row.raw,modifiers:row.modifiers||[],formula:parsed,
+   proofStatus:row.proofStatus||'open',status:row.status,application,alternatives,value,...(row.domain?{origin:'infer-proposition',typeDomain:row.domain.map(alternative),constraints:row.constraints,constraintRefs:(row.constraints||[]).map(c=>'line:'+c.line)}:{}),
    selectedCandidate:selected?.id||null,scopeRefs:[...scopeRefs],dependencies:[...new Set([...scopeRefs,...parsed.refs,...(value?.refs||[]),...proofRefs])]};
   declare(node);
   if(['introduce','assume'].includes(node.kind))scopeRefs.push(id);
@@ -52,9 +55,17 @@ export function buildDraftGraph(scope,facts,rows,{goal=null}={}){
 }
 export function dependentNodes(graph,ids,{includeAlternatives=true}={}){
  const affected=new Set(ids);
- for(const node of graph.nodes){
-  const deps=includeAlternatives?[...node.dependencies,...node.alternatives?.flatMap(c=>c.dependencies)||[]]:node.dependencies;
-  if(deps.some(id=>affected.has(id)))affected.add(node.id);
+ // Constraint edges point backwards in source order. They are invalidation
+ // edges, not proof dependencies; a fixed point handles their cycles.
+ let changed=true;
+ while(changed){
+  changed=false;
+  for(const node of graph.nodes){
+   if(affected.has(node.id))continue;
+   const deps=[...node.dependencies,...(node.constraintRefs||[]),
+    ...(includeAlternatives?[...(node.alternatives||[]),...(node.typeDomain||[])].flatMap(c=>c.dependencies):[])];
+   if(deps.some(id=>affected.has(id))){affected.add(node.id);changed=true;}
+  }
  }
  return graph.nodes.filter(n=>affected.has(n.id)).map(n=>n.id);
 }
