@@ -40,7 +40,20 @@ test('an unfinished local lemma keeps a typed open dependency and later context'
 });
 
 test('a renderable proof hole inside a local lemma is not exported as complete',()=>{
- const input=['local lemma hq : $Q
+ const input=['local lemma hq : $Q$','  proof','    $Q$ | ?','$R$ | gr hq'].join('\n');
+ const result=createDraftSession().evaluate(input,['gr'],new Map([['gr','Q → R']]),{goal:'R'});
+ const lemma=result.rows.find(row=>row.kind==='local-lemma');
+ const child=result.rows.find(row=>row.raw==='$Q$ | ?');
+ assert.equal(lemma.proofStatus,'open');
+ assert.equal(lemma.resolutionStatus,'open-obligation');
+ assert.equal(child.status,'translated','the syntax can render even though the proof step remains open');
+ assert.equal(child.proofStatus,'open');
+ assert.equal(result.rows.at(-1).proofStatus,'depends-on-open');
+ assert.equal(result.complete,false);
+ assert.equal(result.term,null);
+});
+
+test('a completed local lemma propagates dependencies on open parent facts',()=>{
  const input=['local lemma hP : $P$','  proof','    $P$ | hp','$Q$ | g hP'].join('\n');
  const result=createDraftSession().evaluate(input,['hp','g'],new Map([['hp','P'],['g','P → Q']]),{goal:'Q',openBindings:['hp']});
  assert.equal(result.complete,true);
