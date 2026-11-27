@@ -1,15 +1,22 @@
 # LeanDuet development checkpoint
 
-Updated 2026-11-27. This checkpoint follows the dependency order in
-`IMPLEMENTATION_ORDER.md`; the eight-stage sequence is unchanged.
+Updated 2026-11-27 (Asia/Shanghai).
 
 ## Current mathematical focus
 
-The active line of work is stage 2/3: tree-scoped proof contexts, local object
-identity, and the propagation of open proof obligations through case branches.
-The browser draft is a semantic editor for a bounded grammar. A translated or
-complete draft is still only a Lean candidate; it is not a compilation result
-or a claim that the author's mathematical intent has been captured.
+The current line of work extends the proof-scope foundation into small aligned
+mathematics examples. The immediate corpus is set intersection over predicates
+(`PredSet α := α → Prop`): projecting membership from an intersection and
+reordering the two components. These examples exercise bounded quantifier
+introduction, hypothesis introduction, local result identity, ordered
+intermediate reasoning, and Lean's `And.left`, `And.right`, and `And.intro`.
+They are deliberately small Lean-core models, not evidence that arbitrary set
+theory prose or Mathlib proofs can already be translated.
+
+The formula AST recognizes `\cap`/`\inter` and `\cup`/`\union`. Its parser
+uses the Lean precedences for `+` and union (65), and `*` and intersection
+(70), so mixed expressions preserve the parsed tree. This is syntax support;
+it does not by itself add union reasoning rules.
 
 Case scopes now resolve a branch-local declaration by lexical identity even
 when it shadows a parent spelling. Closing the branch discharges that local
@@ -23,71 +30,71 @@ shadowing, so it refuses a shadow that would capture a name in the case goal
 or arm type; generated Lean remains a candidate until the separate compiler
 checks it.
 
-## Completed and in flight
+## Merged foundation
 
-- PR #21 established bounded binary disjunction elimination with nested branch
-  scopes and branch-local identities.
-- PR #22 is merged as `0eaf7dd` (head `73af927`). It preserves physical source
-  lines through branch bodies, checks terminal annotations against residual
-  goals, closes branch-local names at the scope boundary, and checks the final
-  proposition against the remaining goal. Both CI runs for that head passed.
-- PR #23 (`research/partial-case-continuations`, feature commit `0a685a9`,
-  browser follow-up `08713e0`) keeps parent continuation rows in the semantic
-  graph while a branch is open. The common result is provisional, dependent
-  rows remain marked open, branch names do not escape, no Lean term is exported,
-  and the final goal check still runs. Local verification: 185 Node tests, 17
-  Python unit tests, and Python syntax compilation passed. Latest CI exercises
-  Lean integration and the editor's partial-branch interaction.
-- PR #24 (`68a3d0c`) adds repeatable cold, warm, single-character, local
-  dependency-edit, and nested-case timing with structural comparison against a
-  fresh evaluation. One local run used Node 24.22.3 on Linux x64 / AMD EPYC
-  9V74 (24 warmups, 160 samples): cold 0.179/0.774 ms median/P95; warm exact
-  replay 0.198/0.650 ms; one-character final-premise edit 0.178/0.508 ms;
-  local dependency edit 0.198/0.483 ms; 41-line, eight-level case draft
-  2.639/4.279 ms. This single synthetic run does not establish a speedup or a
-  real-world latency guarantee.
-- PR #25 (`f37c313`) adds intuitionistic negation introduction for `¬ P` and
-  `Not P`, leaving `False` as the residual goal, and tests explicit
-  `False.elim` separately. No classical axiom is inserted. The generated Lean
-  cases are in CI; local verification reached 187 Node tests and 17 Python unit
-  tests, while this environment has no Lean executable.
+- PR [#22](https://github.com/Liangebra/leanduet/pull/22), merge `0eaf7dd`:
+  physical source addresses, residual-goal checking, and closed branch-local
+  names.
+- PR [#24](https://github.com/Liangebra/leanduet/pull/24), merge `c6bf9f4`:
+  opt-in latency and incremental/full structural comparison benchmark.
+- PR [#23](https://github.com/Liangebra/leanduet/pull/23), merge `83d0154`:
+  open and nested disjunction branches retain parent continuations while local
+  names remain scoped.
+- PR [#25](https://github.com/Liangebra/leanduet/pull/25), merge `fcc66aa`:
+  intuitionistic negation introduction leaves `False` as the remaining goal;
+  it does not insert classical reasoning.
 
-## Actual boundaries
+The original eight-stage order in `IMPLEMENTATION_ORDER.md` remains in force.
+The next dependency-ready work is still stage 2: generalize goal/context
+operations and subproof lifecycle beyond the current implication, quantifier,
+existential, and explicit binary-case mechanisms. In parallel, retain the
+current small corpus while stage 8 expands to genuine Mathlib examples.
 
-- Case analysis accepts only an explicit binary `Or` split with both arms in
-  order, bounded to eight nested splits and 64 nonblank lines.
-- A branch-local binder must currently use a name fresh in its parent context;
-  sibling branches may reuse a display name while retaining different IDs.
-- Case blocks are fully reevaluated after edits. Branch-level prefix reuse is
-  not implemented or claimed.
-- Formula matching is a conservative structural check modulo bound-variable
-  renaming. It is not Lean definitional equality or elaboration.
-- An open branch may still expose useful continuation structure, but it cannot
-  yield an executable proof candidate until all dependencies close.
-- Negation introduction only handles the intuitionistic `P → False` direction;
-  proving `P` from `¬ P → False` requires an explicit classical principle.
+## Validation and limits
 
-## Next dependency-ready work
+Local verification passes: 190 Node tests, 17 Python unit tests, Python syntax
+compilation, and the full `tests/interpret_integration.py` run under Lean 4.19.
+That integration compiles both generated declarations and checks the extracted
+Lean trees and local dependency closures. The first PR CI run caught a mistaken
+assumption that `And.left hx` would remain textually named in Lean's tree; the
+test now checks its actual projection form (`hx.left`) and constructor-pair
+representation. The browser smoke test still awaits GitHub CI, because this
+workspace does not have a Playwright browser installed.
 
-1. Finish CI for PRs #23–#25, merge only after the current heads pass, then
-   verify main-branch tests and the Pages deployment.
-2. Build reusable subgoal operations for local lemmas, conjunction/iff goals,
-   and branch return, keeping `False.elim` explicit and classical reasoning
-   opt-in.
-3. Extend structural candidates from proposition types to mathematical
-   operations, preserving ambiguity and distinguishing unsupported rules,
-   missing information, incompatibility, and exhausted search budgets.
-4. Align the existing Lean fixtures with human-reviewed prose across analysis,
-   algebra, sets, and topology. Existing IR tests already cover dependent `Fin`
-   witnesses, local lets, distinct same-type premises, universe-polymorphic
-   limits, and a Mathlib compact-image example.
-5. Return to stage 6/7 for local semantic patching and branch-level cache
-   invalidation, comparing every incremental result with full recomputation.
+The natural-language draft remains a bounded, rule-guided grammar, not
+unrestricted prose parsing. A structural `complete` result means the draft has
+the required shape and goal annotations; only the separate Lean check can
+establish elaboration. Formula comparison is conservative surface structure
+modulo bound-variable renaming, not Lean definitional equality. Case analysis
+currently requires an explicit binary disjunction, is bounded to eight nested
+splits and 64 nonblank source lines, and fully recomputes case bodies after an
+edit.
 
-## Research and roadmap relation
+No performance improvement is claimed for these syntax and corpus changes.
+The existing opt-in benchmark is synthetic, bounded to the current draft
+engine, and checks incremental/full result equality rather than enforcing a
+speed threshold. One local rerun (Node v24.22.3, Linux x64, 24 warmups and 160
+samples; median/P95 milliseconds) measured 0.211/0.538 for cold evaluation,
+0.196/1.493 for exact replay, 0.185/0.458 for a final-premise edit,
+0.196/0.453 for a local dependency edit, and 2.406/4.140 for 41 lines with
+eight nested case levels. This is one synthetic environment and includes a
+noisy replay tail; it is not a production latency claim. Nested case blocks
+currently recompute their branch bodies.
 
-The scope work is grounded in the repository's Ranta/GF, Hazelnut, and
-dependent-context notes; it does not replace the existing eight-stage order.
-The candidate-structure work belongs after scope and object identity because
-scope supplies the constraints needed to prune interpretations. Corpus and
-latency evaluation remain acceptance tasks throughout later implementation.
+## Open problems and next entry points
+
+1. Generalize proof operations around child goals, local context extension,
+   closure conditions, and returning a result to the parent; make witness
+   escape rules explicit for all nested scopes.
+2. Add structure-level ambiguity candidates for phrases that could introduce
+   a universal variable, extract an existential witness, define an object, or
+   leave an existence obligation. Preserve unsupported, underspecified,
+   inconsistent, and budget-exhausted states separately.
+3. Extend aligned examples from the current predicate-set model to actual
+   Mathlib declarations, beginning with the existing compact-image topology
+   integration and adding prose only where the current grammar can preserve
+   the statement and proof path honestly.
+4. Improve branch-level incremental reuse and continue comparing it against a
+   full cold evaluation. Do not infer a speedup from code shape.
+5. Clarify surface structural mismatches versus Lean definitional equality in
+   diagnostics and candidate states.

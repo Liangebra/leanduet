@@ -214,18 +214,58 @@ import {compileNaturalDraft} from './web/natural-draft.mjs';
 const facts=new Map([['hnot','P → False']]);
 const neg=compileNaturalDraft('假设 hp\\n$False$ | hnot hp',['P','hnot'],facts,{goal:'¬ P'});
 const not=compileNaturalDraft('假设 hp\\n$False$ | hnot hp',['P','hnot'],facts,{goal:'Not P'});
+const alias=compileNaturalDraft('$¬ P$ | hnot',['hnot'],new Map([['hnot','Not P']]),{goal:'¬ P'});
 let rejected=false;
 try { compileNaturalDraft('假设 hp\\n$False$ | hp',['P'],new Map(),{goal:'¬ P'}); }
-catch(error) { rejected=/Known local premise hp has type P, not False/.test(error.message); }
+catch(error) { rejected=/Surface type of local premise hp .* differs structurally .* Lean definitional equality has not been checked/.test(error.message); }
 if(!rejected)throw new Error('A local proof of P was incorrectly accepted as a proof of False');
 const exfalso=compileNaturalDraft('$Q$ | False.elim using hFalse',['Q','hFalse'],new Map([['hFalse','False']]),{goal:'Q'});
-console.log(JSON.stringify([neg.term,not.term,exfalso.term]));
+console.log(JSON.stringify([neg.term,not.term,exfalso.term,alias.term]));
 """
-neg_term,not_term,exfalso_term=json.loads(subprocess.run(["node","--input-type=module"],input=logic_script,text=True,cwd=root,check=True,capture_output=True).stdout)
+neg_term,not_term,exfalso_term,alias_term=json.loads(subprocess.run(["node","--input-type=module"],input=logic_script,text=True,cwd=root,check=True,capture_output=True).stdout)
 with TemporaryDirectory() as tmp:
     target=Path(tmp)/"IntuitionisticNegation.lean"
     target.write_text("theorem negation_intro (P : Prop) (hnot : P → False) : ¬ P := "+neg_term+"\n"
         +"theorem not_intro (P : Prop) (hnot : P → False) : Not P := "+not_term+"\n"
-        +"theorem exfalso (Q : Prop) (hFalse : False) : Q := "+exfalso_term+"\n",encoding="utf-8")
+        +"theorem exfalso (Q : Prop) (hFalse : False) : Q := "+exfalso_term+"\n"
+        +"theorem negation_alias (P : Prop) (hnot : Not P) : ¬ P := "+alias_term+"\n",encoding="utf-8")
     subprocess.run(["lean",str(target)],cwd=root,check=True)
 print("Intuitionistic negation introduction and explicit False elimination accepted by Lean")
+
+# An aligned set-theory case exercises presentation syntax, bounded context
+# introductions and the resulting Lean term. The minimal predicate-set model
+# uses Lean's core Membership and Inter classes; no copied Mathlib source is
+# needed for this fixture.
+real_math_cases=json.loads((root/"tests/fixtures/real-math-cases.json").read_text(encoding="utf-8"))
+for real_math_case in real_math_cases:
+    case_script="""
+import {compileNaturalDraft} from './web/natural-draft.mjs';
+const example="""+json.dumps(real_math_case,ensure_ascii=False)+""";
+const result=compileNaturalDraft(example.naturalDraft,example.scope,new Map(Object.entries(example.context)),{goal:example.goal});
+console.log(JSON.stringify(result.term));
+"""
+    case_term=json.loads(subprocess.run(["node","--input-type=module"],input=case_script,text=True,cwd=root,check=True,capture_output=True).stdout)
+    with TemporaryDirectory() as tmp:
+        target=Path(tmp)/(real_math_case["id"]+".lean")
+        case_source=real_math_case["leanPrelude"]+real_math_case["leanDeclaration"]+case_term+"\n"
+        target.write_text(case_source,encoding="utf-8")
+        subprocess.run(["lean",str(target)],cwd=root,check=True)
+    case_tree=extract(case_source)["tree"]
+    focus=next(node for node in walk(case_tree)
+               if node.get("reference","").endswith(real_math_case["focusReference"])
+               and node.get("term")==real_math_case["expectedElaboratedTerm"])
+    assert focus.get("type")==real_math_case["expectedFocusType"],(real_math_case["id"],focus)
+    context={binding["name"]:binding for binding in focus["scope"]}
+    closure={binding["name"] for binding in focus["scope"] if binding["neededForContext"]}
+    assert set(real_math_case["expectedContextClosure"]).issubset(closure),(real_math_case["id"],closure)
+    assert real_math_case["focusCandidate"] in case_term,(real_math_case["id"],case_term)
+    if real_math_case["id"]=="predicate-intersection-left":
+        assert context["hx"]["usedInTerm"] and context["A"]["usedInType"] and context["x"]["usedInType"],context
+    else:
+        # Lean elaborates the source-level And.intro as constructor notation.
+        # Keep that distinction visible instead of demanding textual node identity.
+        pair=next(node for node in walk(case_tree) if node.get("kind")=="opaque"
+                  and "hB" in node.get("term","") and "hA" in node.get("term","")
+                  and "∧" in node.get("type", ""))
+        assert "hB" in pair["term"] and "hA" in pair["term"],pair
+    print("Lean-compiled aligned set case:",real_math_case["id"])

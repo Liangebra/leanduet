@@ -1,0 +1,19 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {compileNaturalDraft} from '../web/natural-draft.mjs';
+
+const cases=JSON.parse(readFileSync(new URL('./fixtures/real-math-cases.json',import.meta.url),'utf8'));
+
+test('aligned real-math fixtures preserve set operations and proof structure',()=>{
+ assert.equal(cases.length,2);
+ for(const example of cases){
+  const result=compileNaturalDraft(example.naturalDraft,example.scope,new Map(Object.entries(example.context)),{goal:example.goal});
+  assert.equal(result.complete,true,example.id);
+  assert.equal(result.rows.at(-1).type,example.expectedLastType,example.id);
+  assert.deepEqual(result.steps.map(step=>step.kind),example.expectedStepKinds,example.id);
+  assert.ok(result.term.includes(example.focusCandidate),example.id);
+  assert.ok(result.rows.every(row=>row.proofStatus==='candidate'),example.id);
+  assert.equal(result.rows.at(-1).proofStatus,'candidate','structural candidacy is not a Lean verification result');
+ }
+});
