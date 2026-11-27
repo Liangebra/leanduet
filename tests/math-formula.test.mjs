@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {compileFormula} from '../web/math-formula.mjs';
+import {compileFormula,sameScopedFormula} from '../web/math-formula.mjs';
 test('math expression grammar preserves precedence and binder structure',()=>{
  assert.equal(compileFormula(String.raw`$b = a$`).lean,'(b = a)');
  assert.equal(compileFormula(String.raw`P \land Q \to R`).lean,'((P ∧ Q) → R)');
@@ -19,6 +19,12 @@ test('canonical scoped view is invariant under alpha-renaming but not capture',(
  assert.deepEqual(a,b);assert.notDeepEqual(a,c);
  const nested=compileFormula(String.raw`\forall x : \mathbb{N}, \exists y : \mathbb{N}, x = y`).scoped;
  assert.equal(nested.body.body.left.index,1);assert.equal(nested.body.body.right.index,0);
+});
+
+test('the built-in Lean negation spelling has one scoped form',()=>{
+ assert.equal(sameScopedFormula('Not P','¬ P'),true);
+ assert.equal(sameScopedFormula('Not (P ∧ Q)','¬ (P ∧ Q)'),true);
+ assert.equal(sameScopedFormula('P','False'),false);
 });
 
 test('bounded quantifiers preserve membership and reject capture',()=>{

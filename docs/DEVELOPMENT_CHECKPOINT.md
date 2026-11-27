@@ -18,7 +18,12 @@ uses the Lean precedences for `+` and union (65), and `*` and intersection
 (70), so mixed expressions preserve the parsed tree. This is syntax support;
 it does not by itself add union reasoning rules.
 
-A second aligned case targets Mathlib 4.19's `IsCompact.image`. The formula grammar represents `f '' s` using pinned Mathlib notation, and the Chinese alias “紧集的连续像” selects `IsCompact.image` with explicit premises `hs` and `hf`. Mathlib CI compiles this generated theorem and checks dependent context closure, including topology instances. This is one bounded theorem path, not general Mathlib prose translation.
+A second aligned case targets Mathlib 4.19's `IsCompact.image`. The formula
+grammar represents `f '' s` using pinned Mathlib notation, and the Chinese
+alias “紧集的连续像” selects `IsCompact.image` with explicit premises `hs`
+and `hf`. Mathlib CI compiles the generated theorem and checks dependent
+context closure, including topology instances. This is one bounded theorem
+path, not general Mathlib prose translation.
 
 Case scopes now resolve a branch-local declaration by lexical identity even
 when it shadows a parent spelling. Closing the branch discharges that local
