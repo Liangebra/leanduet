@@ -116,6 +116,17 @@ inductive case analysis, contradiction, or unrestricted branching prose
 parsing. Recomputing a case block is currently a full block evaluation;
 branch-aware prefix caching remains future work.
 
+At the top level and within a branch, supported ordinary inference lines may
+now occur before, between, and after multiple case blocks. The evaluator
+compiles each linear prefix as a continuation rather than prematurely treating
+its last line as the theorem conclusion, extends the structured scope with
+those local declarations, and then parses the next case block. The same
+physical source-line addresses flow into the nested parser. If an earlier
+linear segment contains an unresolved row, later case structure remains in the
+graph but the combined draft stays incomplete. This composition does not
+broaden the accepted sentence grammar, and nested case bodies are still
+recomputed rather than incrementally reused.
+
 ## Checked same-context round trip
 
 The native decoder reconstructs all supported Expr constructors with exact structural names, universe levels, binder modes and local-slot identity. Each exported context type/value, selected term/type and optional formula is decoded in Lean, checked, compared with its original shape, and re-encoded to the identical JSON. The final decoded term must have a type definitionally equal to the decoded target. The returned roundTrip fields record these checks. This verifies individual exported judgments in their original context; it is not a general formal theorem, cross-project import, independent environment reconstruction, or a proof of the browser parser. No external JSON is executed or accepted by the API. The decoder rejects unknown constructors and out-of-scope slots. Encoding and round-trip checking share a bounded inspection budget.

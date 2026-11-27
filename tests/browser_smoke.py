@@ -161,6 +161,8 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
             rows.nth(0).get_by_role("button",name="Use this candidate").first.click()
             rows.nth(1).get_by_role("button",name="Use this candidate").first.click()
             expect(patch_page.locator("#chainText")).to_have_value(original_draft)
+            assert rows.nth(0).get_attribute("data-resolution-status")=="candidate-unverified"
+            expect(rows.nth(0)).to_contain_text("Candidate generated · Lean not checked")
             patch_page.locator("#compileChain").click()
             expect(patch_page.locator("#patchTerm")).to_have_value("by\n  have hq : Q := f p\n  show R\n  exact g hq")
             patch_page.locator("#chainText").fill(original_draft+"\n")
@@ -178,8 +180,9 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
             case_page=browser.new_page(viewport={"width":1440,"height":900})
             case_page.on("pageerror",lambda error:errors.append(str(error)))
             case_page.goto(url)
-            case_source="""theorem disjunction_demo (P Q R : Prop) (h : P ∨ Q) (f : P → R) (g : Q → R) : R := by
-  exact Or.elim h f g
+            case_source="""theorem interleaved_demo (P Q U V R T : Prop) (h : P ∨ Q) (j : U ∨ V) (p : P)
+    (f : P → R) (g : P → T) (k : Q → T) (l : U → T) (m : V → T) : T := by
+  exact Or.elim h (fun hp => g hp) (fun hq => k hq)
 """
             case_page.locator("#lean").fill(case_source)
             case_page.once("dialog",lambda d:d.accept())
@@ -192,19 +195,21 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
             case_node.locator(":scope > button.typedEdit").click()
             case_page.locator("#chainEditor summary").click()
             case_page.locator("#chainFormat").select_option("natural")
-            case_text="分情况讨论 h，建立 hR : $R$\n  左支 hp\n    $R$ | f hp\n  右支 hq\n    $R$ | g hq\n$R$ | hR"
-            partial_case_text="分情况讨论 h，建立 hR : $R$\n  左支 hp\n    unsupported ⊛\n  右支 hq\n    $R$ | g hq\n$R$ | hR"
+            case_text="establish hr : $R$ | f p\n分情况讨论 h，建立 hT : $T$\n  左支 hp\n    $T$ | g hp\n  右支 hq\n    $T$ | k hq\nestablish ht : $T$ | hT\ncases j, establish jT : $T$\n  left case hu\n    $T$ | l hu\n  right case hv\n    $T$ | m hv\n$T$ | jT"
+            partial_case_text="分情况讨论 h，建立 hT : $T$\n  左支 hp\n    unsupported ⊛\n  右支 hq\n    $T$ | k hq\nestablish ht : $T$ | hT\ncases j, establish jT : $T$\n  left case hu\n    $T$ | l hu\n  right case hv\n    $T$ | m hv\n$T$ | jT"
             case_page.locator("#chainText").fill(partial_case_text)
-            expect(case_page.locator("#draftTranslation")).to_contain_text("inl hp : P ⊢ R · open")
+            expect(case_page.locator("#draftTranslation")).to_contain_text("inl hp : P ⊢ T · open")
+            expect(case_page.locator("#draftTranslation")).to_contain_text("cases j")
             expect(case_page.locator("#draftTranslation")).to_contain_text("Line 6 · translated · depends-on-open")
             assert case_page.locator("#patchTerm").input_value()=="", "an open branch must not stage a Lean candidate"
             case_page.locator("#chainText").fill(case_text)
             expect(case_page.locator("#draftTranslation")).to_contain_text("cases h into inl hp: P / inr hq: Q")
             case_page.locator("#inferChain").click()
-            expect(case_page.locator("#chainBindings")).to_contain_text("hR",timeout=120000)
+            expect(case_page.locator("#chainBindings")).to_contain_text("hT",timeout=120000)
             expect(case_page.locator("#chainBindings")).not_to_contain_text("hp")
             expect(case_page.locator("#chainBindings")).not_to_contain_text("hq")
             assert "cases h with" in case_page.locator("#patchTerm").input_value()
+            assert "cases j with" in case_page.locator("#patchTerm").input_value()
             case_page.locator("#checkPatch").click()
             expect(case_page.locator("#applyPatch")).to_be_enabled(timeout=120000)
             case_page.once("dialog",lambda d:d.accept())

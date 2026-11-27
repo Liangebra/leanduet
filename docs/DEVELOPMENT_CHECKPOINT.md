@@ -2,106 +2,67 @@
 
 Updated 2026-11-27 (Asia/Shanghai).
 
-## Current mathematical focus
+## Active work
 
-The current line of work extends the proof-scope foundation into small aligned
-mathematics examples. The immediate corpus is set intersection over predicates
-(`PredSet α := α → Prop`): projecting membership from an intersection and
-reordering the two components. These examples exercise bounded quantifier
-introduction, hypothesis introduction, local result identity, ordered
-intermediate reasoning, and Lean's `And.left`, `And.right`, and `And.intro`.
-They are deliberately small Lean-core models, not evidence that arbitrary set
-theory prose or Mathlib proofs can already be translated.
+The reviewed base is main commit `4f9f925` (PR #29). PR [#22](https://github.com/Liangebra/leanduet/pull/22) is merged; its physical source addresses, residual-goal checks, and expired local-name handling are in the base. PR [#29](https://github.com/Liangebra/leanduet/pull/29) is also merged. Its full Tests run and Mathlib-specific workflow passed; the Mathlib case generates and compiles an `IsCompact.image` candidate and checks dependent context closure.
 
-The formula AST recognizes `\cap`/`\inter` and `\cup`/`\union`. Its parser
-uses the Lean precedences for `+` and union (65), and `*` and intersection
-(70), so mixed expressions preserve the parsed tree. This is syntax support;
-it does not by itself add union reasoning rules.
+The current source change composes supported ordinary inference lines with
+multiple explicit binary-disjunction blocks, both at the theorem level and
+inside a branch. A linear prefix is evaluated in continuation mode, then its
+introduced declarations extend the lexical proof scope before the next case
+block is compiled. Case results return to their parent scope; branch-local
+facts expire. Physical line offsets are carried through the nested parser.
+An unresolved prefix remains visible in the graph and keeps the whole draft
+incomplete, even if later blocks remain structurally useful.
 
-A second aligned case targets Mathlib 4.19's `IsCompact.image`. The formula
-grammar represents `f '' s` using pinned Mathlib notation, and the Chinese
-alias “紧集的连续像” selects `IsCompact.image` with explicit premises `hs`
-and `hf`. Mathlib CI compiles the generated theorem and checks dependent
-context closure, including topology instances. This is one bounded theorem
-path, not general Mathlib prose translation.
+This continues stage 2 of the original eight-stage order and supplies a real
+scope/control-flow requirement for stages 3, 6, and 7. It does not add general
+prose parsing, arbitrary inductive elimination, or branch-level caching.
 
-Case scopes now resolve a branch-local declaration by lexical identity even
-when it shadows a parent spelling. Closing the branch discharges that local
-identity; a later parent continuation again resolves the original parent
-object. Repeated names in the root context remain ambiguous, and siblings may
-reuse a display name without sharing identity. The graph's positional context
-IDs are remapped through the visible scope projection, so a shadow does not
-redirect an inherited object to the wrong declaration. The bounded formula
-view still cannot preserve a parent free-name identity through arbitrary
-shadowing, so it refuses a shadow that would capture a name in the case goal
-or arm type; generated Lean remains a candidate until the separate compiler
-checks it.
+## Checked local state
 
-## Merged foundation
+- Node suite: 205 tests passed.
+- Python unit suite: 17 tests passed.
+- Python syntax compilation and `git diff --check`: passed.
+- The Lean executable is not installed in this workspace. The updated
+  `tests/interpret_integration.py` contains two generated sequence theorems
+  (top-level interleaving and a local prefix inside a nested branch), while
+  `tests/browser_smoke.py` exercises that sequence in the natural-draft editor.
+  GitHub CI must compile and interact with them before this work can merge.
+- `tests/draft-benchmark.mjs` checked incremental/cold structural equality
+  across 160 samples per case, after 24 warmups, on Node v24.22.3 / Linux x64.
+  Current medians/P95 (ms): 16-line cold 0.193/0.809; exact replay
+  1.580/5.810; final-premise edit 1.214/1.858; dependency edit 1.318/3.136;
+  eight-level case draft 6.725/10.778; two-case interleaving cold
+  2.269/3.136; interleaving replay/terminal edit 2.356/3.653. This synthetic
+  run shows no speedup claim: the warm path is not faster here, and nested
+  cases report zero reused rows.
 
-- PR [#22](https://github.com/Liangebra/leanduet/pull/22), merge `0eaf7dd`:
-  physical source addresses, residual-goal checking, and closed branch-local
-  names.
-- PR [#24](https://github.com/Liangebra/leanduet/pull/24), merge `c6bf9f4`:
-  opt-in latency and incremental/full structural comparison benchmark.
-- PR [#23](https://github.com/Liangebra/leanduet/pull/23), merge `83d0154`:
-  open and nested disjunction branches retain parent continuations while local
-  names remain scoped.
-- PR [#25](https://github.com/Liangebra/leanduet/pull/25), merge `fcc66aa`:
-  intuitionistic negation introduction leaves `False` as the remaining goal;
-  it does not insert classical reasoning.
+## Semantic boundaries
 
-The original eight-stage order in `IMPLEMENTATION_ORDER.md` remains in force.
-The next dependency-ready work is still stage 2: generalize goal/context
-operations and subproof lifecycle beyond the current implication, quantifier,
-existential, and explicit binary-case mechanisms. In parallel, retain the
-current small corpus while stage 8 expands to genuine Mathlib examples.
+Case analysis remains an explicit binary `Or` operation, bounded to eight
+nested splits and 64 nonblank lines per parsed block. Ordinary draft segments
+remain limited to the existing controlled grammar and 16 inference lines.
+The structural `complete` flag means only that the bounded program can be
+rendered; it does not imply Lean elaboration or semantic fidelity. Formula
+matching is conservative surface structure, not Lean definitional equality.
+Scope IDs and physical line IDs are revision-local, and nested case bodies
+are recomputed after edits.
 
-## Validation and limits
+## Next dependency-ready tasks
 
-Local verification passes: 190 Node tests, 17 Python unit tests, Python syntax
-compilation, and the full `tests/interpret_integration.py` run under Lean 4.19.
-That integration compiles both generated declarations and checks the extracted
-Lean trees and local dependency closures. The first PR CI run caught a mistaken
-assumption that `And.left hx` would remain textually named in Lean's tree; the
-test now checks its actual projection form (`hx.left`) and constructor-pair
-representation. The browser smoke test still awaits GitHub CI, because this
-workspace does not have a Playwright browser installed.
+1. Submit the scope-sequence change as a separate PR and require Lean's
+   generated-term integration plus browser smoke tests to pass.
+2. Build the next proof operation around explicit child goals and closure
+   conditions (first conjunction introduction), without adding classical
+   reasoning or allowing local witnesses to escape their scopes.
+3. Add structure-level candidates for phrases such as “take an element
+   satisfying …”; preserve universal introduction, witness extraction,
+   definition, and open existence as distinct possibilities.
+4. Revisit branch-level incremental reuse only with cold-result comparison;
+   the current benchmark establishes a baseline, not a performance target.
 
-The natural-language draft remains a bounded, rule-guided grammar, not
-unrestricted prose parsing. A structural `complete` result means the draft has
-the required shape and goal annotations; only the separate Lean check can
-establish elaboration. Formula comparison is conservative surface structure
-modulo bound-variable renaming, not Lean definitional equality. Case analysis
-currently requires an explicit binary disjunction, is bounded to eight nested
-splits and 64 nonblank source lines, and fully recomputes case bodies after an
-edit.
-
-No performance improvement is claimed for these syntax and corpus changes.
-The existing opt-in benchmark is synthetic, bounded to the current draft
-engine, and checks incremental/full result equality rather than enforcing a
-speed threshold. One local rerun (Node v24.22.3, Linux x64, 24 warmups and 160
-samples; median/P95 milliseconds) measured 0.211/0.538 for cold evaluation,
-0.196/1.493 for exact replay, 0.185/0.458 for a final-premise edit,
-0.196/0.453 for a local dependency edit, and 2.406/4.140 for 41 lines with
-eight nested case levels. This is one synthetic environment and includes a
-noisy replay tail; it is not a production latency claim. Nested case blocks
-currently recompute their branch bodies.
-
-## Open problems and next entry points
-
-1. Generalize proof operations around child goals, local context extension,
-   closure conditions, and returning a result to the parent; make witness
-   escape rules explicit for all nested scopes.
-2. Add structure-level ambiguity candidates for phrases that could introduce
-   a universal variable, extract an existential witness, define an object, or
-   leave an existence obligation. Preserve unsupported, underspecified,
-   inconsistent, and budget-exhausted states separately.
-3. Extend aligned examples from the current predicate-set model to actual
-   Mathlib declarations, beginning with the existing compact-image topology
-   integration and adding prose only where the current grammar can preserve
-   the statement and proof path honestly.
-4. Improve branch-level incremental reuse and continue comparing it against a
-   full cold evaluation. Do not infer a speedup from code shape.
-5. Clarify surface structural mismatches versus Lean definitional equality in
-   diagnostics and candidate states.
+The aligned corpus now includes predicate-set operations and the Mathlib
+compact-image example. The next stage-8 expansion should add a small number of
+reviewed analysis or linear-algebra proofs with source language, expected
+structure, generated Lean, and independent compilation.
