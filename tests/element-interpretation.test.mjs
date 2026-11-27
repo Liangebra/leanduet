@@ -252,10 +252,11 @@ test('Lean-expanded bounded existentials keep membership in the extracted eviden
  assert.equal(result.candidates[0].operation,'existential-elimination');
  assert.equal(result.candidates[0].restrictionSet,'A');
  assert.equal(result.candidates[0].evidenceType,'((z ∈ A) ∧ (P z))');
- assert.throws(()=>elementInterpretationCandidates(parseElementRequest(
+ const mismatch=elementInterpretationCandidates(parseElementRequest(
   'take an element z : $Int$ in A satisfying $P(z)$ from h'),
-  {goal:'True',scope:['A','h'],facts:new Map([['A','List Nat'],['h',source]])}),
-  undefined);
+  {goal:'True',scope:['A','h'],facts:new Map([['A','List Nat'],['h',source]])});
+ assert.equal(mismatch.status,'incompatible-type');
+ assert.deepEqual(mismatch.candidates,[]);
 });
 
 test('a typed element request recognizes Lean’s nondependent Pi arrow as universal introduction',()=>{
