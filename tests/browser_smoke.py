@@ -11,6 +11,29 @@ ROOT=Path(__file__).resolve().parents[1]
 port=18765
 url=f"http://127.0.0.1:{port}"
 
+
+def select_typed_edit(page, *, exact_type=None, includes=()):
+    page.locator("#typedTree").evaluate("""(root, query) => {
+      const rows=[...root.querySelectorAll('.typedNode')].map(node=>({
+        node,
+        type:node.querySelector(':scope > .typedType code')?.textContent.trim()||'',
+        summary:node.querySelector(':scope > summary')?.textContent.trim()||'',
+        term:node.querySelector(':scope > details pre')?.textContent.trim()||'',
+        depth:(node.parentElement?.closest('.typedNode') ? 1 : 0) +
+          (node.parentElement?.closest('.typedNode')?.parentElement?.closest('.typedNode') ? 1 : 0),
+        edit:node.querySelector(':scope > .typedEdit')
+      }));
+      const candidates=rows.filter(row=>(query.exactType===null||row.type===query.exactType)
+        &&query.includes.every(part=>row.type.includes(part))&&row.edit);
+      if(!candidates.length) throw new Error('No editable typed node matched; available: '+
+        JSON.stringify(rows.map(({type,summary,term,depth,edit})=>({type,summary,term,depth,editable:!!edit}))));
+      candidates.sort((a,b)=>a.depth-b.depth||a.type.length-b.type.length);
+      const target=candidates[0].node;
+      for(let current=target;current&&current!==root;current=current.parentElement)
+        if(current.tagName==='DETAILS') current.open=true;
+      target.querySelector(':scope > .typedEdit').click();
+    }""", {"exactType":exact_type,"includes":list(includes)})
+
 with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL) as server:
     try:
         for _ in range(100):
@@ -253,7 +276,9 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
     (h : P ∨ P) : ∀ x : Nat, P := by
   intro x
   rcases he with ⟨y, hp⟩
-  exact hp
+  cases h with
+  | inl hleft => exact hp
+  | inr hright => exact hp
 """
             operation_page.locator("#lean").fill(operation_source)
             operation_page.once("dialog",lambda d:d.accept())
@@ -261,6 +286,8 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
             operation_page.locator('[data-view="typed"]').click()
             operation_page.locator("#extractTerm").click()
             expect(operation_page.locator("#typedStatus")).to_contain_text("Extracted from Lean elaboration",timeout=60000)
+            select_typed_edit(operation_page,includes=("∀","P"))
+            expect(operation_page.locator("#patchTarget")).to_contain_text("∀")
             operation_page.locator("#chainEditor summary").click()
             operation_page.locator("#chainFormat").select_option("natural")
             operation_text="""take an element x : $Nat$ satisfying $P$
@@ -303,6 +330,8 @@ $P$ | hp""")
             restricted_page.locator('[data-view="typed"]').click()
             restricted_page.locator("#extractTerm").click()
             expect(restricted_page.locator("#typedStatus")).to_contain_text("Extracted from Lean elaboration",timeout=60000)
+            select_typed_edit(restricted_page,includes=("∀","P x"))
+            expect(restricted_page.locator("#patchTarget")).to_contain_text("∀")
             if not restricted_page.locator("#chainEditor").evaluate("(editor) => editor.open"):
                 restricted_page.locator("#chainEditor summary").click()
             restricted_page.locator("#chainFormat").select_option("natural")
@@ -317,6 +346,7 @@ $P$ | hp""")
 
             restricted_page.locator("#lean").fill("""theorem restricted_exists_demo (A : List Nat) (P : Nat → Prop)
     (h : ∃ x ∈ A, P x) (hq : True) : True := by
+  rcases h with ⟨x, hxp⟩
   exact hq
 """)
             restricted_page.once("dialog",lambda d:d.accept())
@@ -324,6 +354,8 @@ $P$ | hp""")
             restricted_page.locator('[data-view="typed"]').click()
             restricted_page.locator("#extractTerm").click()
             expect(restricted_page.locator("#typedStatus")).to_contain_text("Extracted from Lean elaboration",timeout=60000)
+            select_typed_edit(restricted_page,exact_type="True")
+            expect(restricted_page.locator("#patchTarget")).to_contain_text("True")
             if not restricted_page.locator("#chainEditor").evaluate("(editor) => editor.open"):
                 restricted_page.locator("#chainEditor summary").click()
             restricted_page.locator("#chainFormat").select_option("natural")
