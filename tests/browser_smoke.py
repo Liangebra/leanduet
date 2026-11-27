@@ -401,6 +401,39 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
             goalop_page.locator("#check").click()
             expect(goalop_page.locator("#verifyState")).to_have_text("Lean passed",timeout=120000)
             goalop_page.close()
+
+            false_page=browser.new_page(viewport={"width":1440,"height":900})
+            false_page.on("pageerror",lambda error:errors.append(str(error)))
+            false_page.goto(url)
+            false_source="""theorem ex_falso_demo (P : Prop) (hFalse : False) : P := by
+  exact False.elim hFalse
+"""
+            false_page.locator("#lean").fill(false_source)
+            false_page.once("dialog",lambda d:d.accept())
+            false_page.locator("#adopt").click()
+            false_page.locator('[data-view="typed"]').click()
+            false_page.locator("#extractTerm").click()
+            expect(false_page.locator("#typedStatus")).to_contain_text("Extracted from Lean elaboration",timeout=60000)
+            false_page.locator("#typedTree").evaluate("(root) => root.querySelectorAll('details.typedNode').forEach(x=>x.open=true)")
+            false_node=false_page.locator(".typedNode").filter(has=false_page.locator("summary").filter(has_text=__import__("re").compile(r"^Apply False\.elim$"))).last
+            false_node.locator(":scope > button.typedEdit").click()
+            expect(false_page.locator("#patchTarget")).to_contain_text("P")
+            expect(false_page.locator("#patchScope")).to_contain_text("P")
+            expect(false_page.locator("#patchScope")).to_contain_text("hFalse")
+            false_page.locator("#chainEditor summary").click()
+            false_page.locator("#chainFormat").select_option("natural")
+            false_page.locator("#chainText").fill("From hFalse, we obtain $P$")
+            expect(false_page.locator("#draftTranslation")).to_contain_text("False.elim hFalse · false elimination")
+            false_page.locator("#compileChain").click()
+            expect(false_page.locator("#patchTerm")).to_have_value(__import__("re").compile(r"False\.elim hFalse"))
+            false_page.locator("#checkPatch").click()
+            expect(false_page.locator("#applyPatch")).to_be_enabled(timeout=120000)
+            false_page.once("dialog",lambda d:d.accept())
+            false_page.locator("#applyPatch").click()
+            false_page.locator("#check").click()
+            expect(false_page.locator("#verifyState")).to_have_text("Lean passed",timeout=120000)
+            false_page.close()
+
             assert not errors, errors
             browser.close()
         print("Browser smoke test passed")
