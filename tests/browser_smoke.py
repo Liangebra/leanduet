@@ -272,11 +272,11 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
             operation_page=browser.new_page(viewport={"width":1440,"height":900})
             operation_page.on("pageerror",lambda error:errors.append(str(error)))
             operation_page.goto(url)
-            operation_source="""theorem operation_choice_demo (P : Nat → Prop) (hall : ∀ x : Nat, P x)
-    (he : ∃ y : Nat, P y) (h : True ∨ True) :
-    (∀ witness : ∃ y : Nat, P y, ∀ x : Nat, P x) := by
-  intro witness
-  exact hall
+            operation_source="""theorem operation_choice_demo (P : Prop) (he : ∃ y : Nat, P)
+    (h : P ∨ P) : ∀ x : Nat, P := by
+  intro x
+  rcases he with ⟨y, hp⟩
+  exact hp
 """
             operation_page.locator("#lean").fill(operation_source)
             operation_page.once("dialog",lambda d:d.accept())
@@ -284,11 +284,11 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
             operation_page.locator('[data-view="typed"]').click()
             operation_page.locator("#extractTerm").click()
             expect(operation_page.locator("#typedStatus")).to_contain_text("Extracted from Lean elaboration",timeout=60000)
-            select_typed_edit(operation_page,includes=("∀","P x"),summary="Use hypothesis",term="hall")
+            select_typed_edit(operation_page,includes=("∀","P"),summary="Introduce x")
             expect(operation_page.locator("#patchTarget")).to_contain_text("∀")
             operation_page.locator("#chainEditor summary").click()
             operation_page.locator("#chainFormat").select_option("natural")
-            operation_text="""take an element x : $Nat$ satisfying $P(x)$
+            operation_text="""take an element x : $Nat$ satisfying $P$
 unsupported ⊛"""
             operation_page.locator("#chainText").fill(operation_text)
             operation_row=operation_page.locator("#draftTranslation .ruleResult").first
@@ -297,18 +297,18 @@ unsupported ⊛"""
             operation_row.get_by_role("button",name="Use this candidate").first.click()
             expect(operation_page.locator("#chainStatus")).to_contain_text("Candidate choice changed")
             expect(operation_row).to_contain_text("Clear choice")
-            operation_text=operation_text.replace("unsupported ⊛", """cases h, establish hp : $P(x)$
+            operation_text=operation_text.replace("unsupported ⊛", """cases h, establish hp : $P$
   left case hleft
-    $P(x)$ | hall x
+    $P$ | hleft
   right case hright
-    $P(x)$ | hall x
-$P(x)$ | hp""")
+    $P$ | hright
+$P$ | hp""")
             operation_page.locator("#chainText").fill(operation_text)
             operation_row=operation_page.locator("#draftTranslation .ruleResult").first
             expect(operation_row).to_contain_text("universal-variable introduction")
             expect(operation_row).to_contain_text("Clear choice")
             operation_page.locator("#compileChain").click()
-            expect(operation_page.locator("#patchTerm")).to_have_value(__import__("re").compile(r"intro x[\s\S]*cases h with[\s\S]*exact hall x[\s\S]*exact hp"))
+            expect(operation_page.locator("#patchTerm")).to_have_value(__import__("re").compile(r"intro x[\s\S]*cases h with[\s\S]*exact hleft[\s\S]*exact hright[\s\S]*exact hp"))
             operation_page.locator("#checkPatch").click()
             expect(operation_page.locator("#applyPatch")).to_be_enabled(timeout=120000)
             operation_page.once("dialog",lambda d:d.accept())
