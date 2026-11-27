@@ -337,7 +337,7 @@ $P(x)$ | hp""")
             restricted_page.locator("#chainFormat").select_option("natural")
             restricted_page.locator("#chainText").fill("take an arbitrary element z : $Nat$ in A satisfying $P(z)$\nassume hz : $z ∈ A$\n$P(z)$ | hall z hz")
             bounded_row=restricted_page.locator("#draftTranslation .ruleResult").first
-            assert restricted_page.locator("#draftTranslation .ruleResult").count()>0, "Draft preview: "+restricted_page.locator("#draftTranslation").inner_text()
+            assert restricted_page.locator("#draftTranslation .ruleResult").count()>0, "Target: "+restricted_page.locator("#patchTarget").inner_text()+"; input: "+restricted_page.locator("#chainText").input_value()+"; draft preview: "+restricted_page.locator("#draftTranslation").inner_text()
             expect(bounded_row).to_contain_text("arbitrary element introduction under a set restriction")
             expect(bounded_row).to_contain_text("After introduction, establish (z ∈ A)")
             restricted_page.locator("#compileChain").click()
