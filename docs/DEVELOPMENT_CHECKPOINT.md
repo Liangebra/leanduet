@@ -18,6 +18,14 @@ uses the Lean precedences for `+` and union (65), and `*` and intersection
 (70), so mixed expressions preserve the parsed tree. This is syntax support;
 it does not by itself add union reasoning rules.
 
+A second aligned case now targets Mathlib 4.19's `IsCompact.image`. The formula
+grammar represents `f '' s` using the pinned Mathlib `infixl:80` notation, and
+the Chinese rule alias “紧集的连续像” can select `IsCompact.image` with the
+explicit premises `hs` and `hf`. A targeted Mathlib integration compiles the
+generated theorem and checks the extracted dependent context closure, including
+both topology instances. This is one bounded theorem path, not general Mathlib
+prose translation; the Mathlib workflow run remains required before merge.
+
 ## Merged foundation
 
 - PR [#22](https://github.com/Liangebra/leanduet/pull/22), merge `0eaf7dd`:
