@@ -201,3 +201,8 @@ symbolic dependencies on unresolved holes. Relation construction is bounded
 independently of assignment enumeration and reports overflow without treating
 partial tuples as exhaustive. This is conditional finite projection inference,
 not a general dependent type elaborator or Sigma-type implementation.
+
+The integration suite compiles the same conditional projection expression
+under both possible source types, and checks that an incompatible source
+choice cannot export a proof. Regression coverage includes three dependent
+domains and incremental replay after changing the terminal constraint.

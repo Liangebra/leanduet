@@ -207,3 +207,32 @@ test('dependent candidate choice migrates across source insertions',async()=>{
  const current=reconcileDraftIdentity(old,draftProof('\n'+text,scope,ctx).graph);
  assert.deepEqual([...migrateDraftChoices(old,current,choices)],[[3,key]]);
 });
+
+test('a terminal type constraint propagates through three dependent domains',()=>{
+ const ctx=new Map([['h','((P ∧ Q) ∧ (R ∧ S)) ∧ ((A ∧ B) ∧ (C ∧ D))'],['f','C → T']]);
+ const text='建立 hu : $?$,由 h\n建立 hv : $?$,由 hu\n建立 hw : $?$,由 hv\n由 hw 与 f 得到 $T$';
+ const r=draftProof(text,[...ctx.keys()],ctx);
+ assert.equal(r.complete,true);
+ assert.equal(r.rows[0].step.application,'And.right h');
+ assert.equal(r.rows[1].step.application,'And.right hu');
+ assert.equal(r.rows[2].step.application,'And.left hv');
+ assert.equal(r.rows[2].step.type,'C');
+ assert.equal(r.graph.constraintGroups[0].assignments.length,1);
+ assert.deepEqual(r.rows.slice(0,3).map(row=>row.domain.length),[2,4,8]);
+});
+test('conditional domain replay matches cold evaluation when the terminal constraint changes',()=>{
+ const ctx=new Map([['h','(P ∧ Q) ∧ (R ∧ S)'],['f','P → T'],['g','R → T']]);
+ const scope=[...ctx.keys()],session=createDraftSession();
+ const prefix='建立 hu : $?$,由 h\n建立 hv : $?$,由 hu\n';
+ const a=prefix+'由 hv 与 f 得到 $T$',b=prefix+'由 hv 与 g 得到 $T$';
+ assert.equal(session.evaluate(a,scope,ctx).rows[0].step.application,'And.left h');
+ const r=session.evaluate(b,scope,ctx);
+ assert.equal(r.rows[0].step.application,'And.right h');
+ assert.deepEqual(r.graph,draftProof(b,scope,ctx).graph);
+});
+test('source-to-child domain references participate in reverse invalidation',async()=>{
+ const {dependentNodes}=await import('../web/draft-graph.mjs');
+ const ctx=new Map([['h','(P ∧ Q) ∧ (R ∧ S)'],['f','R → T']]);
+ const r=draftProof('建立 hu : $?$,由 h\n建立 hv : $?$,由 hu\n由 hv 与 f 得到 $T$',[...ctx.keys()],ctx);
+ assert.deepEqual(dependentNodes(r.graph,['line:3']),['line:1','line:2','line:3']);
+});
