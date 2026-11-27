@@ -26,8 +26,23 @@ function negationBody(ast){
  if(ast.kind==='call'&&ast.fn?.kind==='id'&&ast.fn.value==='Not'&&ast.args.length===1)return ast.args[0];
  return null;
 }
+
+// Lean prints bounded quantifiers in their ordinary Pi/And form. Recover the
+// restriction only when the membership's left side is exactly the binder.
+function restrictedQuantifier(ast,quantifier){
+ if(ast?.kind==='bounded'&&ast.op===quantifier)
+  return {name:ast.name,domain:null,set:ast.set,property:ast.body};
+ if(ast?.kind!=='binder'||ast.op!==quantifier)return null;
+ const connective=quantifier==='∀'?'→':'∧',body=ast.body;
+ if(body?.kind!=='binary'||body.op!==connective)return null;
+ const membership=body.left;
+ if(membership?.kind!=='binary'||membership.op!=='∈'||
+    membership.left?.kind!=='id'||membership.left.value!==ast.name)return null;
+ return {name:ast.name,domain:ast.domain,set:membership.right,property:body.right};
+}
 function inferredIntroductionType(ast,kind){
  if(kind==='introduce'&&ast.kind==='binder'&&ast.op==='∀'&&ast.domain)return renderFormula(ast.domain);
+ if(kind==='introduce'&&ast.kind==='binary'&&ast.op==='→')return renderFormula(ast.left);
  if(kind==='assume'&&ast.kind==='binary'&&ast.op==='→')return renderFormula(ast.left);
  const negative=kind==='assume'?negationBody(ast):null;
  if(negative)return renderFormula(negative);
@@ -86,11 +101,20 @@ export function planGoalOperation(goal,{kind,name=null,type=null,source=null,sou
    closure:{kind:'constructor',name:'Exists.intro',witness}};
  }
  if(!['introduce','assume'].includes(kind))throw Error('Unknown goal operation.');
- if(kind==='introduce'&&ast.kind==='bounded'&&ast.op==='∀'){
+ const restricted=kind==='introduce'?restrictedQuantifier(ast,'∀'):null;
+ if(restricted){
+  // A parsed Lean Pi already carries a trustworthy binder domain. Surface
+  // bounded quantifiers omit it, so those still require an explicit type.
+  if((typeof type!=='string'||!type)&&restricted.domain)type=renderFormula(restricted.domain);
   if(typeof type!=='string'||!type)throw Error('A set-restricted universal needs an explicit element type annotation.');
-  if(typeof name!=='string'||!name)name=ast.name;
-  if(name!==ast.name&&(containsName(ast.body,name)||containsName(ast.set,name)))throw Error('Introduction name may capture an existing occurrence; choose a fresh name.');
-  const set=renderFormula(ast.set),property=renderFormula(rename(ast.body,ast.name,name));
+  const domain=compileFormula(type,{syntax:'lean'}).scoped;
+  if(restricted.domain&&!same(scopedFormula(restricted.domain),domain))
+   throw Error('The element type does not match the universal binder domain.');
+  if(typeof name!=='string'||!name)name=restricted.name;
+  if(name!==restricted.name&&(containsName(restricted.property,name)||containsName(restricted.set,name)))
+   throw Error('Introduction name may capture an existing occurrence; choose a fresh name.');
+  const set=renderFormula(rename(restricted.set,restricted.name,name));
+  const property=renderFormula(rename(restricted.property,restricted.name,name));
   const membership='('+name+' ∈ '+set+')';
   return {kind:'bounded-universal-introduction',parentGoal:goal,logic:'intuitionistic',restrictionSet:set,focusProperty:property,
    subgoals:[{id:'restricted-body',goal:'('+membership+' → '+property+')',contextDelta:[{name,type,kind:'universal-variable'}]}],
@@ -100,11 +124,18 @@ export function planGoalOperation(goal,{kind,name=null,type=null,source=null,sou
  if(typeof name!=='string'||!name)name=ast.kind==='binder'?ast.name:'h';
  const domain=compileFormula(introType,{syntax:'lean'}).scoped;
  if(kind==='introduce'){
-  if(ast.kind!=='binder'||ast.op!=='∀'||(ast.domain&&!same(scopedFormula(ast.domain),domain)))
-   throw Error('The current goal is not a matching universal.');
-  if(name!==ast.name&&containsName(ast.body,name))throw Error('Introduction name may capture an existing occurrence; choose a fresh name.');
+  let body;
+  if(ast.kind==='binder'&&ast.op==='∀'&&(!ast.domain||same(scopedFormula(ast.domain),domain))){
+   if(name!==ast.name&&containsName(ast.body,name))throw Error('Introduction name may capture an existing occurrence; choose a fresh name.');
+   body=renderFormula(rename(ast.body,ast.name,name));
+  }else if(ast.kind==='binary'&&ast.op==='→'&&same(scopedFormula(ast.left),domain)){
+   // Lean prints a nondependent Pi as an arrow. When the request supplies
+   // the binder type, treating that function argument as a new object keeps
+   // it distinct from the ordinary "assume hp : P" introduction path.
+   body=renderFormula(ast.right);
+  }else throw Error('The current goal is not a matching universal or typed nondependent Pi.');
   return {kind:'universal-introduction',parentGoal:goal,logic:'dependent-function',
-   subgoals:[{id:'body',goal:renderFormula(rename(ast.body,ast.name,name)),contextDelta:[{name,type:introType,kind:'universal-variable'}]}],
+   subgoals:[{id:'body',goal:body,contextDelta:[{name,type:introType,kind:'universal-variable'}]}],
    closure:{kind:'binder-introduction',name}};
  }
  if(ast.kind==='binary'&&ast.op==='→'&&same(scopedFormula(ast.left),domain))return {
@@ -131,12 +162,19 @@ export function inferIntroduction(goal,kind,name=null){
 export function existentialBindings(sourceType,{name,type=null}){
  if(!sourceType)throw Error('The cited existential premise has no known type.');
  const ast=compileFormula(sourceType,{syntax:'lean'}).ast;
- if(ast.kind==='bounded'&&ast.op==='∃'){
-  if(typeof type!=='string'||!type)throw Error('A set-restricted existential needs an explicit witness type annotation.');
-  if(name!==ast.name&&(containsName(ast.body,name)||containsName(ast.set,name)))throw Error('Witness name may capture an existing occurrence; choose a fresh name.');
-  const restrictionSet=renderFormula(ast.set),propertyType=renderFormula(rename(ast.body,ast.name,name));
+ const restricted=restrictedQuantifier(ast,'∃');
+ if(restricted){
+  if(typeof type!=='string'&&!restricted.domain)
+   throw Error('A set-restricted existential needs an explicit witness type annotation.');
+  const domain=type||(restricted.domain?renderFormula(restricted.domain):null);
+  if(restricted.domain&&type&&!same(scopedFormula(restricted.domain),compileFormula(type,{syntax:'lean'}).scoped))
+   throw Error('Witness type does not match the existential domain.');
+  if(name!==restricted.name&&(containsName(restricted.property,name)||containsName(restricted.set,name)))
+   throw Error('Witness name may capture an existing occurrence; choose a fresh name.');
+  const restrictionSet=renderFormula(rename(restricted.set,restricted.name,name));
+  const propertyType=renderFormula(rename(restricted.property,restricted.name,name));
   const membership='('+name+' ∈ '+restrictionSet+')';
-  return {type,evidenceType:'('+membership+' ∧ '+propertyType+')',restrictionSet,propertyType};
+  return {type:domain,evidenceType:'('+membership+' ∧ '+propertyType+')',restrictionSet,propertyType};
  }
  if(ast.kind!=='binder'||ast.op!=='∃')throw Error('The cited premise is not a supported existential.');
  if(ast.domain&&type&&!same(scopedFormula(ast.domain),compileFormula(type,{syntax:'lean'}).scoped))throw Error('Witness type does not match the existential domain.');

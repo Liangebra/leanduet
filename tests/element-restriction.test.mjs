@@ -96,3 +96,45 @@ test('bounded existential extraction keeps witness evidence local and source ide
  assert.deepEqual(actual,expected);
 });
 
+test('bounded candidate identity follows the set object and rejects an ambiguous restriction',()=>{
+ const universal=parseElementRequest('take an arbitrary element x : $Nat$ in A satisfying $P(x)$');
+ const first=elementInterpretationCandidates(universal,{goal:'∀ x ∈ A, P x',scope:['A'],scopeIds:['set:A:1'],
+  facts:new Map([['A','Set Nat']])});
+ const replaced=elementInterpretationCandidates(universal,{goal:'∀ x ∈ A, P x',scope:['A'],scopeIds:['set:A:2'],
+  facts:new Map([['A','Set Nat']])});
+ assert.equal(first.status,'unique');
+ assert.notEqual(first.candidates[0].choice,replaced.candidates[0].choice,
+  'a new set identity invalidates the previous bounded-introduction selection');
+ assert.deepEqual(first.candidates[0].restrictionDependencies,['set:A:1']);
+
+ const witness=parseElementRequest('take an element x : $Nat$ in A satisfying $P(x)$ from h');
+ const existentialFacts=new Map([['A','Set Nat'],['h','∃ y ∈ A, P y']]);
+ const witnessFirst=elementInterpretationCandidates(witness,{goal:'Q',scope:['A','h'],scopeIds:['set:A:1','premise:h'],
+  facts:existentialFacts});
+ const witnessChanged=elementInterpretationCandidates(witness,{goal:'Q',scope:['A','h'],scopeIds:['set:A:2','premise:h'],
+  facts:existentialFacts});
+ assert.equal(witnessFirst.status,'unique');
+ assert.notEqual(witnessFirst.candidates[0].choice,witnessChanged.candidates[0].choice,
+  'a source match is insufficient when the set object in its witness type changed');
+ assert.deepEqual(witnessFirst.candidates[0].restrictionDependencies,['set:A:1']);
+
+ const ambiguous=elementInterpretationCandidates(universal,{goal:'∀ x ∈ A, P x',scope:[],
+  ambiguousNames:['A'],facts:new Map([['A','Set Nat']])});
+ assert.equal(ambiguous.status,'ambiguous-context');
+ assert.deepEqual(ambiguous.candidates,[]);
+});
+
+test('set object identities are explicit dependencies in the semantic draft graph',()=>{
+ const facts=new Map([['A','Set Nat'],['hall','∀ x : Nat, x ∈ A → P x']]);
+ const input='take an arbitrary element x : $Nat$ in A satisfying $P(x)$\n'+
+  'assume hx : $x ∈ A$\n$P(x)$ | hall x hx';
+ const result=compileNaturalDraft(input,['A','hall'],facts,{goal:'∀ x ∈ A, P x'});
+ const request=result.graph.nodes.find(node=>node.kind==='introduce'&&node.name==='x');
+ assert.ok(request);
+ assert.ok(request.alternatives[0].dependencies.includes('context:0'));
+ const ambiguous=createDraftSession().evaluate(
+  'take an arbitrary element x : $Nat$ in A satisfying $P(x)$',['A','A'],new Map([['A','Set Nat']]),
+  {goal:'∀ x ∈ A, P x',continuation:true});
+ assert.equal(ambiguous.rows[0].resolutionStatus,'ambiguous-context');
+});
+

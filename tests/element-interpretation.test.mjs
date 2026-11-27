@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {compileNaturalDraft,createDraftSession,draftProof} from '../web/natural-draft.mjs';
 import {elementInterpretationCandidates,parseElementRequest} from '../web/element-interpretation.mjs';
+import {planGoalOperation} from '../web/context-extension.mjs';
 import {reconcileDraftIdentity,migrateDraftChoices} from '../web/draft-identity.mjs';
 
 test('element requests keep a shared utterance and expose universal and existential operations',()=>{
@@ -17,6 +18,54 @@ test('element requests keep a shared utterance and expose universal and existent
  assert.equal(result.candidates[1].sourceId,'context:1');
 });
 
+test('a typed element request recognizes Lean’s nondependent Pi arrow as universal introduction',()=>{
+ const request=parseElementRequest('take an element z : $Nat$ satisfying $P$');
+ const result=elementInterpretationCandidates(request,{goal:'Nat → P',scope:['P','he'],
+  facts:new Map([['P','Prop'],['he','∃ y : Nat, P']])});
+ assert.equal(result.status,'ambiguous');
+ assert.deepEqual(result.candidates.map(candidate=>candidate.operation),['universal-introduction','existential-elimination']);
+ assert.equal(result.candidates[0].type,'Nat');
+ const operation=planGoalOperation('Nat → P',{kind:'introduce',name:'z',type:'Nat'});
+ assert.equal(operation.subgoals[0].goal,'P');
+ assert.equal(operation.subgoals[0].contextDelta[0].name,'z');
+ assert.equal(operation.subgoals[0].contextDelta[0].kind,'universal-variable');
+});
+
+test('Lean-expanded set quantifiers recover their membership obligation structurally',()=>{
+ const request=parseElementRequest('take an arbitrary element z : $Nat$ in A satisfying $P(z)$');
+ const result=elementInterpretationCandidates(request,{goal:'∀ (x : Nat), x ∈ A → P x',scope:['A'],
+  facts:new Map([['A','List Nat']])});
+ assert.equal(result.status,'unique');
+ assert.equal(result.candidates[0].operation,'universal-introduction');
+ assert.equal(result.candidates[0].restrictionSet,'A');
+ assert.equal(result.candidates[0].requiredCondition,'(z ∈ A)');
+ const operation=planGoalOperation('∀ (x : Nat), x ∈ A → P x',
+  {kind:'introduce',name:'z',type:'Nat'});
+ assert.equal(operation.restrictionSet,'A');
+ assert.equal(operation.focusProperty,'(P z)');
+ assert.equal(operation.subgoals[0].goal,'((z ∈ A) → (P z))');
+ assert.throws(()=>planGoalOperation('∀ (x : Nat), x ∈ A → P x',
+  {kind:'introduce',name:'z',type:'Int'}),/binder domain/);
+ const unrelated=elementInterpretationCandidates(request,{goal:'∀ (x : Nat), y ∈ A → P x',scope:['A'],
+  facts:new Map([['A','List Nat']])});
+ assert.equal(unrelated.candidates.length,0,'membership of an unrelated y is not a bound restriction');
+});
+
+test('Lean-expanded bounded existentials keep membership in the extracted evidence',()=>{
+ const request=parseElementRequest('take an element z : $Nat$ in A satisfying $P(z)$ from h');
+ const source='∃ (x : Nat), x ∈ A ∧ P x';
+ const result=elementInterpretationCandidates(request,{goal:'True',scope:['A','h'],
+  facts:new Map([['A','List Nat'],['h',source]])});
+ assert.equal(result.status,'unique');
+ assert.equal(result.candidates[0].operation,'existential-elimination');
+ assert.equal(result.candidates[0].restrictionSet,'A');
+ assert.equal(result.candidates[0].evidenceType,'((z ∈ A) ∧ (P z))');
+ const mismatch=elementInterpretationCandidates(parseElementRequest(
+  'take an element z : $Int$ in A satisfying $P(z)$ from h'),
+  {goal:'True',scope:['A','h'],facts:new Map([['A','List Nat'],['h',source]])});
+ assert.equal(mismatch.status,'incompatible-type');
+ assert.deepEqual(mismatch.candidates,[]);
+});
 test('Chinese arbitrary wording rules out existential extraction',()=>{
  const request=parseElementRequest('取任意元素 x：$Nat$ 满足 $P(x)$');
  const result=elementInterpretationCandidates(request,{goal:'∀ y : Nat, P y',scope:['he'],facts:new Map([['he','∃ y : Nat, P y']])});
@@ -129,6 +178,51 @@ test('unsupported matches, missing sources, and search budgets stay distinct',()
  assert.equal(elementInterpretationCandidates(unscoped,{goal:null,scope:many,facts:manyFacts,limit:8}).status,'budget-exhausted');
 });
 
+test('an element-operation choice survives unrelated text edits after selection',()=>{
+ const session=createDraftSession(),goal='Nat → P',scope=['P','he'];
+ const facts=new Map([['P','Prop'],['he','∃ y : Nat, P']]);
+ const original='take an element z : $Nat$ satisfying $P$\nunsupported ⊛';
+ const first=session.evaluate(original,scope,facts,{goal});
+ const candidate=first.rows[0].candidates.find(value=>value.operation==='universal-introduction');
+ assert.ok(candidate);
+ const choices=new Map([[1,candidate.choice]]);
+ const selected=session.evaluate(original,scope,facts,{goal,choices});
+ assert.equal(selected.rows[0].step.kind,'introduce');
+ const previous=reconcileDraftIdentity(null,selected.graph);
+ const edited='take an element z : $Nat$ satisfying $P$\nchanged unsupported ⊛';
+ const probe=session.evaluate(edited,scope,facts,{goal});
+ const current=reconcileDraftIdentity(previous,probe.graph);
+ assert.deepEqual([...migrateDraftChoices(previous,current,choices)],[[1,candidate.choice]]);
+});
+
+test('an element choice keeps its root identity when a later scoped block extends the draft',()=>{
+ const session=createDraftSession(),goal='∀ x : Nat, P x',scope=['hall','he','h'];
+ const facts=new Map([['hall','∀ x : Nat, P x'],['he','∃ y : Nat, P y'],['h','True ∨ True']]);
+ const initial='take an element x : $Nat$ satisfying $P(x)$\nunsupported ⊛';
+ const first=session.evaluate(initial,scope,facts,{goal});
+ const candidate=first.rows[0].candidates.find(value=>value.operation==='universal-introduction');
+ assert.ok(candidate);
+ const choice=candidate.choice,choices=new Map([[1,choice]]);
+ const selected=session.evaluate(initial,scope,facts,{goal,choices});
+ const previous=reconcileDraftIdentity(null,selected.graph);
+ const expanded=initial.replace('unsupported ⊛',
+  'cases h, establish hT : $True$\n  left case ht\n    $True$ | ht\n  right case hu\n    $True$ | hu\n$True$ | hT');
+ const probe=session.evaluate(expanded,scope,facts,{goal});
+ assert.equal(probe.graph.goal,goal,'the full draft graph is anchored to the originally selected target');
+ assert.deepEqual(probe.graph.nodes.filter(node=>node.kind==='context').map(node=>node.name),scope,
+  'suffix locals remain proof nodes instead of becoming root context entries');
+ const current=reconcileDraftIdentity(previous,probe.graph);
+ const migrated=migrateDraftChoices(previous,current,choices);
+ assert.deepEqual([...migrated],[[1,choice]]);
+ const restored=session.evaluate(expanded,scope,facts,{goal,choices:migrated});
+ assert.equal(restored.rows[0].step.kind,'introduce');
+ assert.equal(restored.rows[0].selectedChoice,choice);
+ const cold=createDraftSession().evaluate(expanded,scope,facts,{goal,choices:migrated});
+ assert.equal(cold.complete,false,'the unrelated case result does not close the remaining P x obligation');
+ const {reusedRows,...actual}=restored,{reusedRows:coldReuse,...expected}=cold;
+ assert.equal(coldReuse,0);
+ assert.deepEqual(actual,expected);
+});
 test('stale operation choices are rejected after context edits',()=>{
  const session=createDraftSession();
  const input='take an element x satisfying $P(x)$ from he\n$Q$ | hq';

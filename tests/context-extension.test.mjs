@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {draftProof,createDraftSession,compileNaturalDraft} from '../web/natural-draft.mjs';
-import {extendGoal} from '../web/context-extension.mjs';
+import {extendGoal,planGoalOperation} from '../web/context-extension.mjs';
 import {dependentNodes} from '../web/draft-graph.mjs';
 import {forkProofScope,proofScopeFacts,proofScopeNames,resolveProofName,rootProofScope} from '../web/proof-scope.mjs';
 const scope=['P'],facts=new Map();
@@ -39,6 +39,13 @@ test('Lean pretty-printed binders and inferred domains accept explicit user anno
  assert.equal(r.complete,true);
  assert.equal(r.remainingGoal,'(x ∈ s)');
  assert.equal(extendGoal('∀ (z : Nat), P z',{kind:'introduce',name:'x',type:'Nat'}),'(P x)');
+});
+test('a typed Lean universal binder supplies its domain for an implicit introduction',()=>{
+ const operation=planGoalOperation('∀ (x : Nat), x ∈ A → P x',{kind:'introduce',name:'x'});
+ assert.equal(operation.subgoals[0].contextDelta[0].type,'Nat');
+ assert.equal(operation.subgoals[0].goal,'((x ∈ A) → (P x))');
+ assert.throws(()=>planGoalOperation('∀ x ∈ A, P x',{kind:'introduce',name:'x'}),
+  /explicit element type annotation/,'surface bounded syntax has no carrier type to infer');
 });
 test('scope dependencies exist even when a proof does not mention its binder',()=>{
  const r=draftProof('任取 x : $Nat$\n$P$ | p',['P','p'],new Map([['p','P']]),{goal:'∀ z : Nat, P'});
@@ -255,6 +262,66 @@ test('an open branch preserves the parent continuation as dependent semantic str
  const conclusion=result.graph.nodes.find(n=>n.id==='line:8');
  assert.ok(intermediate.dependencies.includes(node.id),'the continuation cites the provisional common result');
  assert.ok(conclusion.dependencies.includes(intermediate.id),'later prose remains connected to its local result');
+});
+
+test('an incomplete case rejects a common result type that mentions a branch-local object',()=>{
+ const facts=new Map([['P','Prop'],['Q','Prop'],['h','P ∨ Q'],['R','P → Prop']]);
+ const input='cases h, establish hR : $R(hp)$\n  left case hp\n    unsupported ⊛\n  right case hq\n    unsupported ⊛\n$R(hp)$ | hR';
+ const result=createDraftSession().evaluate(input,[...facts.keys()],facts,{goal:'R(hp)'});
+ const row=result.rows[0];
+ const node=result.graph.nodes.find(n=>n.kind==='cases');
+ assert.equal(result.complete,false);
+ assert.equal(result.term,null);
+ assert.equal(row.resolutionStatus,'incompatible-target');
+ assert.match(row.reason,/branch-local name cannot occur in the parent result: hp/);
+ const continuation=result.rows.find(item=>item.line===6);
+ assert.ok(continuation,'later parent prose remains available for semantic inspection');
+ assert.equal(continuation.status,'unresolved','an escaped local cannot justify the parent continuation');
+ assert.match(continuation.reason,/hp/,'the parent continuation cannot resolve the expired branch spelling');
+ assert.equal(result.graph.nodes.some(item=>item.name==='hp'&&item.kind==='context'),false,'the branch object is not added to the parent graph');
+ assert.equal(node.branches.length,2,'the failed branch drafts remain available for repair');
+});
+
+test('a bound variable with the same spelling as a branch name is not an escape',()=>{
+ const facts=new Map([['P','Prop'],['Q','Prop'],['h','P ∨ Q'],['R','P → Prop']]);
+ const target='∀ hp : P, R(hp)';
+ const input='cases h, establish hR : $'+target+'$\n  left case hp\n    unsupported ⊛\n  right case hq\n    unsupported ⊛\n$'+target+'$ | hR';
+ const result=createDraftSession().evaluate(input,[...facts.keys()],facts,{goal:target});
+ assert.equal(result.complete,false);
+ assert.equal(result.rows[0].resolutionStatus,'open-obligation');
+ assert.doesNotMatch(result.rows[0].reason,/branch-local name cannot occur/);
+ assert.ok(result.rows.some(row=>row.line===6),'the nonescaping parent continuation remains visible');
+});
+
+test('an unfinished branch-local declaration cannot escape through its provisional result',()=>{
+ const facts=new Map([['P','Prop'],['h','P ∨ P'],['R','P → Prop']]);
+ const input=['cases h, establish hR : $R(hLocal)$',
+  '  left case hp','    establish hLocal : $P$ | hp','    unsupported ⊛',
+  '  right case hq','    unsupported ⊛','$R(hLocal)$ | hR'].join('\n');
+ const result=createDraftSession().evaluate(input,[...facts.keys()],facts,{goal:'R(hLocal)'});
+ const cases=result.graph.nodes.find(node=>node.kind==='cases');
+ assert.equal(result.complete,false);
+ assert.equal(result.rows[0].resolutionStatus,'incompatible-target');
+ assert.match(result.rows[0].reason,/hLocal/);
+ assert.ok(cases.branches[0].graph.nodes.some(node=>node.name==='hLocal'),
+  'the branch draft remains visible in its own subtree');
+ assert.ok(result.rows.some(row=>row.line===7&&row.status==='unresolved'),
+  'the later parent line remains visible but cannot use the expired declaration');
+});
+
+test('editing an incomplete escaped case matches a cold rebuild and preserves physical lines',()=>{
+ const facts=new Map([['P','Prop'],['Q','Prop'],['h','P ∨ Q'],['R','P → Prop']]);
+ const input='cases h, establish hR : $R(hp)$\n  left case hp\n    unsupported ⊛\n  right case hq\n    unsupported ⊛\n$R(hp)$ | hR';
+ const session=createDraftSession();
+ session.evaluate(input,[...facts.keys()],facts,{goal:'R(hp)'});
+ const edited='\n'+input;
+ const incremental=session.evaluate(edited,[...facts.keys()],facts,{goal:'R(hp)'});
+ const cold=createDraftSession().evaluate(edited,[...facts.keys()],facts,{goal:'R(hp)'});
+ assert.deepEqual(incremental.rows,cold.rows);
+ assert.deepEqual(incremental.steps,cold.steps);
+ assert.deepEqual(incremental.graph,cold.graph);
+ assert.equal(incremental.term,cold.term);
+ assert.ok(incremental.rows.some(row=>row.line===7),'the continuation keeps its shifted source line');
 });
 
 test('resolving an open branch closes the provisional dependency and matches a cold evaluation',()=>{

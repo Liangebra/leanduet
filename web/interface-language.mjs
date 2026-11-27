@@ -158,6 +158,7 @@ const rows = [
 ["Needs more context","需要更多上下文","追加の文脈が必要"],
 ["Needs an explicit element type","需要显式指定元素类型","要素型を明示してください"],
 ["Element type conflicts with the known carrier","元素类型与已知载体类型冲突","要素型が既知の台型と一致しません"],
+["Set restriction names more than one local object","集合限制名称对应多个局部对象","集合制限の名前が複数の局所対象に対応しています"],
 ["A candidate is available · choose how to proceed","已有候选 · 请决定是否采用","候補あり · 採用するか選択してください"],
 ["Multiple supported interpretations remain","仍有多种受支持的解释","複数の対応可能な解釈が残っています"],
 ["Candidate search budget exhausted","候选搜索达到预算上限","候補探索の予算上限に達しました"],

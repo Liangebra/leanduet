@@ -306,10 +306,12 @@ classical double-negation elimination is never inserted. A bare local reference
 whose type is known is compared in the scoped surface grammar, including the
 built-in equivalence between `Not P` and `¬ P`; other structural mismatches
 remain unresolved and explicitly state that Lean definitional equality was not
-checked. Nontrivial applications still require Lean's independent check. From `False`,
-users can apply an explicit rule such as `False.elim`. The structured backend
-checks the annotations with Lean. Existential elimination remains a linear scope extension; it is
-not arbitrary dependent pattern matching or implicit type inference.
+checked. Nontrivial applications still require Lean's independent check. A
+typed local premise of `False` can now yield a distinct `False.elim` candidate
+for a different goal, including through the deterministic implicit rule search.
+The resolver does not derive arbitrary contradictions or insert classical
+principles. Existential elimination remains a linear scope extension; it is not
+arbitrary dependent pattern matching or implicit type inference.
 
 ## Branch-local disjunction elimination
 
@@ -395,7 +397,14 @@ predicate evidence. “Arbitrary/任意” excludes witness extraction; an expli
 subtype coercion, or unproved witness construction is inferred.
 
 These are separate structural leaves over one request, not a Cartesian product
-of independently parsed words. Each leaf records its operation, typed object
+of independently parsed words.
+
+Lean may print a nondependent Pi binder as an arrow, such as `Nat → P`. For an
+element request with an explicit type, a matching arrow domain also supports
+variable introduction, while ordinary `assume h : P` remains the implication
+introduction operation. This is a surface normalization backed by the typed
+request and Lean's Pi pretty-printing convention; it does not infer arbitrary
+domains or establish general type equality. Each leaf records its operation, typed object
 identities, source-premise identity when applicable, and a choice key. A unique
 supported reading can proceed through the existing goal-introduction or
 existential-elimination machinery. Multiple readings remain unresolved and do
