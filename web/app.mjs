@@ -50,6 +50,7 @@ const resolutionLabels={
  'needs-context':'Needs more context',
  'needs-type-annotation':'Needs an explicit element type',
  'incompatible-type':'Element type conflicts with the known carrier',
+ 'ambiguous-context':'Set restriction names more than one local object',
  'needs-choice':'A candidate is available · choose how to proceed',
  'ambiguous':'Multiple supported interpretations remain',
  'budget-exhausted':'Candidate search budget exhausted',
