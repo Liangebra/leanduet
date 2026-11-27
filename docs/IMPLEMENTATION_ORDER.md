@@ -388,7 +388,14 @@ predicate evidence. “Arbitrary/任意” excludes witness extraction; an expli
 subtype coercion, or unproved witness construction is inferred.
 
 These are separate structural leaves over one request, not a Cartesian product
-of independently parsed words. Each leaf records its operation, typed object
+of independently parsed words.
+
+Lean may print a nondependent Pi binder as an arrow, such as `Nat → P`. For an
+element request with an explicit type, a matching arrow domain also supports
+variable introduction, while ordinary `assume h : P` remains the implication
+introduction operation. This is a surface normalization backed by the typed
+request and Lean's Pi pretty-printing convention; it does not infer arbitrary
+domains or establish general type equality. Each leaf records its operation, typed object
 identities, source-premise identity when applicable, and a choice key. A unique
 supported reading can proceed through the existing goal-introduction or
 existential-elimination machinery. Multiple readings remain unresolved and do
