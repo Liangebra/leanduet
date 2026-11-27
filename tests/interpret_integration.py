@@ -98,3 +98,26 @@ with TemporaryDirectory() as tmp:
     target.write_text("theorem joint_left"+signature+joint_left+"\n"+"theorem joint_right"+signature+joint_right+"\n",encoding="utf-8")
     subprocess.run(["lean",str(target)],cwd=root,check=True)
 print("Both correlated proof assignments accepted by Lean; conflicting assignment not exported")
+
+# Conditional projection types: the very same child Lean term can denote a
+# proof of P or R, depending on the earlier type. Validate both directions.
+dependent_script = """
+import {compileNaturalDraft,draftProof} from './web/natural-draft.mjs';
+const facts=new Map([['h','(P ∧ Q) ∧ (R ∧ S)'],['f','P → T'],['g','R → T']]);
+const scope=[...facts.keys()];
+const prefix='建立 hu : $?$,由 h\\n建立 hv : $?$,由 hu\\n';
+const left=compileNaturalDraft(prefix+'由 hv 与 f 得到 $T$',scope,facts);
+const right=compileNaturalDraft(prefix+'由 hv 与 g 得到 $T$',scope,facts);
+const bad=draftProof(prefix+'由 hv 与 g 得到 $T$',scope,facts,{choices:new Map([[1,'And.left h']])});
+console.log(JSON.stringify([left.term,right.term,bad.term]));
+"""
+dep_left,dep_right,dep_bad=json.loads(subprocess.run(["node","--input-type=module"],input=dependent_script,text=True,cwd=root,check=True,capture_output=True).stdout)
+assert dep_bad is None
+assert "And.left h" in dep_left and "And.right h" in dep_right
+assert "And.left hu" in dep_left and "And.left hu" in dep_right
+with TemporaryDirectory() as tmp:
+    target=Path(tmp)/"DependentConstraints.lean"
+    signature=" (P Q R S T : Prop) (h : (P ∧ Q) ∧ (R ∧ S)) (f : P → T) (g : R → T) : T := "
+    target.write_text("theorem dependent_left"+signature+dep_left+"\n"+"theorem dependent_right"+signature+dep_right+"\n",encoding="utf-8")
+    subprocess.run(["lean",str(target)],cwd=root,check=True)
+print("Both conditional projection types accepted by Lean; incompatible source not exported")

@@ -5,6 +5,7 @@
 import {compileFormula,renderFormula} from './math-formula.mjs';
 import {premiseFrame,contextCandidates} from './context-grammar.mjs';
 
+export const candidateChoice=c=>c.choice??c.term;
 export function projectionDomain(source,scope,facts){
  if(!scope.includes(source)||!facts.has(source))return [];
  let tree;
@@ -15,18 +16,39 @@ export function projectionDomain(source,scope,facts){
   {schema:'right conjunction elimination',term:'And.right '+source,type:renderFormula(tree.right),premises:[source]}
  ];
 }
+// A projection from an ambiguous earlier binding has a type conditional
+// on the earlier choice. Keep the source-to-child support relation. The
+// same Lean term may elaborate at several types, so term text alone is not
+// a candidate key in a dependent domain.
+function dependentProjection(parent,source,line,name){
+ const candidates=new Map(),support=[];
+ const key=c=>JSON.stringify([c.term,compileFormula(c.type,{syntax:'lean'}).scoped]);
+ for(const prior of parent.domain){
+  const values=projectionDomain(source,[source],new Map([[source,prior.type]]));
+  for(const value of values){
+   const k=key(value);
+   if(!candidates.has(k))candidates.set(k,value);
+   support.push([candidateChoice(prior),k]);
+  }
+ }
+ const counts=new Map();
+ for(const value of candidates.values())counts.set(value.term,(counts.get(value.term)||0)+1);
+ for(const [k,value] of candidates)if(counts.get(value.term)>1)value.choice='typed:'+k;
+ return {domain:[...candidates.values()],relation:{kind:'domain',line,names:[parent.name,name],status:'matched',
+  tuples:support.map(([prior,k])=>[prior,candidateChoice(candidates.get(k))])}};
+}
 // Bounded relational join. Keep whole compatible assignments, so a later
 // choice cannot independently combine mutually inconsistent marginals.
 export function solveFiniteRelations(variables,relations,choices=new Map(),{budget=4096,limit=256}={}){
  const byName=new Map(variables.map(v=>[v.name,v]));
  const names=new Set(byName.keys());
- const domains=new Map(variables.map(v=>[v.name,v.domain.filter(c=>!choices.has(v.line)||choices.get(v.line)===c.term)]));
+ const domains=new Map(variables.map(v=>[v.name,v.domain.filter(c=>!choices.has(v.line)||choices.get(v.line)===candidateChoice(c))]));
  const active=relations.filter(r=>r.status==='matched');
  const assignments=[];let explored=0,overflow=false;
  const partial=new Map();
  // Check support even for partial assignments, not only complete tuples.
  function supported(r){
-  return r.tuples.some(tuple=>r.names.every((n,i)=>!partial.has(n)||partial.get(n).term===tuple[i]));
+  return r.tuples.some(tuple=>r.names.every((n,i)=>!partial.has(n)||candidateChoice(partial.get(n))===tuple[i]));
  }
  const order=[...variables].sort((a,b)=>domains.get(a.name).length-domains.get(b.name).length||active.filter(r=>r.names.includes(b.name)).length-active.filter(r=>r.names.includes(a.name)).length||a.line-b.line);
  function visit(i){
@@ -35,7 +57,7 @@ export function solveFiniteRelations(variables,relations,choices=new Map(),{budg
   if(active.some(r=>!supported(r)))return;
   if(i===order.length){
    if(assignments.length>=limit){overflow=true;return;}
-   assignments.push(variables.map(v=>partial.get(v.name).term));return;
+   assignments.push(variables.map(v=>candidateChoice(partial.get(v.name))));return;
   }
   const n=order[i].name;
   if(!names.has(n))return;
@@ -47,23 +69,25 @@ export function solveFiniteRelations(variables,relations,choices=new Map(),{budg
  // Do not expose partial marginals as the complete supported domains.
  return {status:overflow?'overflow':!assignments.length?'contradiction':assignments.length===1?'unique':'ambiguous',
   assignments:overflow?[]:assignments,explored,
-  candidates:variables.map((v,i)=>overflow?v.domain:v.domain.filter(c=>assignments.some(a=>a[i]===c.term)))};
+  candidates:variables.map((v,i)=>overflow?v.domain:v.domain.filter(c=>assignments.some(a=>a[i]===candidateChoice(c))))};
 }
 function buildRelation(row,frame,byName,facts){
  const names=[...new Set(frame.premises.filter(n=>byName.has(n)))];
  if(!names.length||frame.premises.some(n=>!byName.has(n)&&!facts.has(n)))return null;
- const tuples=[],extended=new Map(facts);
+ const tuples=[],extended=new Map(facts);let probes=0,overflow=false;
  function visit(i,terms){
+  if(overflow)return;
   if(i===names.length){
+   if(++probes>4096){overflow=true;return;}
    if(contextCandidates(row.parsed.type,frame.premises,extended).length)tuples.push(terms);
    return;
   }
   const v=byName.get(names[i]);
-  for(const c of v.domain){extended.set(v.name,c.type);visit(i+1,[...terms,c.term]);}
+  for(const c of v.domain){extended.set(v.name,c.type);visit(i+1,[...terms,candidateChoice(c)]);if(overflow)break;}
   extended.delete(v.name);
  }
  visit(0,[]);
- return {line:row.line,names,status:tuples.length?'matched':'unsupported',tuples};
+ return {kind:'inference',line:row.line,names,status:overflow?'overflow':tuples.length?'matched':'unsupported',tuples:overflow?[]:tuples};
 }
 export function constrainPropositions(first,scope,facts,future,choices=new Map(),excludedLines=new Set()){
  const domain=projectionDomain(first.parsed.source,scope,facts);
@@ -79,8 +103,10 @@ export function constrainPropositions(first,scope,facts,future,choices=new Map()
   if(['introduce','assume','define'].includes(p.kind))break;
   if(p.kind==='infer-proposition'){
    if(!used.has(p.name)&&!excludedLines.has(row.line)){
-    const next=projectionDomain(p.source,scope,facts);
-    if(next.length){const v={line:row.line,name:p.name,domain:next};variables.push(v);byName.set(v.name,v);}
+    const parent=byName.get(p.source);
+    const dependent=parent?dependentProjection(parent,p.source,row.line,p.name):null;
+    const next=dependent?.domain||projectionDomain(p.source,scope,facts);
+    if(next.length){const v={line:row.line,name:p.name,domain:next};variables.push(v);byName.set(v.name,v);if(dependent)relations.push(dependent.relation);}
    }
    used.add(p.name);continue;
   }
@@ -98,23 +124,23 @@ export function constrainPropositions(first,scope,facts,future,choices=new Map()
   let changed=true;
   while(changed){
    changed=false;
-   for(const r of relations)if(r.status==='matched'&&r.names.some(n=>component.has(n))){
+   for(const r of relations)if(r.status!=='unsupported'&&r.names.some(n=>component.has(n))){
     for(const n of r.names)if(!component.has(n)){component.add(n);changed=true;}
    }
   }
   for(const n of component)pending.delete(n);
   const members=variables.filter(v=>component.has(v.name));
   const linked=relations.filter(r=>r.status==='matched'&&r.names.every(n=>component.has(n)));
-  const solved=solveFiniteRelations(members,linked,choices);
   const relevant=relations.filter(r=>r.names.some(n=>component.has(n)));
-  const group={id:'constraint:'+members[0].line,variables:members.map(v=>({line:v.line,name:v.name})),
+  const solved=relevant.some(r=>r.status==='overflow')?{status:'overflow',assignments:[],explored:0,candidates:members.map(v=>v.domain)}:solveFiniteRelations(members,linked,choices);
+  const group={id:'constraint:'+members[0].line,variables:members.map(v=>({line:v.line,name:v.name,domain:v.domain.map(c=>({key:candidateChoice(c),term:c.term,type:c.type}))})),
    relations:relevant,status:solved.status,assignments:solved.assignments,explored:solved.explored};
   members.forEach((v,i)=>{
-   const constraints=relevant.filter(r=>r.names.includes(v.name)).map(r=>({line:r.line,status:r.status,
+   const constraints=relevant.filter(r=>r.names.includes(v.name)).map(r=>({line:r.line,kind:r.kind,status:r.status,
     compatible:[...new Set(r.tuples.map(tuple=>tuple[r.names.indexOf(v.name)]))]}));
    result.set(v.line,{domain:v.domain,candidates:solved.candidates[i],constraints,group,
     overflow:solved.status==='overflow',
-    reason:solved.status==='contradiction'?'No joint structural match for the subsequent explicit constraints or choices.':solved.status==='overflow'?'Joint constraint search exceeded its budget; specify more candidate choices.':''});
+    reason:solved.status==='contradiction'?'No joint structural match for the subsequent explicit constraints or choices.':solved.status==='overflow'?'Joint constraint search exceeded its budget; narrow the draft or candidate choices.':''});
   });
  }
  return result;
