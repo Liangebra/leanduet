@@ -1,106 +1,36 @@
-# LeanDuet development checkpoint
+# Development checkpoint
 
-Updated 2026-11-27 (Asia/Shanghai).
+Updated 2026-11-27 (UTC).
 
-## Repository and PR state
+## Current repository state
 
-The latest observed `main` is `c99c14c`, which includes merged PR #36. PR #22
-is merged as `0eaf7dd`; it preserves physical source addresses in nested
-branches, checks terminal branch annotations against the residual goal, and
-expires branch-local names after closure. The original eight-stage order in
-`IMPLEMENTATION_ORDER.md` remains authoritative.
+- Main includes PR #22 (source positions, residual-goal closure checks, and branch-local name expiry), PR #43 (constructive ex-falso from an explicit `False` premise), PR #37 (structural operation candidates), PR #38 (set-restricted element operations), and PR #39 (scoped local lemma subproofs).
+- PR #39 was squash-merged as `5c6205e7df9f0a55f422a6d74be22f71e9a499a9`. Its exact head `3d899d39ec508d93d20cfc9f2d97af853d5421c6` passed both full Tests runs (`46077887989`, `46077892803`) and pinned Mathlib integration (`46077892834`). The browser path selected the actual elaborated `letFun` node, built a local-lemma draft, checked/applied its Lean patch, and rechecked the theorem.
+- The main push, Mathlib integration, and Pages deployment for the #39 merge were started as runs `46078929296`, `46078929261`, and `46078929322`; verify their final result before treating main as fully green.
+- PR #40 adds the subgroup multiplication-closure acceptance case alongside the compact-image topology case. Its earlier stacked head is being synchronized onto current main; the synchronized head still needs full Tests and pinned Mathlib validation.
+- PR #42 corrects the incremental benchmark baseline to use the public full compiler path and compares every cached result structurally with a cold result. It still needs synchronization and a fresh run on the final stack.
+- PR #44 is an independent Urdu language-pack contribution. Its fork workflow is `action_required`; its tests are not verified.
 
-PR #37 (`research/element-operation-candidates`, head `fe4556f`) keeps
-universal-variable introduction and existential witness extraction as distinct
-structural candidates for “take an element satisfying …”. Its Mathlib
-integration run `46026642155` passed. Tests run `46026642256` is in progress;
-the earlier browser failure came from clicking a target inside collapsed
-`details`. The current head locates the typed hypothesis by its formula and
-term, opens the ancestor chain, and still needs a complete browser run before
-merge.
+## Mathematical and engineering state
 
-PR #38 (`research/bounded-element-operations`, head `0c2008a`) adds bounded
-universal introduction and restricted existential extraction. Its Mathlib
-integration run `46026943713` passed. Tests run `46026943572` is in progress;
-the earlier head failed on the same collapsed-node click, so this head selects
-the intended binder/hypothesis nodes and opens their ancestors. It remains
-stacked on #37 and must be retargeted to `main` after #37 is integrated, then
-revalidated.
+Proof scopes form a tree. Child goals inherit parent object identities; sibling locals remain isolated; branches close only against their stated residual goals; child-local declarations expire; only parent-visible dependencies can return. Conjunction, equivalence, existential construction, intuitionistic negation introduction, and ex-falso remain constructive operations. Classical reductio is not silently introduced.
 
-The local `research/local-lemma-scopes` work adds an explicit named local
-subproof block to the latest #38 head. It is not yet committed or published as
-a PR. Keep it stacked on #38 until that dependency is merged and checked.
+Bounded element requests preserve the set restriction and its local identity. A displayed element type is required; a known local carrier can reject a mismatch; a universal introduction creates membership as an explicit premise; an existential witness carries both membership and its property. The browser keeps universal-introduction and existential-extraction readings separate until the goal, typed context, or user choice constrains them. The parser does not infer arbitrary set carriers.
 
-## Mathematical contract and current work
+A local lemma uses an explicit claim and proof block. The child inherits parent identities, must structurally close against the stated claim, and returns only parent dependencies. Child-local declarations expire. An incomplete claim remains visible as an open dependency but cannot produce a complete Lean export. The browser-to-backend path and Mathlib local-lemma candidate compile on the validated PR #39 head.
 
-A local lemma has the explicit bounded syntax `local lemma h : $P$`, followed
-by an indented `proof` block (Chinese: `局部引理 h : $P$`). It forks a child
-goal that inherits the parent's object identities. Closing it checks the
-child's target against the stated proposition, discharges child-local
-identities, and returns only parent dependencies and the new proposition.
-An unfinished proof remains in the graph, and subsequent rows may be analyzed
-as depending on the open lemma, but no complete Lean candidate is exported.
-A structurally closed child that depends on an upstream open object remains an
-unverified candidate with that dependency marked open. This extends stage 2's
-scope/closure mechanism and gives stage 3+ a reusable local claim operation; it
-is not free-language lemma invention or proof verification.
+The representative corpus now includes a compact-image theorem in topology and a subgroup multiplication-closure theorem in abstract algebra. The latter's synchronized Mathlib run must confirm both compilation and dependency extraction before it is counted as validated.
 
-The element-operation candidate pair advances stage 3 while preserving the
-same phrase and candidate identity. The set-restricted forms retain membership
-as an explicit premise/evidence and require a stated element type. The carrier
-check is limited to visible simple identifiers; coercion and compound-carrier
-inference remain unsupported. These additions do not replace or reorder the
-eight-stage plan.
+## Verification boundary
 
-## Local verification
-
-- JavaScript unit suite: 257/257 passed, including 10 local-lemma scope,
-  lifecycle, identity, and incremental-versus-cold tests.
-- Python unit suite: 19/19 passed, including local-lemma backend-shape and
-  rejection checks.
-- `py_compile`, `node --check` on touched modules, and `git diff --check`
-  passed.
-- The repeatable draft benchmark passed its incremental-versus-cold equality
-  assertions (Node v24.22.3, Linux x64, 24 warmups / 160 samples). For the
-  local-lemma fixture with 51 typed locals: cold evaluation was 1.653 ms
-  median / 2.329 ms P95; exact replay was 0.333 / 0.588 ms; a one-premise
-  edit was 1.836 / 2.629 ms; a leading-line shift was 1.897 / 2.425 ms.
-  Structural lemma edits still recompute the bounded block; these are local
-  synthetic measurements, not browser response guarantees.
-- Generated local-lemma Lean has not yet been compiled in this workspace.
-  The browser smoke also has not run locally because Chromium is unavailable;
-  the new browser workflow test must pass on the PR head before merge.
-- The Mathlib integration now has a real compact-image local-lemma fixture:
-  it exercises both browser candidate generation and backend scope return,
-  then asks the pinned Mathlib toolchain to compile the generated theorem.
-  This remote integration result is pending.
-- The earlier #37 synthetic candidate-evaluation benchmark predates the
-  bounded-quantifier extension. It is not a browser-latency measurement and
-  is not updated by the local-lemma change.
+Parsing, candidate construction, structural compatibility, open proof obligations, Lean elaboration, kernel checking, and author-intent fidelity are separate states. A structurally exportable draft is not by itself a Lean proof or a semantic-fidelity guarantee. Formula comparison is conservative structural comparison, not general definitional equality. Local scope IDs and incremental cache behavior still require improvement for source-line shifts.
 
 ## Next dependency-ready work
 
-1. Let the latest #37 Tests run reach browser smoke and finish; repair concrete
-   failures, then merge only with both required workflows green.
-2. Retarget #38 to `main` after #37 merges, rerun CI on the updated head, and
-   merge only after generated Lean and browser paths pass.
-3. Finish reviewing the local-lemma child/parent dependency boundary, add the
-   current tests and docs to the PR branch, and require full browser plus Lean
-   CI before merge.
-4. Continue stage 2 by auditing explicit `False` elimination and the boundary
-   between intuitionistic negation introduction and classical reductio; do not
-   add a classical principle implicitly.
-5. Continue stage 8 with one reviewed analysis or linear-algebra proof fixture
-   containing authored prose, an expected semantic graph, Lean code, and local
-   edit checks. Keep Lean compilation distinct from informal fidelity.
+1. Finish checking the main #39 push Tests, Mathlib integration, and Pages deployment runs.
+2. Validate and merge synchronized PR #40, including its pinned subgroup Lean case and dependency view.
+3. Synchronize PR #42; record cold, replay, edit and nested-scope medians/P95 and report cases where incremental work is slower.
+4. Continue issue #4 with stable proof-node IDs and edit migration for insertions, deletions, repeated steps, and ambiguous two-sided edits.
+5. Add a reviewed analysis or linear-algebra case with natural prose, expected semantic structure, Lean compilation, and a local-edit regression.
 
-## Boundaries
-
-`complete` means only that the bounded browser structure can render a Lean
-candidate. It does not assert elaboration, kernel verification, author-intent
-fidelity, or mathematical correctness. Surface formula matching is
-scope-aware but is not Lean definitional equality. Missing context, unsupported
-rules, inconsistent constraints, unresolved candidates, and exhausted search
-remain distinct. The browser graph, backend inference, and Lean validation are
-separate layers. Local-lemma blocks are currently recomputed as a whole after
-structural edits.
+The original eight-stage implementation order remains authoritative. The current work advances tree scopes, structural operation ambiguity, declaration dependency checks, local bidirectional editing, incremental evaluation, and real-math acceptance cases; it does not complete any full stage.

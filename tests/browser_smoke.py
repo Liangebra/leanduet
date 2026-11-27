@@ -11,23 +11,25 @@ ROOT=Path(__file__).resolve().parents[1]
 port=18765
 url=f"http://127.0.0.1:{port}"
 
+
 def select_typed_edit(page, *, exact_type=None, includes=(), summary=None, term=None):
     page.locator("#typedTree").evaluate("""(root, query) => {
       const rows=[...root.querySelectorAll('.typedNode')].map(node=>({
         node,
         type:node.querySelector(':scope > .typedType code')?.textContent.trim()||'',
         summary:node.querySelector(':scope > summary')?.textContent.trim()||'',
-        term:node.querySelector(':scope > details pre')?.textContent.trim()||''
+        term:node.querySelector(':scope > details pre')?.textContent.trim()||'',
+        depth:(node.parentElement?.closest('.typedNode') ? 1 : 0) +
+          (node.parentElement?.closest('.typedNode')?.parentElement?.closest('.typedNode') ? 1 : 0),
+        edit:node.querySelector(':scope > .typedEdit')
       }));
-      let candidates=rows.filter(row=>(query.exactType===null||row.type===query.exactType)
+      const candidates=rows.filter(row=>(query.exactType===null||row.type===query.exactType)
         &&query.includes.every(part=>row.type.includes(part))
         &&(query.summary===null||row.summary===query.summary)
-        &&(query.term===null||row.term===query.term)
-        &&row.node.querySelector(':scope > .typedEdit'));
-      if(!candidates.length) throw new Error('Could not locate the requested typed proof node.');
-      const shortest=Math.min(...candidates.map(row=>row.type.length));
-      candidates=candidates.filter(row=>row.type.length===shortest);
-      if(candidates.length!==1) throw new Error('The requested typed proof node is ambiguous.');
+        &&(query.term===null||row.term===query.term)&&row.edit);
+      if(!candidates.length) throw new Error('No editable typed node matched; available: '+
+        JSON.stringify(rows.map(({type,summary,term,depth,edit})=>({type,summary,term,depth,editable:!!edit}))));
+      candidates.sort((a,b)=>a.depth-b.depth||a.type.length-b.type.length);
       const target=candidates[0].node;
       for(let current=target;current&&current!==root;current=current.parentElement)
         if(current.tagName==='DETAILS') current.open=true;
@@ -286,6 +288,7 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
             expect(operation_page.locator("#typedStatus")).to_contain_text("Extracted from Lean elaboration",timeout=60000)
             select_typed_edit(operation_page,includes=("∀","P x"),summary="Use hypothesis",term="hall")
             expect(operation_page.locator("#patchTarget")).to_contain_text("∀")
+            expect(operation_page.locator("#patchScope")).to_contain_text("he")
             operation_page.locator("#chainEditor summary").click()
             operation_page.locator("#chainFormat").select_option("natural")
             operation_text="""take an element x : $Nat$ satisfying $P(x)$
@@ -328,7 +331,7 @@ $P(x)$ | hp""")
             lemma_page.locator('[data-view="typed"]').click()
             lemma_page.locator("#extractTerm").click()
             expect(lemma_page.locator("#typedStatus")).to_contain_text("Extracted from Lean elaboration",timeout=60000)
-            select_typed_edit(lemma_page,exact_type="R",summary="Establish local binding localQ")
+            select_typed_edit(lemma_page,exact_type="R",summary="Apply letFun")
             expect(lemma_page.locator("#patchTarget")).to_contain_text("R")
             lemma_page.locator("#chainEditor summary").click()
             lemma_page.locator("#chainFormat").select_option("natural")
@@ -361,22 +364,24 @@ $R$ | gr localQ"""
             restricted_page.locator('[data-view="typed"]').click()
             restricted_page.locator("#extractTerm").click()
             expect(restricted_page.locator("#typedStatus")).to_contain_text("Extracted from Lean elaboration",timeout=60000)
-            select_typed_edit(restricted_page,includes=("∀","x ∈ A","P x"),summary="Introduce x")
+            select_typed_edit(restricted_page,includes=("∀","P x"),summary="Introduce x",term="fun x hx => hall x hx")
             expect(restricted_page.locator("#patchTarget")).to_contain_text("∀")
             if not restricted_page.locator("#chainEditor").evaluate("(editor) => editor.open"):
                 restricted_page.locator("#chainEditor summary").click()
             restricted_page.locator("#chainFormat").select_option("natural")
-            restricted_page.locator("#chainText").fill("take an arbitrary element x : $Nat$ in A satisfying $P(x)$\nassume hx : $x ∈ A$\n$P(x)$ | hall x hx")
+            restricted_page.locator("#chainText").fill("take an arbitrary element z : $Nat$ in A satisfying $P(z)$\nassume hz : $z ∈ A$\n$P(z)$ | hall z hz")
             bounded_row=restricted_page.locator("#draftTranslation .ruleResult").first
+            assert restricted_page.locator("#draftTranslation .ruleResult").count()>0, "Target: "+restricted_page.locator("#patchTarget").inner_text()+"; input: "+restricted_page.locator("#chainText").input_value()+"; draft preview: "+restricted_page.locator("#draftTranslation").inner_text()
             expect(bounded_row).to_contain_text("arbitrary element introduction under a set restriction")
-            expect(bounded_row).to_contain_text("After introduction, establish (x ∈ A)")
+            expect(bounded_row).to_contain_text("After introduction, establish (z ∈ A)")
             restricted_page.locator("#compileChain").click()
-            expect(restricted_page.locator("#patchTerm")).to_have_value(__import__("re").compile(r"intro x[\s\S]*intro hx[\s\S]*exact hall x hx"))
+            expect(restricted_page.locator("#patchTerm")).to_have_value(__import__("re").compile(r"intro z[\s\S]*intro hz[\s\S]*exact hall z hz"))
             restricted_page.locator("#checkPatch").click()
             expect(restricted_page.locator("#applyPatch")).to_be_enabled(timeout=120000)
 
             restricted_page.locator("#lean").fill("""theorem restricted_exists_demo (A : List Nat) (P : Nat → Prop)
     (h : ∃ x ∈ A, P x) (hq : True) : True := by
+  rcases h with ⟨x, hxp⟩
   exact hq
 """)
             restricted_page.once("dialog",lambda d:d.accept())
@@ -384,17 +389,17 @@ $R$ | gr localQ"""
             restricted_page.locator('[data-view="typed"]').click()
             restricted_page.locator("#extractTerm").click()
             expect(restricted_page.locator("#typedStatus")).to_contain_text("Extracted from Lean elaboration",timeout=60000)
-            select_typed_edit(restricted_page,exact_type="True",summary="Use hypothesis",term="hq")
+            select_typed_edit(restricted_page,exact_type="True")
             expect(restricted_page.locator("#patchTarget")).to_contain_text("True")
             if not restricted_page.locator("#chainEditor").evaluate("(editor) => editor.open"):
                 restricted_page.locator("#chainEditor summary").click()
             restricted_page.locator("#chainFormat").select_option("natural")
-            restricted_page.locator("#chainText").fill("take an element x : $Nat$ in A satisfying $P(x)$ from h\n$True$ | hq")
+            restricted_page.locator("#chainText").fill("take an element z : $Nat$ in A satisfying $P(z)$ from h\n$True$ | hq")
             bounded_witness=restricted_page.locator("#draftTranslation .ruleResult").first
             expect(bounded_witness).to_contain_text("restricted existential witness extraction")
-            expect(bounded_witness).to_contain_text("h_x : ((x ∈ A) ∧ (P x))")
+            expect(bounded_witness).to_contain_text("h_z : ((z ∈ A) ∧ (P z))")
             restricted_page.locator("#compileChain").click()
-            expect(restricted_page.locator("#patchTerm")).to_have_value(__import__("re").compile(r"rcases duet_exists_x with ⟨x, h_x⟩[\s\S]*exact hq"))
+            expect(restricted_page.locator("#patchTerm")).to_have_value(__import__("re").compile(r"rcases duet_exists_z with ⟨z, h_z⟩[\s\S]*exact hq"))
             restricted_page.locator("#checkPatch").click()
             expect(restricted_page.locator("#applyPatch")).to_be_enabled(timeout=120000)
             restricted_page.close()
@@ -554,6 +559,38 @@ $R$ | gr localQ"""
             goalop_page.locator("#check").click()
             expect(goalop_page.locator("#verifyState")).to_have_text("Lean passed",timeout=120000)
             goalop_page.close()
+            false_page=browser.new_page(viewport={"width":1440,"height":900})
+            false_page.on("pageerror",lambda error:errors.append(str(error)))
+            false_page.goto(url)
+            false_source="""theorem ex_falso_demo (P : Prop) (hFalse : False) : P := by
+  exact False.elim hFalse
+"""
+            false_page.locator("#lean").fill(false_source)
+            false_page.once("dialog",lambda d:d.accept())
+            false_page.locator("#adopt").click()
+            false_page.locator('[data-view="typed"]').click()
+            false_page.locator("#extractTerm").click()
+            expect(false_page.locator("#typedStatus")).to_contain_text("Extracted from Lean elaboration",timeout=60000)
+            false_page.locator("#typedTree").evaluate("(root) => root.querySelectorAll('details.typedNode').forEach(x=>x.open=true)")
+            false_node=false_page.locator(".typedNode").filter(has=false_page.locator("summary").filter(has_text=__import__("re").compile(r"^Apply False\.elim$"))).last
+            false_node.locator(":scope > button.typedEdit").click()
+            expect(false_page.locator("#patchTarget")).to_contain_text("P")
+            expect(false_page.locator("#patchScope")).to_contain_text("P")
+            expect(false_page.locator("#patchScope")).to_contain_text("hFalse")
+            false_page.locator("#chainEditor summary").click()
+            false_page.locator("#chainFormat").select_option("natural")
+            false_page.locator("#chainText").fill("From hFalse, we obtain $P$")
+            expect(false_page.locator("#draftTranslation")).to_contain_text("False.elim hFalse · false elimination")
+            false_page.locator("#compileChain").click()
+            expect(false_page.locator("#patchTerm")).to_have_value(__import__("re").compile(r"False\.elim hFalse"))
+            false_page.locator("#checkPatch").click()
+            expect(false_page.locator("#applyPatch")).to_be_enabled(timeout=120000)
+            false_page.once("dialog",lambda d:d.accept())
+            false_page.locator("#applyPatch").click()
+            false_page.locator("#check").click()
+            expect(false_page.locator("#verifyState")).to_have_text("Lean passed",timeout=120000)
+            false_page.close()
+
             assert not errors, errors
             browser.close()
         print("Browser smoke test passed")
