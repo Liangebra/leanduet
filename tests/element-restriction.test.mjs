@@ -129,7 +129,7 @@ test('set object identities are explicit dependencies in the semantic draft grap
  const input='take an arbitrary element x : $Nat$ in A satisfying $P(x)$\n'+
   'assume hx : $x ∈ A$\n$P(x)$ | hall x hx';
  const result=compileNaturalDraft(input,['A','hall'],facts,{goal:'∀ x ∈ A, P x'});
- const request=result.graph.nodes.find(node=>node.kind==='witness');
+ const request=result.graph.nodes.find(node=>node.kind==='introduce'&&node.name==='x');
  assert.ok(request);
  assert.ok(request.alternatives[0].dependencies.includes('context:0'));
  const ambiguous=createDraftSession().evaluate(
