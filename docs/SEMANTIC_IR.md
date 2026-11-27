@@ -25,6 +25,18 @@ lean/Scoped.lean defines Term n with Fin n variables and binders whose bodies ar
 
 The browser formula parser also produces a canonical scoped view using de Bruijn indices; it retains original names in the surface AST for display and source output. Alpha-equivalent bound names produce identical scoped views, while free names remain unresolved until Lean. The JS implementation is tested but has not been proved equivalent to the Lean model.
 
+`lean/Scoped.lean` also defines a separate intrinsically typed fragment for
+natural-number expressions and first-order propositions with equality,
+conjunction, implication, and universal quantification over `Nat`. Its Lean
+denotation is preserved by simultaneous capture-avoiding substitution; a
+regression example substitutes through a universal binder. The typed syntax
+erases into the generic `Scoped.Term`, and a second theorem proves that this
+map commutes with substitution. This is an initial mathematical checkpoint
+for Issue #10, but it is not a serialization or interpretation of the browser
+AST or arbitrary Lean `Expr`. It excludes dependent object domains, general
+predicates, constants, partial syntax and the full Lean type system. CI
+compiles the model with the existing `lean/Scoped.lean` check.
+
 ## Integration plan
 
 Define a context-indexed typed signature with distinct object, proposition, proof and hole sorts. Connect native Expr export with explicit binding identity and universe data. Define a type-preserving elaboration relation from surface syntax, retaining alternative parses if not unique. A local edit becomes a partial context morphism and checked replacement, preserving the surrounding proof complement. Establish substitution composition and then a theorem connecting the actual serialized representation to its Lean interpretation. Only after this link should we claim end-to-end semantic correctness.

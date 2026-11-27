@@ -213,3 +213,183 @@ theorem pair_eta {Γ Δ : Type u} {A : Ty Γ} (f : Δ → Extend A) :
   rfl
 
 end LeanDuet.Context
+
+/-!
+An initial typed, interpreted fragment for the scope-indexed syntax in
+`Scoped.lean`. This language has only natural-number variables, zero,
+successor, addition, equality, conjunction, implication, and universal
+quantification over `Nat`. It is not a Lean `Expr` codec or a model of arbitrary
+dependent types. Its purpose is to check that capture-avoiding substitution in
+a small mathematical language agrees with its Lean interpretation.
+-/
+namespace LeanDuet.ScopedSemantics
+
+inductive NatExpr : Nat → Type where
+  | var {n : Nat} : Fin n → NatExpr n
+  | zero {n : Nat} : NatExpr n
+  | succ {n : Nat} : NatExpr n → NatExpr n
+  | add {n : Nat} : NatExpr n → NatExpr n → NatExpr n
+  deriving Repr
+
+def liftRen {n m : Nat} (r : Fin n → Fin m) : Fin (n+1) → Fin (m+1) :=
+  Fin.cases 0 (fun i => (r i).succ)
+
+def rename {n m : Nat} (r : Fin n → Fin m) : NatExpr n → NatExpr m
+  | .var i => .var (r i)
+  | .zero => .zero
+  | .succ a => .succ (rename r a)
+  | .add a b => .add (rename r a) (rename r b)
+
+def liftSub {n m : Nat} (s : Fin n → NatExpr m) : Fin (n+1) → NatExpr (m+1) :=
+  Fin.cases (.var 0) (fun i => rename Fin.succ (s i))
+
+def subst {n m : Nat} (s : Fin n → NatExpr m) : NatExpr n → NatExpr m
+  | .var i => s i
+  | .zero => .zero
+  | .succ a => .succ (subst s a)
+  | .add a b => .add (subst s a) (subst s b)
+
+abbrev Env (n : Nat) := Fin n → Nat
+
+def extend (ρ : Env n) (x : Nat) : Env (n+1) := Fin.cases x ρ
+
+def denoteNat {n : Nat} : NatExpr n → Env n → Nat
+  | .var i, ρ => ρ i
+  | .zero, _ => 0
+  | .succ a, ρ => Nat.succ (denoteNat a ρ)
+  | .add a b, ρ => denoteNat a ρ + denoteNat b ρ
+
+theorem denoteNat_rename {n m : Nat} (e : NatExpr n) (r : Fin n → Fin m)
+    (ρ : Env m) :
+    denoteNat (rename r e) ρ = denoteNat e (fun i => ρ (r i)) := by
+  induction e with
+  | var i => rfl
+  | zero => rfl
+  | succ a ih => simp [rename, denoteNat, ih]
+  | add a b ia ib => simp [rename, denoteNat, ia, ib]
+
+theorem denoteNat_subst {n m : Nat} (e : NatExpr n) (s : Fin n → NatExpr m)
+    (ρ : Env m) :
+    denoteNat (subst s e) ρ = denoteNat e (fun i => denoteNat (s i) ρ) := by
+  induction e with
+  | var i => rfl
+  | zero => rfl
+  | succ a ih => simp [subst, denoteNat, ih]
+  | add a b ia ib => simp [subst, denoteNat, ia, ib]
+
+inductive Formula : Nat → Type where
+  | truth {n : Nat} : Formula n
+  | falsity {n : Nat} : Formula n
+  | equal {n : Nat} : NatExpr n → NatExpr n → Formula n
+  | and {n : Nat} : Formula n → Formula n → Formula n
+  | imp {n : Nat} : Formula n → Formula n → Formula n
+  | all {n : Nat} : Formula (n+1) → Formula n
+  deriving Repr
+
+def substFormula {n m : Nat} (s : Fin n → NatExpr m) : Formula n → Formula m
+  | .truth => .truth
+  | .falsity => .falsity
+  | .equal a b => .equal (subst s a) (subst s b)
+  | .and p q => .and (substFormula s p) (substFormula s q)
+  | .imp p q => .imp (substFormula s p) (substFormula s q)
+  | .all p => .all (substFormula (liftSub s) p)
+
+def denote {n : Nat} : Formula n → Env n → Prop
+  | .truth, _ => True
+  | .falsity, _ => False
+  | .equal a b, ρ => denoteNat a ρ = denoteNat b ρ
+  | .and p q, ρ => denote p ρ ∧ denote q ρ
+  | .imp p q, ρ => denote p ρ → denote q ρ
+  | .all p, ρ => ∀ x : Nat, denote p (extend ρ x)
+
+theorem denote_liftSub_env {n m : Nat} (s : Fin n → NatExpr m)
+    (ρ : Env m) (x : Nat) :
+    (fun i => denoteNat (liftSub s i) (extend ρ x)) =
+      extend (fun i => denoteNat (s i) ρ) x := by
+  funext i
+  refine Fin.cases ?_ (fun j => ?_) i
+  · simp [liftSub, extend, denoteNat]
+  · simp [liftSub, denoteNat_rename, extend]
+
+/-- Substitution commutes with interpretation. Under a quantifier the lifted
+    substitution maps the new variable to itself and weakens every old term. -/
+theorem denote_subst {n m : Nat} (p : Formula n) (s : Fin n → NatExpr m)
+    (ρ : Env m) :
+    denote (substFormula s p) ρ = denote p (fun i => denoteNat (s i) ρ) := by
+  induction p generalizing m ρ with
+  | truth => rfl
+  | falsity => rfl
+  | equal a b => simp [substFormula, denote, denoteNat_subst]
+  | and p q hp hq => simp [substFormula, denote, hp, hq]
+  | imp p q hp hq => simp [substFormula, denote, hp, hq]
+  | all p ih =>
+      simp [substFormula, denote, ih, denote_liftSub_env]
+
+/-- Forget the typing and interpretation annotations into the existing generic
+    scope-indexed syntax. This map is only for the fragment above. -/
+def eraseNat {n : Nat} : NatExpr n → LeanDuet.Scoped.Term n
+  | .var i => .var i
+  | .zero => .atom "Nat.zero"
+  | .succ a => .unary "Nat.succ" (eraseNat a)
+  | .add a b => .binary "Nat.add" (eraseNat a) (eraseNat b)
+
+def eraseFormula {n : Nat} : Formula n → LeanDuet.Scoped.Term n
+  | .truth => .atom "True"
+  | .falsity => .atom "False"
+  | .equal a b => .binary "Eq" (eraseNat a) (eraseNat b)
+  | .and p q => .binary "And" (eraseFormula p) (eraseFormula q)
+  | .imp p q => .binary "Imp" (eraseFormula p) (eraseFormula q)
+  | .all p => .bind "∀ Nat" (.atom "Nat") (eraseFormula p)
+
+theorem eraseNat_rename {n m : Nat} (e : NatExpr n) (r : Fin n → Fin m) :
+    eraseNat (rename r e) = LeanDuet.Scoped.rename r (eraseNat e) := by
+  induction e with
+  | var i => rfl
+  | zero => rfl
+  | succ a ih => simp [rename, eraseNat, LeanDuet.Scoped.rename, ih]
+  | add a b ia ib => simp [rename, eraseNat, LeanDuet.Scoped.rename, ia, ib]
+
+theorem eraseNat_subst {n m : Nat} (e : NatExpr n) (s : Fin n → NatExpr m) :
+    eraseNat (subst s e) =
+      LeanDuet.Scoped.subst (fun i => eraseNat (s i)) (eraseNat e) := by
+  induction e with
+  | var i => rfl
+  | zero => rfl
+  | succ a ih => simp [subst, eraseNat, LeanDuet.Scoped.subst, ih]
+  | add a b ia ib => simp [subst, eraseNat, LeanDuet.Scoped.subst, ia, ib]
+
+theorem eraseNat_liftSub {n m : Nat} (s : Fin n → NatExpr m) :
+    (fun i => eraseNat (liftSub s i)) =
+      LeanDuet.Scoped.liftSub (fun i => eraseNat (s i)) := by
+  funext i
+  refine Fin.cases ?_ (fun j => ?_) i
+  · rfl
+  · simp [liftSub, eraseNat_rename, LeanDuet.Scoped.liftSub]
+
+theorem eraseFormula_subst {n m : Nat} (p : Formula n) (s : Fin n → NatExpr m) :
+    eraseFormula (substFormula s p) =
+      LeanDuet.Scoped.subst (fun i => eraseNat (s i)) (eraseFormula p) := by
+  induction p generalizing m with
+  | truth => rfl
+  | falsity => rfl
+  | equal a b => simp [substFormula, eraseFormula, eraseNat_subst, LeanDuet.Scoped.subst]
+  | and p q hp hq => simp [substFormula, eraseFormula, LeanDuet.Scoped.subst, hp, hq]
+  | imp p q hp hq => simp [substFormula, eraseFormula, LeanDuet.Scoped.subst, hp, hq]
+  | all p ih =>
+      simp only [substFormula, eraseFormula, LeanDuet.Scoped.subst]
+      rw [ih (liftSub s)]
+      rw [eraseNat_liftSub s]
+
+/-- A substitution into two free variables specializes to a one-variable
+    context without capturing the binder in the formula. -/
+example (ρ : Env 1) :
+    denote
+      (substFormula (fun _ : Fin 2 => NatExpr.var 0)
+        (Formula.all (Formula.equal (NatExpr.var 1) (NatExpr.var 0)))) ρ =
+      (∀ x : Nat, ρ 0 = x) := by
+  simpa [denote, extend, denoteNat] using
+    (denote_subst
+      (Formula.all (Formula.equal (NatExpr.var 1) (NatExpr.var 0)))
+      (fun _ : Fin 2 => NatExpr.var 0) ρ)
+
+end LeanDuet.ScopedSemantics

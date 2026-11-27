@@ -40,6 +40,17 @@ possible candidate dependencies by default. This is a dependency index, not
 yet an incremental scheduler. The native kernel judgment is not reconstructed
 from this speculative graph.
 
+## Small interpreted syntax fragment
+
+`lean/Scoped.lean` first proves substitution laws for an untyped scope-indexed
+operator tree, then adds a separate, intrinsically typed fragment with
+natural-number expressions and first-order propositions. Its Lean denotation
+is preserved by capture-avoiding substitution, including under universal
+binders; an erasure map into the generic tree also preserves substitution.
+This is an initial semantic correspondence, not a conversion from the browser
+AST to Lean `Expr`, and it excludes dependent object types, predicates beyond
+equality, arbitrary constants, and incomplete terms.
+
 ## Explicit candidate resolution
 
 A draft choice is a line-local selection of a currently available candidate;
