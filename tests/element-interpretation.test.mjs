@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {compileNaturalDraft,createDraftSession,draftProof} from '../web/natural-draft.mjs';
 import {elementInterpretationCandidates,parseElementRequest} from '../web/element-interpretation.mjs';
+import {planGoalOperation} from '../web/context-extension.mjs';
 import {reconcileDraftIdentity,migrateDraftChoices} from '../web/draft-identity.mjs';
 
 test('element requests keep a shared utterance and expose universal and existential operations',()=>{
@@ -17,6 +18,18 @@ test('element requests keep a shared utterance and expose universal and existent
  assert.equal(result.candidates[1].sourceId,'context:1');
 });
 
+test('a typed element request recognizes Lean’s nondependent Pi arrow as universal introduction',()=>{
+ const request=parseElementRequest('take an element z : $Nat$ satisfying $P$');
+ const result=elementInterpretationCandidates(request,{goal:'Nat → P',scope:['P','he'],
+  facts:new Map([['P','Prop'],['he','∃ y : Nat, P']])});
+ assert.equal(result.status,'ambiguous');
+ assert.deepEqual(result.candidates.map(candidate=>candidate.operation),['universal-introduction','existential-elimination']);
+ assert.equal(result.candidates[0].type,'Nat');
+ const operation=planGoalOperation('Nat → P',{kind:'introduce',name:'z',type:'Nat'});
+ assert.equal(operation.subgoals[0].goal,'P');
+ assert.equal(operation.subgoals[0].contextDelta[0].name,'z');
+ assert.equal(operation.subgoals[0].contextDelta[0].kind,'universal-variable');
+});
 test('Chinese arbitrary wording rules out existential extraction',()=>{
  const request=parseElementRequest('取任意元素 x：$Nat$ 满足 $P(x)$');
  const result=elementInterpretationCandidates(request,{goal:'∀ y : Nat, P y',scope:['he'],facts:new Map([['he','∃ y : Nat, P y']])});
