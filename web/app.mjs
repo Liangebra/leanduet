@@ -48,6 +48,9 @@ const resolutionLabels={
  'depends-on-open':'Depends on an open obligation',
  'open-obligation':'Open proof obligation',
  'needs-context':'Needs more context',
+ 'needs-type-annotation':'Needs an explicit element type',
+ 'incompatible-type':'Element type conflicts with the known carrier',
+ 'ambiguous-context':'Set restriction names more than one local object',
  'needs-choice':'A candidate is available · choose how to proceed',
  'ambiguous':'Multiple supported interpretations remain',
  'budget-exhausted':'Candidate search budget exhausted',
@@ -621,6 +624,8 @@ function previewDraft({edited=false,choices=draftChoices}={}){
      if(x.dependencies?.length)d.append(element('small','Depends on open obligations: '+x.dependencies.join(', ')));
      for(const c of x.candidates||[]){
       d.append(element('code',(c.type?c.type+' ← ':'')+c.term+' · '+c.schema));
+      if(c.requiredCondition)d.append(element('small','After introduction, establish '+c.requiredCondition));
+      if(c.evidenceType)d.append(element('small',c.evidenceName+' : '+c.evidenceType));
       if(c.constraints?.length)d.append(element('small','Compatible with the remaining goal at line '+c.constraints.at(-1).line));
       if(c.premiseFacts?.length)d.append(element('small',c.premiseFacts.map(p=>p.type+' ['+p.name+']').join(' · ')));
       const key=c.choice??c.term,selected=choices.get(x.line)===key;

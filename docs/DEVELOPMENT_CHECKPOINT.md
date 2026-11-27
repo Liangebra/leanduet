@@ -1,81 +1,32 @@
-# LeanDuet development checkpoint
+# Development checkpoint
 
-Updated 2026-11-27 (Asia/Shanghai).
+Updated 2026-11-27 (UTC).
 
-## Verified repository state
+## Current repository state
 
-- `main` is at `98405e14ff5790d7f20ddb66acd10857ab4761c2`, including merged
-  PR #22 (scoped source positions, residual-goal checks, and local-name expiry)
-  and PR #43 (constructive ex-falso from an explicit `False` premise).
-- PR #22 is closed and merged at `0eaf7dd608579e442c5f1c3b835a83c558f75348`.
-- The open research stack is #37 → #38 → #39 → #40 → #42. Their downstream
-  branches still target older stack heads and must be synchronized and tested
-  after each dependency lands.
-- PR #37 is based on current `main`, head
-  `02adf00f65241bc360cfcfa6e2888fde2845542a`. The Tests run
-  `46063313266` and Mathlib integration run `46063313286` are in progress.
-  An earlier run exposed a malformed Python integration fixture introduced
-  during stack synchronization. The truncated ex-falso line and orphaned
-  duplicate suffix are repaired on the current head; the new runs are the
-  validation for that repair.
-- PR #38 previously failed browser smoke on an outdated base; #39 has no CI
-  run on its latest head. #40's older Mathlib run passed but its full workflow
-  failed in the browser path. #42's benchmark step ran, but its full workflow
-  inherited the same browser failure. None of those old results validates the
-  current dependency stack.
+- `main` includes merged PR #22 (scoped source positions, residual-goal checks, and branch-local name expiry), PR #43 (constructive ex-falso from an explicit `False` premise), and PR #37 (bounded structural alternatives for universal introduction and existential witness extraction).
+- PR #37 merged at `07905c568e91783e95696b3567f5644d829710ca`. The Tests workflow `46063313266` and Mathlib integration workflow `46063313286` passed on the repaired code head before merge.
+- PR #38 develops set-restricted element operations. Its original branch targets an older stacked base. The current patch carries its set-identity and ambiguity fixes onto the merged main tree; validation must run on this synchronized head before merge.
+- PRs #39, #40, and #42 depend on the earlier stack and have not yet been validated against this synchronized series.
 
-## Mathematical work and limits
+## Mathematical and engineering state
 
-The scoped proof model now carries parent binding identities into child goals,
-isolates sibling declarations, checks a branch's terminal annotation against
-its residual goal, expires branch-local declarations at closure, and returns
-only dependencies already present in the parent. Conjunction, equivalence,
-explicit existential goals, negation introduction, and ex-falso use
-constructive operations; no classical axiom is silently introduced.
+Proof scopes are trees. Parent object identities are inherited by child goals; sibling locals remain isolated; branch conclusions must match residual goals; local declarations expire on closure; only parent-visible dependencies may return. Conjunction, equivalence, existential construction, negation introduction, and ex-falso are represented as constructive goal operations. Classical reductio is not silently added.
 
-PR #37 adds a bounded structural candidate family for “take an element
-satisfying …”: a matching universal goal may justify arbitrary introduction,
-and a visible typed existential premise may justify witness extraction.
-Remaining-goal constraints can remove incompatible readings. If the supported
-evidence does not select one reading, the request stays open and creates no
-local binding until a user chooses. This is a small candidate family, not a
-general shared parse forest. Local definitions, subtype coercions, general
-implicit quantifiers, Lean definitional equality, and unique author-intent
-recovery remain outside its scope.
+Element-operation ambiguity is represented by distinct bounded candidates rather than a forced parse. A matching universal goal supports arbitrary introduction; a typed existential premise supports witness extraction. Later supported goals can constrain candidates. An unresolved request introduces no speculative object.
+
+The set-restricted extension recognizes explicit element requests such as “take an arbitrary element x : Nat in A satisfying P(x)” and their Chinese counterpart. It preserves the set restriction, requires a displayed element type, checks a known local set carrier when available, tracks referenced local set identities in the choice key and dependency graph, and rejects duplicate visible names. For `∃ x ∈ A, P x`, the witness evidence includes both membership and the requested property. These rules are surface-level and conservative; Lean still must elaborate the generated term.
 
 ## Verification boundary
 
-JavaScript and Python suites passed on an earlier PR #37 revision, as did
-syntax checks. They do not validate the current fixture repair. Lean and
-Playwright Chromium are unavailable in the local work environment, so generated
-Lean and browser interaction require green repository workflows. Synthetic
-latency measurements are documented in the PR and are not browser performance
-guarantees. The current GitHub Pages deployment has not been independently
-verified.
+A structurally exportable draft is not, by itself, Lean elaboration, kernel verification, or confirmation of author intent. Formula comparison is conservative structural comparison, not general definitional equality. The editor does not infer set carriers from an arbitrary global Lean environment unless that information is present in the local context. The current browser and Mathlib workflows are the validation gate for this PR.
 
-A structurally complete draft is only an exportable candidate. It is not, by
-that fact alone, elaborated by Lean, kernel-verified, or confirmed faithful to
-the author's mathematical intent.
+## Next dependency-ready work
 
-## Next dependency-ready tasks
+1. Run the full Tests/browser workflow and the pinned Mathlib integration on the synchronized PR #38 head. Review any generated bounded-universal and bounded-existential terms at the Lean boundary.
+2. Rebase/synchronize PR #39 and check local-lemma scope closure under shadowing, siblings, incomplete proofs, and edits.
+3. Validate PR #40's compact-image and subgroup corpus cases against the pinned Mathlib environment and dependency extraction.
+4. Rerun PR #42's cold-versus-incremental benchmark on the final stack; report per-case medians and P95, including edits where caching loses.
+5. Add one reviewed analysis or linear-algebra example with prose, semantic structure, Lean compilation, and a local-edit regression.
 
-1. Check both workflows on PR #37 head `02adf00`; inspect the Python/Lean
-   integration and browser-selection path. Merge only after both are green.
-2. Rebase/synchronize PR #38 on the merged #37 and resolve the outstanding
-   identity issue conservatively: bounded-set references must resolve to one
-   visible object identity, not merely a matching displayed name.
-3. Review PR #39's local-lemma closure contract and its identity behavior under
-   shadowing, siblings, incomplete subproofs, and edits; run full workflows.
-4. Validate #40's compact-image and subgroup cases against pinned Mathlib and
-   the extracted dependency graph.
-5. Rerun #42's benchmark and cold-vs-incremental equality checks on the final
-   stack. Report per-case medians and P95 honestly, including edits where
-   incremental work is slower.
-6. Add the next reviewed analysis or linear-algebra case with prose,
-   semantic graph, Lean compilation, and a local-edit regression.
-
-This checkpoint follows the original eight-stage dependency order:
-surface semantics → identity → partial graph → candidate forest →
-mathematical inference → incremental evaluation → bidirectional projection →
-representative acceptance. Later stages remain partial; no stage is claimed
-complete.
+The original eight-stage order remains authoritative: surface semantics → identity → partial graph → candidate forest → mathematical inference → incremental evaluation → bidirectional projection → representative acceptance. The work here primarily advances scope/context handling and structural operation candidates; it does not complete any whole stage.

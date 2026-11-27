@@ -86,6 +86,7 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
  if(lines.length>16)throw Error('Use at most sixteen inference lines.');
  const closed=new Set(closedNames);
  const occupied=new Set(scope),visible=new Set(scope.filter((x,i)=>scope.indexOf(x)===i&&scope.lastIndexOf(x)===i));
+ const ambiguousNames=[...new Set(scope.filter(name=>scope.indexOf(name)!==scope.lastIndexOf(name)))];
  // Cache syntax by exact text, independently of context. Cached errors are
  // deterministic syntax diagnostics, not semantic failures.
  const syntax=cache?(cache.syntax??=new Map()):new Map();
@@ -198,7 +199,7 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
      const visibleNames=[...visible];
      const visibleIds=visibleNames.map(name=>localIdentities.get(name));
      const rawResolution=elementInterpretationCandidates(p,{goal:remainingGoal,scope:visibleNames,facts,
-      scopeIds:visibleIds,reservedNames:[...occupied]});
+      scopeIds:visibleIds,reservedNames:[...occupied],ambiguousNames});
      const constrained=constrainElementCandidates(rawResolution.candidates,i);
      operationCandidates=constrained.candidates;
      const resolution={...rawResolution,...constrained,

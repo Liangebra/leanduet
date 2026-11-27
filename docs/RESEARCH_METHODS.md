@@ -64,8 +64,13 @@ with existential witness extraction for one small English/Chinese request
 grammar. It retains the source occurrence and candidate identity, admits a
 later explicit target constraint only when intervening syntax is supported,
 and reports context/search limits separately. Extend this family next to
-definitions, subtype objects, and unresolved existence only with structural
-evidence that distinguishes those operations. Each gate requires
+bounded set restrictions, definitions, subtype objects, and unresolved
+existence only with structural evidence that distinguishes those operations.
+The restricted subset keeps `x ∈ A` as a separate premise under universal
+introduction and as part of the extracted evidence under existential
+elimination. It requires an explicit carrier annotation; a known simple local
+carrier may reject a mismatch, while unknown or compound carriers remain for
+Lean to check. Each gate requires
 scope/identity regression tests, independent Lean compilation of emitted
 fragments, and incremental-versus-cold evaluation tests. In parallel, retain a
 small set of reviewed real mathematics examples rather than waiting for all
