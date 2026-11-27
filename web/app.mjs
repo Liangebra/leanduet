@@ -587,6 +587,14 @@ function previewDraft({edited=false}={}){
       d.append(subgoals);
      }
      if(x.reason)d.append(element('small',x.reason));
+     if(x.rejectedCandidates?.length){
+      const rejected=element('details');rejected.append(element('summary','Other operation readings ruled out by the explicit goal'));
+      for(const candidate of x.rejectedCandidates){
+       const line=candidate.rejectedBy?.line;
+       rejected.append(element('small',candidate.term+' · '+candidate.schema+(line?' · conflicts with line '+line+' goal '+candidate.rejectedBy.goal:'')));
+      }
+      d.append(rejected);
+     }
      if(x.constraints?.length)d.append(element('small','Later structural constraints: '+x.constraints.map(c=>'line '+c.line+' ('+c.status+')').join(', ')));
      if(x.constraintGroup?.variables.length>1){
       const group=x.constraintGroup;
@@ -613,6 +621,7 @@ function previewDraft({edited=false}={}){
      if(x.dependencies?.length)d.append(element('small','Depends on open obligations: '+x.dependencies.join(', ')));
      for(const c of x.candidates||[]){
       d.append(element('code',(c.type?c.type+' ← ':'')+c.term+' · '+c.schema));
+      if(c.constraints?.length)d.append(element('small','Compatible with the remaining goal at line '+c.constraints.at(-1).line));
       if(c.premiseFacts?.length)d.append(element('small',c.premiseFacts.map(p=>p.type+' ['+p.name+']').join(' · ')));
       const key=c.choice??c.term,selected=draftChoices.get(x.line)===key;
       const b=element('button',selected?'Clear choice':'Use this candidate');b.type='button';

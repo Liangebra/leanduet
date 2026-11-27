@@ -16,6 +16,16 @@ properties. No upstream source is copied.
 | 7 | [SAE](https://arxiv.org/abs/2610.25018); [GTED](https://arxiv.org/abs/2507.07399); [Contract Lenses](https://doi.org/10.1017/S0956796823000059) | Role-sensitive structural comparison, conservative edit correspondence, partial update contracts |
 | 8 | [LeanReviewBench](https://github.com/MechMath/LeanReviewBench); FaithAlign | Independent statement targets, semantic error categories, paired revision fixtures, held-out evaluations |
 
+For AmbiQT and LogicalBeam, the relevant lesson is to vary and rank
+interpretations at the level of logical plans and schema assignments; ordinary
+token diversity can return many strings that encode the same reading. The
+LeanDuet prototype therefore represents distinct mathematical operations as
+separate typed candidate leaves and lets goal/context constraints filter them.
+It does not reproduce LogicalBeam's learned template infilling, SQL-specific
+beam search, or AmbiQT corpus, and this first deterministic rule family has no
+probabilistic ranking. The paper is published by ACL; its code repository is
+MIT-licensed. Neither source code nor benchmark data is copied.
+
 ## Boundaries
 
 - One shared semantic interface, not independent natural-language and Lean truth stores.
@@ -49,9 +59,14 @@ without classical axioms. Generated Lean and browser interaction are checked
 by repository CI before merge. This still does not cover named local-lemma
 return, classical reductio, or general inductive elimination.
 
-Next, complete those bounded proof operations over the same child-scope
-contract. Then extend stage 3 with distinct structure candidates for arbitrary
-elements, existential witnesses, definitions, subtype objects, and unresolved
-existence. Each gate requires scope/identity regression tests, independent Lean
-compilation of emitted fragments, and incremental-versus-cold evaluation tests.
-Preserve the existing eight-stage order.
+The first stage-3 operation family now pairs arbitrary-variable introduction
+with existential witness extraction for one small English/Chinese request
+grammar. It retains the source occurrence and candidate identity, admits a
+later explicit target constraint only when intervening syntax is supported,
+and reports context/search limits separately. Extend this family next to
+definitions, subtype objects, and unresolved existence only with structural
+evidence that distinguishes those operations. Each gate requires
+scope/identity regression tests, independent Lean compilation of emitted
+fragments, and incremental-versus-cold evaluation tests. In parallel, retain a
+small set of reviewed real mathematics examples rather than waiting for all
+semantic modules to be complete. Preserve the existing eight-stage order.

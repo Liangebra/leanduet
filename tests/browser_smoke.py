@@ -245,6 +245,44 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
             case_page.locator("#checkPatch").click()
             expect(case_page.locator("#applyPatch")).to_be_enabled(timeout=120000)
             case_page.close()
+            operation_page=browser.new_page(viewport={"width":1440,"height":900})
+            operation_page.on("pageerror",lambda error:errors.append(str(error)))
+            operation_page.goto(url)
+            operation_source="""theorem operation_choice_demo (P : Nat → Prop) (hall : ∀ x : Nat, P x)
+    (he : ∃ y : Nat, P y) (h : True ∨ True) : ∀ x : Nat, P x := hall
+"""
+            operation_page.locator("#lean").fill(operation_source)
+            operation_page.once("dialog",lambda d:d.accept())
+            operation_page.locator("#adopt").click()
+            operation_page.locator('[data-view="typed"]').click()
+            operation_page.locator("#extractTerm").click()
+            expect(operation_page.locator("#typedStatus")).to_contain_text("Extracted from Lean elaboration",timeout=60000)
+            operation_page.locator("#typedTree .typedEdit").first.click()
+            expect(operation_page.locator("#patchTarget")).to_contain_text("∀")
+            operation_page.locator("#chainEditor summary").click()
+            operation_page.locator("#chainFormat").select_option("natural")
+            operation_text="""take an element x satisfying $P(x)$
+cases h, establish hp : $P(x)$
+  left case hleft
+    $P(x)$ | hall x
+  right case hright
+    $P(x)$ | hall x
+$P(x)$ | hp"""
+            operation_page.locator("#chainText").fill(operation_text)
+            operation_row=operation_page.locator("#draftTranslation .ruleResult").first
+            expect(operation_row).to_contain_text("universal-variable introduction")
+            expect(operation_row).to_contain_text("existential witness extraction")
+            operation_row.get_by_role("button",name="Use this candidate").first.click()
+            expect(operation_row).to_contain_text("Clear choice")
+            operation_page.locator("#compileChain").click()
+            expect(operation_page.locator("#patchTerm")).to_have_value(__import__("re").compile(r"intro x[\s\S]*cases h with[\s\S]*exact hall x[\s\S]*exact hp"))
+            operation_page.locator("#checkPatch").click()
+            expect(operation_page.locator("#applyPatch")).to_be_enabled(timeout=120000)
+            operation_page.once("dialog",lambda d:d.accept())
+            operation_page.locator("#applyPatch").click()
+            operation_page.locator("#check").click()
+            expect(operation_page.locator("#verifyState")).to_have_text("Lean passed",timeout=120000)
+            operation_page.close()
             exploration_source=patch_page.locator("#lean").input_value()
             patch_page.locator("#noteGoal").click()
             assert "Goal snapshot" in patch_page.locator("#prompt").input_value()
@@ -388,6 +426,8 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
             goalop_page.locator("#typedTree").evaluate("(root) => root.querySelectorAll('details.typedNode').forEach(x=>x.open=true)")
             exists_node=goalop_page.locator(".typedNode").filter(has=goalop_page.locator("summary").filter(has_text=__import__("re").compile("^Apply Exists\\.intro$"))).last
             exists_node.locator(":scope > button.typedEdit").click()
+            if not goalop_page.locator("#chainEditor").evaluate("(editor) => editor.open"):
+                goalop_page.locator("#chainEditor summary").click()
             goalop_page.locator("#chainText").fill("construct witness a\n  witness property\n    $P(a)$ | ha")
             expect(goalop_page.locator("#draftTranslation")).to_contain_text("construct witness a")
             goalop_page.locator("#compileChain").click()

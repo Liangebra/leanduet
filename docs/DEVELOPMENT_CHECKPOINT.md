@@ -2,35 +2,84 @@
 
 Updated 2026-11-27 (Asia/Shanghai).
 
-## Repository and upstream review
+## Upstream and review state
 
-Main's latest observed commit is `e17fe92`. It includes merged PRs [#22](https://github.com/Liangebra/leanduet/pull/22), [#32](https://github.com/Liangebra/leanduet/pull/32), [#33](https://github.com/Liangebra/leanduet/pull/33), and [#34](https://github.com/Liangebra/leanduet/pull/34). PR #22 preserves branch source positions, checks conclusions against residual goals, and prevents branch-local declarations from escaping. PR #32 composes sequential scoped case blocks; PR #33 adds identity-aware scoped caches; PR #34 makes one compact-image Mathlib case a shared JavaScript/Lean corpus fixture.
+The latest observed `main` is `324411b`, the squash merge of PR #35. PR #22
+and PRs #32–#35 are merged. PR #36 (`ee64768`,
+`research/goal-operation-extensions`) is based on this `main`; its Mathlib
+workflow passed, but its complete Tests workflow exposed a browser smoke
+failure: after adopting a new existential theorem, the test filled `#chainText`
+while its enclosing editor was collapsed. This is fixed on PR #36 at head
+`4a6628a`; the workflow for that new head must pass before merge. The failed
+run passed JavaScript, Python, Lean models, backend integration and generated
+Lean integration; only the browser smoke step failed.
 
-PR #34's Mathlib integration and complete test/browser workflow passed on head `517b74f` (runs 46001497049 and 46001497038). PR #35 adds scoped conjunction child goals. Its latest head is `8b02858`; the Mathlib workflow passed (run 46005423369) and its complete Tests workflow (run 46005423224) is in progress. A prior run on a superseded head failed in the JavaScript step; the current remote tree was then restored from the local snapshot and every one of its 20 changed files was fetched back and compared with that snapshot. Do not use the superseded run as evidence about the current head.
+The current local branch, `research/element-operation-candidates`, is based on
+PR #36's prior head `ee64768` and contains the next stacked change, including
+the same browser-test correction as #36. It is not yet on GitHub. Its
+dependency is explicit: it uses the constructive equivalence and
+existential child-goal operations introduced by #36 in neighboring integration
+tests, while the operation-candidate resolver itself also reuses main's scope,
+identity and existential-elimination machinery.
 
-## Current proof-operation work
+## Current mathematical problem
 
-PR #35 defines a shared child-goal compiler for conjunction introduction. Parent identities flow into child scopes, sibling declarations remain isolated, and child locals are discharged when a subgoal closes. Structural exportability stays distinct from proof closure; `exact?` remains an open obligation.
+One short utterance such as “take an element `x` satisfying `P(x)`” can state
+different mathematical operations. The current change models one shared
+request with a bounded family of structurally justified readings: introduce a
+variable from a matching universal goal, or extract a witness and evidence
+from a visible typed existential premise. The goal and a later explicit
+conclusion can constrain the family. If both readings remain possible, the
+request remains unresolved and introduces no local object until the user
+chooses. Object-source identity, rather than its displayed name, is part of
+existential choice identity.
 
-The local stacked extension adds constructive equivalence introduction and explicit existential introduction to that same contract. Equivalence opens both implications without classical axioms. Existential construction requires a uniquely visible typed local object, checks explicit domains by conservative formula structure, carries the witness identity and dependencies of its dependent type, and leaves the predicate as a child obligation. It does not infer or search for a witness. Capture, unknown or ambiguous witnesses, and surface-type mismatches are rejected.
+This is a narrow first step in original stage 4 (candidate forest), dependent
+on stages 2–3 and the stage 5 proof-operation contract. It is not an unrestricted
+shared parse forest or a general natural-language parser. Local definitions,
+subtype objects, unresolved existence proofs and arbitrary quantifier inference
+remain unimplemented.
 
-Local verification for this extension:
+## Verification
 
-- `node --test tests/*.test.mjs`: 225/225 passed.
-- `python -m unittest discover -s tests`: 17/17 passed.
-- Python byte-compilation and `git diff --check`: passed.
-- `tests/static_browser.py` could not start because the local Playwright Chromium executable is absent; the repository CI must validate the browser path.
-- Lean is not installed locally; generated conjunction/equivalence/existential terms are covered by the interpretation integration intended for PR CI.
-
-This advances stage 2 of the original eight-stage order. It also tests stage 7's incremental-versus-cold consistency on an edited equivalence child. It does not establish general name/type resolution, Lean elaboration, kernel correctness, or semantic fidelity.
+- JavaScript unit suite: 238/238 passed after the candidate-graph null-selection
+  regression was fixed.
+- Python unit suite: 17/17 passed.
+- Python byte-compilation and `git diff --check`: passed before the latest docs
+  and benchmark edits; rerun before commit.
+- Opt-in synthetic benchmark: Node v24.22.3, Linux x64, 24 warmups and 160
+  samples; candidate evaluation over 50 typed context entries measured 0.678 ms
+  median / 1.124 ms P95 cold and 0.461 / 0.735 ms on exact replay. A property
+  edit measured 0.622 / 1.148 ms; adding another existential premise measured
+  0.696 / 1.162 ms. Every incremental case matched a fresh full evaluation.
+  These are synthetic local measurements, not browser latency guarantees.
+- Local Playwright is installed but its Chromium executable is absent; Lean is
+  also absent locally. The new real Lean compilation and browser interactions
+  therefore require CI. PR #36's Mathlib CI passed; its full workflow remained
+  in progress at the last status check.
 
 ## Next dependency-ready work
 
-1. Finish PR #35's current full workflow, inspect the head and review threads, then merge only if unit, Lean, and browser checks pass.
-2. Open the local goal-operation extension as stacked PR #36; require its generated Lean and browser smoke to pass, then update its base after #35 merges.
-3. Add structure-level candidates for arbitrary elements, existential witnesses, local definitions, subtype objects, and unresolved existence. Preserve distinct interpretations and let typed context constrain them.
-4. Add a reviewed real analysis or linear-algebra proof fixture with source language, expected structure, Lean compilation, and local-edit regressions.
+1. Finish local review of the candidate family and its acceptance fixtures;
+   rerun all tests and the benchmark, then publish the stacked change as PR #37.
+2. Wait for #36's latest full workflow, review its final head and merge only
+   after Lean and browser checks pass. Retarget #37 to `main` afterward and
+   rerun its workflows against the merged base.
+3. Audit the shared goal-operation contract for proof-local assumptions,
+   conjunction/iff children, and return behavior before adding another
+   operation. The intuitionistic negation introduction subset is already
+   present; classical reductio and general local-lemma blocks are not.
+4. Add one reviewed real analysis or linear-algebra proof fixture with prose,
+   semantic structure, Lean compilation, and local-edit regression coverage.
 
-## Current boundaries
+## Boundaries
 
-`complete` means only that this bounded structure can be rendered. It does not imply Lean elaboration, kernel verification, author-intent fidelity, or mathematical correctness. Formula compatibility is conservative surface structure, not Lean definitional equality. Goal and case scopes are limited to eight nested levels and 64 nonblank block lines. General local-lemma return, classical reductio, arbitrary inductive elimination, full Lean type resolution, and broad real-mathematics coverage remain open.
+`complete` still means only that the bounded structure can render a Lean
+candidate. It does not establish Lean elaboration, kernel verification,
+author-intent fidelity, or mathematical correctness. Formula compatibility is
+conservative scoped surface structure, not Lean definitional equality. The
+current operation resolver recognizes only a small English/Chinese phrase
+fragment and scans at most 64 local entries; more than eight candidates reports
+budget exhaustion rather than truncating. Typed object dependencies and proof
+dependencies remain distinct. Browser goal conversion, backend inference and
+Lean's final validation are separate paths.
