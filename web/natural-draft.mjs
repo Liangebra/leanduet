@@ -8,7 +8,8 @@ import {renderChain} from './proof-chain.mjs';
 import {premiseFrame,contextCandidates,formulaPremiseSentence,citationCandidates,implicitCandidates,structuralRules} from './context-grammar.mjs';
 import {compileCaseProgram,hasCaseSplitHeader,remapProofGraph} from './case-split.mjs';
 import {compileGoalOperationProgram,goalOperationHeader} from './proof-subgoals.mjs';
-import {extendProofScope,proofScopeFacts,proofScopeNames,rootProofScope} from './proof-scope.mjs';
+import {extendProofScope,proofScopeBindings,proofScopeFacts,proofScopeNames,rootProofScope} from './proof-scope.mjs';
+import {elementInterpretationCandidates,parseElementRequest} from './element-interpretation.mjs';
 const marker=/^(?:(?:therefore|hence|thus|clearly|obviously|indeed|then)(?:\s*[,，:：]\s*|\s+)|(?:因此|从而|于是|显然|事实上|故|则)[，、：:\s]*)/iu;
 const formulaPattern=/\$[^$\n]+\$|\\\([^]*?\\\)|\\\[[^]*?\\\]/g;
 const namePattern=/^[A-Za-z_][A-Za-z0-9_']{0,63}$/;
@@ -42,6 +43,8 @@ function parseLine(raw){
   if(compileFormula(name).ast.kind!=='id')throw Error('Invalid introduction name.');
   return {raw,kind:/^(?:假设|设|assume)/iu.test(word)?'assume':'introduce',name,type:null,modifiers};
  }
+ const elementRequest=parseElementRequest(body);
+ if(elementRequest)return {...elementRequest,raw,modifiers};
  const intro=/^(任取|取任意|假设|设|take\s+|assume\s+)\s*([A-Za-z_][A-Za-z0-9_']{0,63})\s*[:：]\s*(\$[^$\n]+\$|\\\([^]*?\\\))\s*[。.]?$/iu.exec(body);
  if(intro){
   const [,word,name,type]=intro;
@@ -76,7 +79,7 @@ function parseLine(raw){
  }
  return {raw,formula,type:compileFormula(formula).lean,name,ruleText,conclusion,modifiers,forwardText};
 }
-export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),cache=null,goal=null,lineOffset=0,closedNames=[],openBindings=[],incompleteContext=false,continuation=false,scopeIds=[]}={}){
+export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),cache=null,goal=null,lineOffset=0,closedNames=[],openBindings=[],incompleteContext=false,continuation=false,scopeIds=[],scopePrefix='root'}={}){
  const facts=new Map(context);
  if(typeof input!=='string'||input.length>12000)throw Error('Draft exceeds 12000 characters.');
  const lines=input.split(/\r?\n/).map((raw,i)=>({raw,line:i+1+lineOffset})).filter(x=>x.raw.trim());
@@ -95,11 +98,16 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
  const planned=new Set(parsed.flatMap(p=>[p.value?.name,p.value?.evidenceName]).filter(Boolean));
  const lookahead=parsed.some(p=>p.value?.kind==='infer-proposition')?JSON.stringify([input,[...choices]]):null;
  const inheritedOpen=[...new Set(openBindings)];
- const key=JSON.stringify([scope,scopeIds,[...context],[...planned].sort(),goal,lineOffset,lookahead,[...closed].sort(),inheritedOpen.sort(),incompleteContext,continuation]);
+ const key=JSON.stringify([scope,scopeIds,scopePrefix,[...context],[...planned].sort(),goal,lineOffset,lookahead,[...closed].sort(),inheritedOpen.sort(),incompleteContext,continuation]);
  const signatures=lines.map(({raw,line},i)=>JSON.stringify([raw,line,i===lines.length-1&&!continuation,choices.has(line),choices.get(line)]));
  let remainingGoal=goal;
  const constraintResults=new Map();
  let serial=1;const rows=[],steps=[],openNames=new Set(inheritedOpen),serials=[];let blocked=false,reusedRows=0;
+ const localIdentities=new Map(),scopeCounts=new Map();
+ for(const name of scope)scopeCounts.set(name,(scopeCounts.get(name)||0)+1);
+ scope.forEach((name,index)=>{if(scopeCounts.get(name)===1&&visible.has(name)&&scopeIds[index])localIdentities.set(name,scopeIds[index]);});
+ const identityAt=line=>scopePrefix==='root'?'line:'+line:scopePrefix+'/line:'+line;
+ const remember=(name,line,suffix='')=>localIdentities.set(name,identityAt(line)+suffix);
  // The context and all planned names affect the entire draft. Under the
  // same context, reuse only an identical prefix, including choice and
  // conclusion-vs-intermediate role. Reconstruct its local scope exactly.
@@ -112,11 +120,11 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
    if(row.step){
     steps.push(row.step);
     if(['establish','define','introduce','assume','obtain'].includes(row.step.kind)){
-     const {name,type}=row.step;occupied.add(name);visible.add(name);facts.set(name,type);
+     const {name,type}=row.step;occupied.add(name);visible.add(name);facts.set(name,type);remember(name,row.line);
      if(row.proofStatus!=='candidate')openNames.add(name);
      if(row.step.kind==='obtain'){
       const {evidenceName,evidenceType,copy}=row.step;
-      occupied.add(copy);occupied.add(evidenceName);visible.add(evidenceName);facts.set(evidenceName,evidenceType);
+      occupied.add(copy);occupied.add(evidenceName);visible.add(evidenceName);facts.set(evidenceName,evidenceType);remember(evidenceName,row.line,':evidence');
       if(row.proofStatus!=='candidate')openNames.add(evidenceName);
      }
      if(['introduce','assume'].includes(row.step.kind))remainingGoal=row.remainingGoal;
@@ -127,12 +135,12 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
   if(reusedRows)serial=serials.at(-1);
  }
  function unavailable(type){return freeNames(type).find(n=>(planned.has(n)||occupied.has(n)||closed.has(n))&&!visible.has(n));}
- function makeStep(p,last,application){
+ function makeStep(p,last,application,line){
   if(last)return {kind:'conclude',type:p.type,application};
   let name=p.name;
   if(name&&occupied.has(name))throw Error('This intermediate name already exists.');
   if(!name){do{name='duet_h'+serial++;}while(occupied.has(name)||planned.has(name));}
-  occupied.add(name);visible.add(name);facts.set(name,p.type);
+  occupied.add(name);visible.add(name);facts.set(name,p.type);localIdentities.set(name,identityAt(line));
   return {kind:'establish',name,type:p.type,application};
  }
  function unresolved(p,raw,line,last,details){
@@ -141,17 +149,79 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
   const row={...p,raw,line,status:'unresolved',proofStatus:'open',resolutionStatus,...rowDetails};
   // Keep a recognized proposition as a tentative local object. It is not
   // an established theorem and no incomplete draft is exported.
-  if(p&&!['define','introduce','assume','infer-proposition','obtain'].includes(p.kind)&&!last&&!p.conclusion&&(!p.name||!occupied.has(p.name))&&!unavailable(p.type)){
-   const step=makeStep(p,false,'?');
+  if(p&&!['define','introduce','assume','infer-proposition','obtain','element-request'].includes(p.kind)&&!last&&!p.conclusion&&(!p.name||!occupied.has(p.name))&&!unavailable(p.type)){
+   const step=makeStep(p,false,'?',line);
    openNames.add(step.name);steps.push(step);row.step=step;
   }
   rows.push(row);
  }
+ function constrainElementCandidates(candidates,index){
+  // A complete explicit conclusion constrains whether the utterance could
+  // have consumed the target binder. Stop at unknown syntax, another element
+  // request, or a backward type hole; those need a richer joint forest.
+  if(!candidates.length||!goal||continuation||index===lines.length-1)return {candidates,rejectedCandidates:[],targetConstraint:null};
+  const future=parsed.slice(index+1);
+  if(future.some(entry=>entry.error||entry.value?.kind==='element-request'||entry.value?.kind==='infer-proposition'))
+   return {candidates,rejectedCandidates:[],targetConstraint:null};
+  for(const entry of future)if(!entry.value)return {candidates,rejectedCandidates:[],targetConstraint:null};
+  const terminal=parsed.at(-1)?.value;
+  if(terminal?.name)return {candidates,rejectedCandidates:[],targetConstraint:null};
+  let final=null;
+  for(let j=parsed.length-1;j>index;j--){
+   const value=parsed[j].value;
+   if(value?.type&&!['define','obtain','introduce','assume'].includes(value.kind)){final={line:lines[j].line,type:value.type};break;}
+  }
+  if(!final)return {candidates,rejectedCandidates:[],targetConstraint:null};
+  const compatible=[],rejected=[];
+  for(const candidate of candidates){
+   let residual=remainingGoal;
+   try{
+    if(candidate.kind==='introduce')residual=planGoalOperation(residual,{kind:'introduce',name:candidate.name,type:candidate.type}).subgoals[0].goal;
+    for(let j=index+1;j<parsed.length;j++){
+     const next=parsed[j].value;
+     if(['introduce','assume'].includes(next.kind))residual=planGoalOperation(residual,{kind:next.kind,name:next.name,type:next.type}).subgoals[0].goal;
+    }
+   }catch{return {candidates,rejectedCandidates:[],targetConstraint:null};}
+   if(sameScopedFormula(final.type,residual)){
+    compatible.push({...candidate,constraints:[{kind:'remaining-goal',line:final.line,status:'matched',goal:residual}]});
+   }else rejected.push({...candidate,rejectedBy:{kind:'remaining-goal',line:final.line,goal:residual,conclusion:final.type}});
+  }
+  return {candidates:compatible,rejectedCandidates:rejected,
+   targetConstraint:{kind:'remaining-goal',line:final.line,status:compatible.length?'matched':'contradiction'}};
+ }
  for(let i=reusedRows;i<lines.length;i++){
-   const {raw,line}=lines[i],last=i===lines.length-1&&!continuation;let p=null;
+   const {raw,line}=lines[i],last=i===lines.length-1&&!continuation;let p=null,operationCandidates=[];
    try{
     if(parsed[i].error)throw Error(parsed[i].error);
     p=parsed[i].value;
+    if(p.kind==='element-request'){
+     const visibleNames=[...visible];
+     const visibleIds=visibleNames.map(name=>localIdentities.get(name));
+     const rawResolution=elementInterpretationCandidates(p,{goal:remainingGoal,scope:visibleNames,facts,
+      scopeIds:visibleIds,reservedNames:[...occupied]});
+     const constrained=constrainElementCandidates(rawResolution.candidates,i);
+     operationCandidates=constrained.candidates;
+     const resolution={...rawResolution,...constrained,
+      status:constrained.targetConstraint&&!operationCandidates.length?'incompatible-constraints':
+       operationCandidates.length===1?'unique':operationCandidates.length>1?'ambiguous':rawResolution.status};
+     const selected=choices.has(line)?operationCandidates.find(candidate=>candidateChoice(candidate)===choices.get(line)):
+      operationCandidates.length===1?operationCandidates[0]:null;
+     if(!selected){
+      const rejectedChoice=choices.has(line)&&resolution.rejectedCandidates?.some(candidate=>candidateChoice(candidate)===choices.get(line));
+      const resolutionStatus=choices.has(line)?'incompatible-choice':resolution.status;
+      unresolved(p,raw,line,last,{candidates:operationCandidates,rejectedCandidates:resolution.rejectedCandidates,
+       operationConstraint:resolution.targetConstraint,resolutionStatus,
+       reason:rejectedChoice?'The selected operation conflicts with a later explicit conclusion.':
+        choices.has(line)?'The selected operation interpretation is no longer available.':
+        operationCandidates.length>1?'The request has multiple structurally supported mathematical operations; choose one explicitly.':
+        resolution.status==='incompatible-constraints'?'The later explicit conclusion rules out every supported operation interpretation.':
+        resolution.reason||'No supported operation matches the current goal and context.'});
+      continue;
+     }
+     operationCandidates=operationCandidates.map(candidate=>candidateChoice(candidate)===candidateChoice(selected)?selected:candidate);
+     p={...p,...selected,selectedElementCandidate:true,selectedChoice:candidateChoice(selected),
+      operationConstraint:resolution.targetConstraint,rejectedCandidates:resolution.rejectedCandidates};
+    }
     if(p.kind==='infer-proposition'){
      if(last)throw resolutionError('An inferred intermediate must be followed by a conclusion.','incompatible-target');
      if(occupied.has(p.name))throw resolutionError('This intermediate name already exists.','incompatible-choice');
@@ -175,7 +245,7 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
        const canonical=JSON.stringify(compileFormula(type,{syntax:'lean'}).scoped);
        if(candidates.every(c=>JSON.stringify(compileFormula(c.type,{syntax:'lean'}).scoped)===canonical)&&!unavailable(type)){
         p={...p,type};
-        const step=makeStep(p,false,'?');
+        const step=makeStep(p,false,'?',line);
         openNames.add(step.name);steps.push(step);
         details.step=step;
         details.reason='The proposition type is determined, but its proof is ambiguous; choose a proof candidate.';
@@ -187,18 +257,18 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
      p={...p,type:picked.type};
      if(unavailable(p.type))throw Error('The inferred proposition refers to an unavailable local object.');
      if(!visible.has(p.source)){
-      const step=makeStep(p,false,'?');openNames.add(step.name);steps.push(step);
+      const step=makeStep(p,false,'?',line);openNames.add(step.name);steps.push(step);
       unresolved(p,raw,line,last,{step,candidates,domain,constraints,constraintGroup:group,dependencies:[p.source],resolutionStatus:'needs-context',reason:'The proposition type is determined, but its projection source is still unresolved.'});continue;
      }
      const dependencies=[...new Set([...picked.premises,...freeNames(picked.type)].filter(n=>openNames.has(n)))];
      const proofStatus=dependencies.length?'depends-on-open':'candidate';
-     const step=makeStep(p,false,picked.term);
+     const step=makeStep(p,false,picked.term,line);
      if(dependencies.length)openNames.add(step.name);
      rows.push({...p,line,status:blocked?'provisional':'translated',proofStatus,resolutionStatus:candidateResolution(proofStatus),dependencies,step,candidates,domain,constraints,constraintGroup:group});steps.push(step);continue;
     }
     if(p.kind==='obtain'){
       if(last)throw resolutionError('An existential elimination must be followed by a conclusion.','incompatible-target');
-      if(choices.has(line))throw resolutionError('An existential elimination has no proof candidate choice.','incompatible-choice');
+      if(choices.has(line)&&!p.selectedElementCandidate)throw resolutionError('An existential elimination has no proof candidate choice.','incompatible-choice');
       if(!visible.has(p.source)||!facts.has(p.source))throw resolutionError('Cite a visible typed existential premise.','needs-context');
       if(p.name===p.evidenceName||occupied.has(p.name)||occupied.has(p.evidenceName))throw resolutionError('Witness and evidence names must be distinct and fresh.','incompatible-choice');
      const types=existentialBindings(facts.get(p.source),p);
@@ -214,15 +284,17 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
      const step={kind:'obtain',source:p.source,name:p.name,evidenceName:p.evidenceName,copy,...types};
      occupied.add(copy);
      for(const [name,type] of [[step.name,step.type],[step.evidenceName,step.evidenceType]]){
-      occupied.add(name);visible.add(name);facts.set(name,type);if(dependencies.length)openNames.add(name);
+      occupied.add(name);visible.add(name);facts.set(name,type);
+      remember(name,line,name===step.evidenceName?':evidence':'');
+      if(dependencies.length)openNames.add(name);
      }
-     rows.push({...p,...types,line,status:blocked?'provisional':'translated',proofStatus,resolutionStatus:candidateResolution(proofStatus),dependencies,step,candidates:[]});steps.push(step);continue;
+     rows.push({...p,...types,line,status:blocked?'provisional':'translated',proofStatus,resolutionStatus:candidateResolution(proofStatus),dependencies,step,candidates:operationCandidates});steps.push(step);continue;
     }
     if(['introduce','assume'].includes(p.kind)){
       if(last)throw resolutionError('An introduction must be followed by a conclusion.','incompatible-target');
       if(blocked)throw resolutionError('Resolve preceding incomplete wording before extending the goal.','needs-context');
       if(occupied.has(p.name))throw resolutionError('This local name already exists.','incompatible-choice');
-      if(choices.has(line))throw resolutionError('An introduction has no proof candidate choice.','incompatible-choice');
+      if(choices.has(line)&&!p.selectedElementCandidate)throw resolutionError('An introduction has no proof candidate choice.','incompatible-choice');
      const goalOperation=planGoalOperation(remainingGoal,{kind:p.kind,name:p.name,type:p.type});
      p={...p,type:goalOperation.subgoals[0].contextDelta[0].type};
      const names=freeNames(p.type);
@@ -233,10 +305,11 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
      }))};
      const step={kind:p.kind,name:p.name,type:p.type,goalOperation:scopedOperation};
      occupied.add(p.name);visible.add(p.name);facts.set(p.name,p.type);
+     remember(p.name,line);
      const dependencies=names.filter(n=>openNames.has(n));
      if(dependencies.length)openNames.add(p.name);
      const proofStatus=dependencies.length?'depends-on-open':'candidate';
-     rows.push({...p,line,status:'translated',proofStatus,resolutionStatus:candidateResolution(proofStatus),dependencies,remainingGoal,step,candidates:[]});steps.push(step);continue;
+     rows.push({...p,line,status:'translated',proofStatus,resolutionStatus:candidateResolution(proofStatus),dependencies,remainingGoal,step,candidates:operationCandidates});steps.push(step);continue;
     }
     if(p.kind==='define'){
       if(last)throw resolutionError('A definition must be followed by a conclusion.','incompatible-target');
@@ -248,6 +321,7 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
      const proofStatus=dependencies.length?'depends-on-open':'candidate';
      const step={kind:'define',name:p.name,type:p.type,value:p.value};
      occupied.add(p.name);visible.add(p.name);facts.set(p.name,p.type);
+     remember(p.name,line);
      if(dependencies.length)openNames.add(p.name);
      rows.push({...p,line,status:blocked?'provisional':'translated',proofStatus,resolutionStatus:candidateResolution(proofStatus),dependencies,step,candidates:[]});steps.push(step);continue;
     }
@@ -312,7 +386,7 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
     const applicationPremises=candidates.find(c=>c.term===application)?.premises||application.split(/\s+/);
     const dependencies=[...new Set([...applicationPremises,...freeNames(p.type)].filter(name=>openNames.has(name)))];
     const proofStatus=application==='?'?'open':dependencies.length?'depends-on-open':'candidate';
-    const step=makeStep(p,last,application);
+     const step=makeStep(p,last,application,line);
     if(step.kind==='establish'&&proofStatus!=='candidate')openNames.add(step.name);
     const resolutionStatus=application==='?'?(candidates.length?'needs-choice':'open-obligation'):candidateResolution(proofStatus);
     rows.push({...p,line,status:blocked?'provisional':'translated',proofStatus,resolutionStatus,dependencies,step,candidates});steps.push(step);
@@ -376,14 +450,20 @@ function evaluateScopeAware(input,scope=[],context=new Map(),options={}){
  }
  function combineSegments(prefix,result){
   const seenNodes=new Set(prefix.graph.nodes.map(node=>node.id));
-  const nodes=[...prefix.graph.nodes,...result.graph.nodes.filter(node=>!seenNodes.has(node.id))];
+  // The suffix graph is compiled in the extended lexical context. Its visible
+  // prefix declarations already have introduction nodes in prefix.graph, so
+  // keep only suffix proof nodes here instead of flattening that child context
+  // into the root context. The selected root target is the identity anchor;
+  // residual subgoals belong to their operation rows, not graph.goal.
+  const suffixNodes=result.graph.nodes.filter(node=>node.kind!=='context'&&!seenNodes.has(node.id));
+  const nodes=[...prefix.graph.nodes,...suffixNodes];
   const groups=new Map([...(prefix.graph.constraintGroups||[]),...(result.graph.constraintGroups||[])].map(group=>[group.id,group]));
   const complete=result.complete&&!prefix.rows.some(row=>row.status==='unresolved');
   const steps=[...prefix.steps,...result.steps];
   return {...result,rows:[...prefix.rows,...result.rows].sort((a,b)=>a.line-b.line),steps,complete,
    completionKind:complete?'structural-export-ready':'incomplete',reusedRows:(prefix.reusedRows||0)+(result.reusedRows||0),
    openBindings:[...new Set([...(prefix.openBindings||[]),...(result.openBindings||[])])],
-   graph:{...result.graph,nodes,constraintGroups:[...groups.values()]},term:complete?renderChain(steps):null};
+   graph:{...result.graph,goal:prefix.graph.goal,nodes,constraintGroups:[...groups.values()]},term:complete?renderChain(steps):null};
  }
  function segmentCacheKey(text,currentFrame,segmentOptions){
   const choices=[...(segmentOptions.choices||new Map())].sort(([left],[right])=>String(left).localeCompare(String(right)));
@@ -433,7 +513,7 @@ function evaluateScopeAware(input,scope=[],context=new Map(),options={}){
   if(blockIndex>first){
    const lineOffset=segmentOptions.lineOffset||0;
    const prefix=draftProof(lines.slice(0,blockIndex).join('\n'),names,facts,{...segmentOptions,lineOffset,continuation:true,
-    cache:cacheForFrame(currentFrame,segmentOptions.cache),scopeIds:currentFrame.bindings.map(binding=>binding.id)});
+    cache:cacheForFrame(currentFrame,segmentOptions.cache),scopeIds:proofScopeBindings(currentFrame).map(binding=>binding.id),scopePrefix:currentFrame.id});
    prefix.graph=remapProofGraph(prefix.graph,currentFrame);
    const nextFrame=extendFromDraft(currentFrame,prefix);
    const hasOpenText=prefix.rows.some(row=>row.status==='unresolved');
@@ -452,7 +532,7 @@ function evaluateScopeAware(input,scope=[],context=new Map(),options={}){
    return combineSegments(prefix,following);
   }
   const result=draftProof(text,names,facts,{...segmentOptions,lineOffset:segmentOptions.lineOffset||0,
-   cache:cacheForFrame(currentFrame,segmentOptions.cache),scopeIds:currentFrame.bindings.map(binding=>binding.id)});
+   cache:cacheForFrame(currentFrame,segmentOptions.cache),scopeIds:proofScopeBindings(currentFrame).map(binding=>binding.id),scopePrefix:currentFrame.id});
   result.graph=remapProofGraph(result.graph,currentFrame);
   return result;
  }

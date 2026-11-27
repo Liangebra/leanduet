@@ -37,6 +37,7 @@ The [online editor](https://liangebra.github.io/leanduet/) is a static demo. Run
 - Edit existential witnesses together with their dependent evidence.
 - Interleave ordinary proof lines with multiple nested two-branch proofs for explicit disjunctions; branch-local assumptions stay scoped, and only shared results return to the parent.
 - For conjunction and equivalence goals, bounded child-goal blocks prove each component or direction in an isolated scope. Existential goals accept an explicit, typed local witness and keep its property as a child obligation; open proof holes remain marked as obligations.
+- A bounded “take an element satisfying …” request can retain both universal introduction and existential witness extraction when the goal and typed context support both. Choose a reading explicitly when the remaining draft cannot distinguish them; definitions and subtype coercions are not guessed.
 - Preview a dependency-closed lemma and a checked refactoring that replaces the selected proof with its application. Multi-theorem editing remains experimental.
 - Save locally, export Lean or a portable workspace, and read typed narratives in English, Chinese or Japanese, or import [community language packs](docs/LANGUAGE_PACKS.md).
 

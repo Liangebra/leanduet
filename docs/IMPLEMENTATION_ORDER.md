@@ -375,5 +375,45 @@ show that no mathematical explanation exists. At the result level,
 `completionKind: structural-export-ready` means the draft can be rendered;
 `leanVerification: not-run` and `semanticFidelity: not-assessed` remain explicit
 until independent checking and author-intent review occur. This classification
-does not yet generate structural parse alternatives for distinct operations
-such as arbitrary-element introduction versus witness extraction.
+now has a bounded structural alternative family for element introduction and
+witness extraction, described below.
+
+### Structural candidates for element requests
+
+The controlled phrases `take an element x satisfying $P(x)$` and
+`取一个元素 x 满足 $P(x)$` share one parsed request record. The operation
+resolver may produce two different actions when the current goal is a matching
+universal and a visible typed local premise is a matching existential:
+introduce the universally quantified variable, or extract a witness and its
+predicate evidence. “Arbitrary/任意” excludes witness extraction; an explicit
+`from h` source restricts extraction to that local object. No local definition,
+subtype coercion, or unproved witness construction is inferred.
+
+These are separate structural leaves over one request, not a Cartesian product
+of independently parsed words.
+
+Lean may print a nondependent Pi binder as an arrow, such as `Nat → P`. For an
+element request with an explicit type, a matching arrow domain also supports
+variable introduction, while ordinary `assume h : P` remains the implication
+introduction operation. This is a surface normalization backed by the typed
+request and Lean's Pi pretty-printing convention; it does not infer arbitrary
+domains or establish general type equality. Each leaf records its operation, typed object
+identities, source-premise identity when applicable, and a choice key. A unique
+supported reading can proceed through the existing goal-introduction or
+existential-elimination machinery. Multiple readings remain unresolved and do
+not add a speculative local object. A later explicit conclusion can constrain
+these leaves only when the intervening supported syntax gives a determinate
+residual goal; unsupported syntax, another operation request, or a backward
+type hole disables that lookahead rather than pruning candidates speculatively.
+
+The context scan is bounded at 64 visible entries and the rendered family at
+eight candidates. Overflow is `budget-exhausted`, distinct from an empty
+supported family. The row keeps the original text, candidate family, rejected
+readings and constraint explanation. A chosen reading is still an unverified
+Lean candidate; it is not proof of author intent. Tests cover English and
+Chinese phrases, sibling operation readings, explicit sources, stale choices,
+same-draft object identity, downstream target constraints and incremental
+versus cold recomputation. Lean compilation and browser selection run in CI.
+This advances the original candidate-forest stage and uses the identity,
+partial-graph and goal-operation work; it is not a general shared parse forest,
+local-definition resolver, or unrestricted natural-language parser.

@@ -10,6 +10,32 @@ from playwright.sync_api import sync_playwright, expect
 ROOT=Path(__file__).resolve().parents[1]
 port=18765
 url=f"http://127.0.0.1:{port}"
+
+
+def select_typed_edit(page, *, exact_type=None, includes=(), summary=None, term=None):
+    page.locator("#typedTree").evaluate("""(root, query) => {
+      const rows=[...root.querySelectorAll('.typedNode')].map(node=>({
+        node,
+        type:node.querySelector(':scope > .typedType code')?.textContent.trim()||'',
+        summary:node.querySelector(':scope > summary')?.textContent.trim()||'',
+        term:node.querySelector(':scope > details pre')?.textContent.trim()||'',
+        depth:(node.parentElement?.closest('.typedNode') ? 1 : 0) +
+          (node.parentElement?.closest('.typedNode')?.parentElement?.closest('.typedNode') ? 1 : 0),
+        edit:node.querySelector(':scope > .typedEdit')
+      }));
+      const candidates=rows.filter(row=>(query.exactType===null||row.type===query.exactType)
+        &&query.includes.every(part=>row.type.includes(part))
+        &&(query.summary===null||row.summary===query.summary)
+        &&(query.term===null||row.term===query.term)&&row.edit);
+      if(!candidates.length) throw new Error('No editable typed node matched; available: '+
+        JSON.stringify(rows.map(({type,summary,term,depth,edit})=>({type,summary,term,depth,editable:!!edit}))));
+      candidates.sort((a,b)=>a.depth-b.depth||a.type.length-b.type.length);
+      const target=candidates[0].node;
+      for(let current=target;current&&current!==root;current=current.parentElement)
+        if(current.tagName==='DETAILS') current.open=true;
+      target.querySelector(':scope > .typedEdit').click();
+    }""", {"exactType":exact_type,"includes":list(includes),"summary":summary,"term":term})
+
 with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL) as server:
     try:
         for _ in range(100):
@@ -245,6 +271,53 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
             case_page.locator("#checkPatch").click()
             expect(case_page.locator("#applyPatch")).to_be_enabled(timeout=120000)
             case_page.close()
+            operation_page=browser.new_page(viewport={"width":1440,"height":900})
+            operation_page.on("pageerror",lambda error:errors.append(str(error)))
+            operation_page.goto(url)
+            operation_source="""theorem operation_choice_demo (P : Nat → Prop) (hall : ∀ x : Nat, P x)
+    (he : ∃ y : Nat, P y) (h : True ∨ True) :
+    (∀ witness : ∃ y : Nat, P y, ∀ x : Nat, P x) := by
+  intro witness
+  exact hall
+"""
+            operation_page.locator("#lean").fill(operation_source)
+            operation_page.once("dialog",lambda d:d.accept())
+            operation_page.locator("#adopt").click()
+            operation_page.locator('[data-view="typed"]').click()
+            operation_page.locator("#extractTerm").click()
+            expect(operation_page.locator("#typedStatus")).to_contain_text("Extracted from Lean elaboration",timeout=60000)
+            select_typed_edit(operation_page,includes=("∀","P x"),summary="Use hypothesis",term="hall")
+            expect(operation_page.locator("#patchTarget")).to_contain_text("∀")
+            expect(operation_page.locator("#patchScope")).to_contain_text("he")
+            operation_page.locator("#chainEditor summary").click()
+            operation_page.locator("#chainFormat").select_option("natural")
+            operation_text="""take an element x : $Nat$ satisfying $P(x)$
+unsupported ⊛"""
+            operation_page.locator("#chainText").fill(operation_text)
+            operation_row=operation_page.locator("#draftTranslation .ruleResult").first
+            expect(operation_row).to_contain_text("universal-variable introduction")
+            expect(operation_row).to_contain_text("existential witness extraction")
+            operation_row.get_by_role("button",name="Use this candidate").first.click()
+            expect(operation_row).to_contain_text("Clear choice")
+            operation_text=operation_text.replace("unsupported ⊛", """cases h, establish hp : $P(x)$
+  left case hleft
+    $P(x)$ | hall x
+  right case hright
+    $P(x)$ | hall x
+$P(x)$ | hp""")
+            operation_page.locator("#chainText").fill(operation_text)
+            operation_row=operation_page.locator("#draftTranslation .ruleResult").first
+            expect(operation_row).to_contain_text("universal-variable introduction")
+            expect(operation_row).to_contain_text("Clear choice")
+            operation_page.locator("#compileChain").click()
+            expect(operation_page.locator("#patchTerm")).to_have_value(__import__("re").compile(r"intro x[\s\S]*cases h with[\s\S]*exact hall x[\s\S]*exact hp"))
+            operation_page.locator("#checkPatch").click()
+            expect(operation_page.locator("#applyPatch")).to_be_enabled(timeout=120000)
+            operation_page.once("dialog",lambda d:d.accept())
+            operation_page.locator("#applyPatch").click()
+            operation_page.locator("#check").click()
+            expect(operation_page.locator("#verifyState")).to_have_text("Lean passed",timeout=120000)
+            operation_page.close()
             exploration_source=patch_page.locator("#lean").input_value()
             patch_page.locator("#noteGoal").click()
             assert "Goal snapshot" in patch_page.locator("#prompt").input_value()
@@ -401,7 +474,6 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
             goalop_page.locator("#check").click()
             expect(goalop_page.locator("#verifyState")).to_have_text("Lean passed",timeout=120000)
             goalop_page.close()
-
             false_page=browser.new_page(viewport={"width":1440,"height":900})
             false_page.on("pageerror",lambda error:errors.append(str(error)))
             false_page.goto(url)

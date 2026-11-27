@@ -2,35 +2,80 @@
 
 Updated 2026-11-27 (Asia/Shanghai).
 
-## Repository and upstream review
+## Verified repository state
 
-Main's latest observed commit is `e17fe92`. It includes merged PRs [#22](https://github.com/Liangebra/leanduet/pull/22), [#32](https://github.com/Liangebra/leanduet/pull/32), [#33](https://github.com/Liangebra/leanduet/pull/33), and [#34](https://github.com/Liangebra/leanduet/pull/34). PR #22 preserves branch source positions, checks conclusions against residual goals, and prevents branch-local declarations from escaping. PR #32 composes sequential scoped case blocks; PR #33 adds identity-aware scoped caches; PR #34 makes one compact-image Mathlib case a shared JavaScript/Lean corpus fixture.
+- `main` is at `98405e14ff5790d7f20ddb66acd10857ab4761c2`, including merged
+  PR #22 (scoped source positions, residual-goal checks, and local-name expiry)
+  and PR #43 (constructive ex-falso from an explicit `False` premise).
+- PR #22 is closed and merged at `0eaf7dd608579e442c5f1c3b835a83c558f75348`.
+- The open research stack is #37 → #38 → #39 → #40 → #42. Their downstream
+  branches still target older stack heads and must be synchronized and tested
+  after each dependency lands.
+- PR #37 is based on current `main`, head
+  `02adf00f65241bc360cfcfa6e2888fde2845542a`. The Tests run
+  `46063313266` and Mathlib integration run `46063313286` are in progress.
+  An earlier run exposed a malformed Python integration fixture introduced
+  during stack synchronization. The truncated ex-falso line and orphaned
+  duplicate suffix are repaired on the current head; the new runs are the
+  validation for that repair.
+- PR #38 previously failed browser smoke on an outdated base; #39 has no CI
+  run on its latest head. #40's older Mathlib run passed but its full workflow
+  failed in the browser path. #42's benchmark step ran, but its full workflow
+  inherited the same browser failure. None of those old results validates the
+  current dependency stack.
 
-PR #34's Mathlib integration and complete test/browser workflow passed on head `517b74f` (runs 46001497049 and 46001497038). PR #35 adds scoped conjunction child goals. Its latest head is `8b02858`; the Mathlib workflow passed (run 46005423369) and its complete Tests workflow (run 46005423224) is in progress. A prior run on a superseded head failed in the JavaScript step; the current remote tree was then restored from the local snapshot and every one of its 20 changed files was fetched back and compared with that snapshot. Do not use the superseded run as evidence about the current head.
+## Mathematical work and limits
 
-## Current proof-operation work
+The scoped proof model now carries parent binding identities into child goals,
+isolates sibling declarations, checks a branch's terminal annotation against
+its residual goal, expires branch-local declarations at closure, and returns
+only dependencies already present in the parent. Conjunction, equivalence,
+explicit existential goals, negation introduction, and ex-falso use
+constructive operations; no classical axiom is silently introduced.
 
-PR #35 defines a shared child-goal compiler for conjunction introduction. Parent identities flow into child scopes, sibling declarations remain isolated, and child locals are discharged when a subgoal closes. Structural exportability stays distinct from proof closure; `exact?` remains an open obligation.
+PR #37 adds a bounded structural candidate family for “take an element
+satisfying …”: a matching universal goal may justify arbitrary introduction,
+and a visible typed existential premise may justify witness extraction.
+Remaining-goal constraints can remove incompatible readings. If the supported
+evidence does not select one reading, the request stays open and creates no
+local binding until a user chooses. This is a small candidate family, not a
+general shared parse forest. Local definitions, subtype coercions, general
+implicit quantifiers, Lean definitional equality, and unique author-intent
+recovery remain outside its scope.
 
-The local stacked extension adds constructive equivalence introduction and explicit existential introduction to that same contract. Equivalence opens both implications without classical axioms. Existential construction requires a uniquely visible typed local object, checks explicit domains by conservative formula structure, carries the witness identity and dependencies of its dependent type, and leaves the predicate as a child obligation. It does not infer or search for a witness. Capture, unknown or ambiguous witnesses, and surface-type mismatches are rejected.
+## Verification boundary
 
-Local verification for this extension:
+JavaScript and Python suites passed on an earlier PR #37 revision, as did
+syntax checks. They do not validate the current fixture repair. Lean and
+Playwright Chromium are unavailable in the local work environment, so generated
+Lean and browser interaction require green repository workflows. Synthetic
+latency measurements are documented in the PR and are not browser performance
+guarantees. The current GitHub Pages deployment has not been independently
+verified.
 
-- `node --test tests/*.test.mjs`: 225/225 passed.
-- `python -m unittest discover -s tests`: 17/17 passed.
-- Python byte-compilation and `git diff --check`: passed.
-- `tests/static_browser.py` could not start because the local Playwright Chromium executable is absent; the repository CI must validate the browser path.
-- Lean is not installed locally; generated conjunction/equivalence/existential terms are covered by the interpretation integration intended for PR CI.
+A structurally complete draft is only an exportable candidate. It is not, by
+that fact alone, elaborated by Lean, kernel-verified, or confirmed faithful to
+the author's mathematical intent.
 
-This advances stage 2 of the original eight-stage order. It also tests stage 7's incremental-versus-cold consistency on an edited equivalence child. It does not establish general name/type resolution, Lean elaboration, kernel correctness, or semantic fidelity.
+## Next dependency-ready tasks
 
-## Next dependency-ready work
+1. Check both workflows on PR #37 head `02adf00`; inspect the Python/Lean
+   integration and browser-selection path. Merge only after both are green.
+2. Rebase/synchronize PR #38 on the merged #37 and resolve the outstanding
+   identity issue conservatively: bounded-set references must resolve to one
+   visible object identity, not merely a matching displayed name.
+3. Review PR #39's local-lemma closure contract and its identity behavior under
+   shadowing, siblings, incomplete subproofs, and edits; run full workflows.
+4. Validate #40's compact-image and subgroup cases against pinned Mathlib and
+   the extracted dependency graph.
+5. Rerun #42's benchmark and cold-vs-incremental equality checks on the final
+   stack. Report per-case medians and P95 honestly, including edits where
+   incremental work is slower.
+6. Add the next reviewed analysis or linear-algebra case with prose,
+   semantic graph, Lean compilation, and a local-edit regression.
 
-1. Finish PR #35's current full workflow, inspect the head and review threads, then merge only if unit, Lean, and browser checks pass.
-2. Open the local goal-operation extension as stacked PR #36; require its generated Lean and browser smoke to pass, then update its base after #35 merges.
-3. Add structure-level candidates for arbitrary elements, existential witnesses, local definitions, subtype objects, and unresolved existence. Preserve distinct interpretations and let typed context constrain them.
-4. Add a reviewed real analysis or linear-algebra proof fixture with source language, expected structure, Lean compilation, and local-edit regressions.
-
-## Current boundaries
-
-`complete` means only that this bounded structure can be rendered. It does not imply Lean elaboration, kernel verification, author-intent fidelity, or mathematical correctness. Formula compatibility is conservative surface structure, not Lean definitional equality. Goal and case scopes are limited to eight nested levels and 64 nonblank block lines. General local-lemma return, classical reductio, arbitrary inductive elimination, full Lean type resolution, and broad real-mathematics coverage remain open.
+This checkpoint follows the original eight-stage dependency order:
+surface semantics → identity → partial graph → candidate forest →
+mathematical inference → incremental evaluation → bidirectional projection →
+representative acceptance. Later stages remain partial; no stage is claimed
+complete.

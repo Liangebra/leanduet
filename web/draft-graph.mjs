@@ -39,7 +39,14 @@ export function buildDraftGraph(scope,facts,rows,{goal=null}={}){
   const id='line:'+row.line,step=row.step,parsed=formula(row.type),value=step?.kind==='define'?formula(step.value):null;
   if(step?.kind==='obtain'){
    const sourceRefs=refs([step.source]);
-   declare({id,kind:'witness',name:step.name,type:step.type,raw:row.raw,modifiers:row.modifiers||[],formula:parsed,proofStatus:row.proofStatus,resolutionStatus:row.resolutionStatus||'candidate-unverified',status:row.status,alternatives:[],scopeRefs:[...scopeRefs],dependencies:[...new Set([...scopeRefs,...sourceRefs,...parsed.refs])]});
+   const alternatives=(row.candidates||[]).map((candidate,index)=>{
+    const candidateFormula=candidate.type?formula(candidate.type):null;
+    return {id:id+':candidate:'+index,schema:candidate.schema,term:candidate.term,
+     ...(candidate.choice?{choice:candidate.choice}:{}),...(candidate.type?{type:candidate.type,formula:candidateFormula}:{}),
+     dependencies:[...new Set([...refs(candidate.premises||[]),...(candidateFormula?.refs||[])])],
+     ...(candidate.constraints?{constraints:candidate.constraints}:{})};
+   });
+   declare({id,kind:'witness',name:step.name,type:step.type,raw:row.raw,modifiers:row.modifiers||[],formula:parsed,proofStatus:row.proofStatus,resolutionStatus:row.resolutionStatus||'candidate-unverified',status:row.status,alternatives,selectedCandidate:row.selectedChoice?alternatives.find(candidate=>candidate.choice===row.selectedChoice)?.id||null:null,scopeRefs:[...scopeRefs],dependencies:[...new Set([...scopeRefs,...sourceRefs,...parsed.refs])]});
    const evidenceId=id+':evidence',evidence=formula(step.evidenceType);
    declare({id:evidenceId,kind:'evidence',name:step.evidenceName,type:step.evidenceType,raw:row.raw,formula:evidence,proofStatus:row.proofStatus,resolutionStatus:row.resolutionStatus||'candidate-unverified',status:row.status,alternatives:[],scopeRefs:[...scopeRefs,id],dependencies:[...new Set([...scopeRefs,id,...sourceRefs,...evidence.refs])]});
    scopeRefs.push(id,evidenceId);continue;
@@ -47,7 +54,8 @@ export function buildDraftGraph(scope,facts,rows,{goal=null}={}){
   function alternative(c){
    const candidateFormula=c.type?formula(c.type):null;
    return {schema:c.schema,term:c.term,...(c.choice?{choice:c.choice}:{}),...(c.type?{type:c.type,formula:candidateFormula}:{}),
-    dependencies:[...new Set([...refs(c.premises||[]),...(candidateFormula?.refs||[])])]};
+    dependencies:[...new Set([...refs(c.premises||[]),...(candidateFormula?.refs||[])])],
+    ...(c.constraints?{constraints:c.constraints}:{})};
   }
   const alternatives=(row.candidates||[]).map((c,i)=>({id:id+':candidate:'+i,...alternative(c)}));
   const group=row.constraintGroup;
@@ -75,7 +83,11 @@ export function buildDraftGraph(scope,facts,rows,{goal=null}={}){
   const fallbackKind=row.kind==='cases'?'cases':subgoalKinds.has(row.kind)?row.kind:'unresolved';
   const node={id,kind:step?.kind||fallbackKind,name:step?.name||(row.kind==='infer-proposition'?row.name:row.name||null),type:row.type||null,raw:row.raw,modifiers:row.modifiers||[],formula:parsed,
    proofStatus:row.proofStatus||'open',resolutionStatus:row.resolutionStatus||'open-obligation',status:row.status,application,alternatives,value,...(row.domain?{origin:'infer-proposition',typeDomain:row.domain.map(alternative),constraints:row.constraints,constraintRefs,constraintGroup:group?.id||null}:{}),
-   ...(branches?{branches}:{}),...(subgoals?{subgoals}:{}),...(goalOperation?{goalOperation}:{}),selectedCandidate:selected?.id||null,scopeRefs:[...scopeRefs],dependencies:[...new Set([...scopeRefs,...parsed.refs,...(value?.refs||[]),...proofRefs,...caseRefs,...subgoalRefs])]};
+   ...(branches?{branches}:{}),...(subgoals?{subgoals}:{}),...(goalOperation?{goalOperation}:{}),
+   ...(row.operationConstraint?{operationConstraint:row.operationConstraint}:{}),...(row.rejectedCandidates?{rejectedCandidates:row.rejectedCandidates}:{}),
+   ...(row.kind==='element-request'||row.selectedElementCandidate?{origin:'element-request'}:{}),
+   selectedCandidate:selected?.id||(row.selectedChoice?alternatives.find(c=>c.choice===row.selectedChoice)?.id:null)||null,
+   scopeRefs:[...scopeRefs],dependencies:[...new Set([...scopeRefs,...parsed.refs,...(value?.refs||[]),...proofRefs,...caseRefs,...subgoalRefs])]};
   declare(node);
   if(['introduce','assume','cases'].includes(node.kind))scopeRefs.push(id);
  }

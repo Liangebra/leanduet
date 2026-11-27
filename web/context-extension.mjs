@@ -28,6 +28,7 @@ function negationBody(ast){
 }
 function inferredIntroductionType(ast,kind){
  if(kind==='introduce'&&ast.kind==='binder'&&ast.op==='∀'&&ast.domain)return renderFormula(ast.domain);
+ if(kind==='introduce'&&ast.kind==='binary'&&ast.op==='→')return renderFormula(ast.left);
  if(kind==='assume'&&ast.kind==='binary'&&ast.op==='→')return renderFormula(ast.left);
  const negative=kind==='assume'?negationBody(ast):null;
  if(negative)return renderFormula(negative);
@@ -90,11 +91,18 @@ export function planGoalOperation(goal,{kind,name=null,type=null,source=null,sou
  if(typeof name!=='string'||!name)name=ast.kind==='binder'?ast.name:'h';
  const domain=compileFormula(introType,{syntax:'lean'}).scoped;
  if(kind==='introduce'){
-  if(ast.kind!=='binder'||ast.op!=='∀'||(ast.domain&&!same(scopedFormula(ast.domain),domain)))
-   throw Error('The current goal is not a matching universal.');
-  if(name!==ast.name&&containsName(ast.body,name))throw Error('Introduction name may capture an existing occurrence; choose a fresh name.');
+  let body;
+  if(ast.kind==='binder'&&ast.op==='∀'&&(!ast.domain||same(scopedFormula(ast.domain),domain))){
+   if(name!==ast.name&&containsName(ast.body,name))throw Error('Introduction name may capture an existing occurrence; choose a fresh name.');
+   body=renderFormula(rename(ast.body,ast.name,name));
+  }else if(ast.kind==='binary'&&ast.op==='→'&&same(scopedFormula(ast.left),domain)){
+   // Lean prints a nondependent Pi as an arrow. When the request supplies
+   // the binder type, treating that function argument as a new object keeps
+   // it distinct from the ordinary "assume hp : P" introduction path.
+   body=renderFormula(ast.right);
+  }else throw Error('The current goal is not a matching universal or typed nondependent Pi.');
   return {kind:'universal-introduction',parentGoal:goal,logic:'dependent-function',
-   subgoals:[{id:'body',goal:renderFormula(rename(ast.body,ast.name,name)),contextDelta:[{name,type:introType,kind:'universal-variable'}]}],
+   subgoals:[{id:'body',goal:body,contextDelta:[{name,type:introType,kind:'universal-variable'}]}],
    closure:{kind:'binder-introduction',name}};
  }
  if(ast.kind==='binary'&&ast.op==='→'&&same(scopedFormula(ast.left),domain))return {
