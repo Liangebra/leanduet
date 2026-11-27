@@ -104,14 +104,14 @@
     "expectedStructure": [
       {
         "kind": "conclude",
-        "claim": "f (x + y) = f x + f y",
+        "claim": "((f (x + y)) = ((f x) + (f y)))",
         "application": "map_add f x y"
       }
     ],
     "editedExpectedStructure": [
       {
         "kind": "conclude",
-        "claim": "f (y + x) = f y + f x",
+        "claim": "((f (y + x)) = ((f y) + (f x)))",
         "application": "map_add f y x"
       }
     ],
