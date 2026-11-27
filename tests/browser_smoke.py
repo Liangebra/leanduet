@@ -290,7 +290,7 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
             expect(operation_page.locator("#patchTarget")).to_contain_text("∀")
             operation_page.locator("#chainEditor summary").click()
             operation_page.locator("#chainFormat").select_option("natural")
-            operation_text="""take an element x : $Nat$ satisfying $P$
+            operation_text="""take an element z : $Nat$ satisfying $P$
 unsupported ⊛"""
             operation_page.locator("#chainText").fill(operation_text)
             operation_row=operation_page.locator("#draftTranslation .ruleResult").first
@@ -310,7 +310,7 @@ $P$ | hp""")
             expect(operation_row).to_contain_text("universal-variable introduction")
             expect(operation_row).to_contain_text("Clear choice")
             operation_page.locator("#compileChain").click()
-            expect(operation_page.locator("#patchTerm")).to_have_value(__import__("re").compile(r"intro x[\s\S]*cases h with[\s\S]*exact hleft[\s\S]*exact hright[\s\S]*exact hp"))
+            expect(operation_page.locator("#patchTerm")).to_have_value(__import__("re").compile(r"intro z[\s\S]*cases h with[\s\S]*exact hleft[\s\S]*exact hright[\s\S]*exact hp"))
             operation_page.locator("#checkPatch").click()
             expect(operation_page.locator("#applyPatch")).to_be_enabled(timeout=120000)
             operation_page.once("dialog",lambda d:d.accept())
@@ -335,12 +335,12 @@ $P$ | hp""")
             if not restricted_page.locator("#chainEditor").evaluate("(editor) => editor.open"):
                 restricted_page.locator("#chainEditor summary").click()
             restricted_page.locator("#chainFormat").select_option("natural")
-            restricted_page.locator("#chainText").fill("take an arbitrary element x : $Nat$ in A satisfying $P(x)$\nassume hx : $x ∈ A$\n$P(x)$ | hall x hx")
+            restricted_page.locator("#chainText").fill("take an arbitrary element z : $Nat$ in A satisfying $P(z)$\nassume hz : $z ∈ A$\n$P(z)$ | hall z hz")
             bounded_row=restricted_page.locator("#draftTranslation .ruleResult").first
             expect(bounded_row).to_contain_text("arbitrary element introduction under a set restriction")
             expect(bounded_row).to_contain_text("After introduction, establish (x ∈ A)")
             restricted_page.locator("#compileChain").click()
-            expect(restricted_page.locator("#patchTerm")).to_have_value(__import__("re").compile(r"intro x[\s\S]*intro hx[\s\S]*exact hall x hx"))
+            expect(restricted_page.locator("#patchTerm")).to_have_value(__import__("re").compile(r"intro z[\s\S]*intro hx[\s\S]*exact hall x hx"))
             restricted_page.locator("#checkPatch").click()
             expect(restricted_page.locator("#applyPatch")).to_be_enabled(timeout=120000)
 
@@ -359,12 +359,12 @@ $P$ | hp""")
             if not restricted_page.locator("#chainEditor").evaluate("(editor) => editor.open"):
                 restricted_page.locator("#chainEditor summary").click()
             restricted_page.locator("#chainFormat").select_option("natural")
-            restricted_page.locator("#chainText").fill("take an element x : $Nat$ in A satisfying $P(x)$ from h\n$True$ | hq")
+            restricted_page.locator("#chainText").fill("take an element z : $Nat$ in A satisfying $P(z)$ from h\n$True$ | hq")
             bounded_witness=restricted_page.locator("#draftTranslation .ruleResult").first
             expect(bounded_witness).to_contain_text("restricted existential witness extraction")
-            expect(bounded_witness).to_contain_text("h_x : ((x ∈ A) ∧ (P x))")
+            expect(bounded_witness).to_contain_text("h_z : ((z ∈ A) ∧ (P z))")
             restricted_page.locator("#compileChain").click()
-            expect(restricted_page.locator("#patchTerm")).to_have_value(__import__("re").compile(r"rcases duet_exists_x with ⟨x, h_x⟩[\s\S]*exact hq"))
+            expect(restricted_page.locator("#patchTerm")).to_have_value(__import__("re").compile(r"rcases duet_exists_z with ⟨x, h_x⟩[\s\S]*exact hq"))
             restricted_page.locator("#checkPatch").click()
             expect(restricted_page.locator("#applyPatch")).to_be_enabled(timeout=120000)
             restricted_page.close()
