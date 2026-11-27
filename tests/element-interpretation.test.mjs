@@ -18,8 +18,7 @@ test('element requests keep a shared utterance and expose universal and existent
  assert.equal(result.candidates[1].sourceId,'context:1');
 });
 
-test('Lean-expanded set quantifiers recover their membership obligation structurally',()=>{
- const request=parseElementRequest('take an arbitrary element z : $Nat$ in A satisfying $P(z)
+test('a typed element request recognizes Lean’s nondependent Pi arrow as universal introduction',()=>{
  const request=parseElementRequest('take an element z : $Nat$ satisfying $P$');
  const result=elementInterpretationCandidates(request,{goal:'Nat → P',scope:['P','he'],
   facts:new Map([['P','Prop'],['he','∃ y : Nat, P']])});
@@ -31,18 +30,42 @@ test('Lean-expanded set quantifiers recover their membership obligation structur
  assert.equal(operation.subgoals[0].contextDelta[0].name,'z');
  assert.equal(operation.subgoals[0].contextDelta[0].kind,'universal-variable');
 });
-test('an explicit element type can fill an omitted printed existential domain',()=>{
- const request=parseElementRequest('take an element z : $Nat$ satisfying $P$');
- const result=elementInterpretationCandidates(request,{goal:'Nat → P',scope:['P','he'],
-  facts:new Map([['P','Prop'],['he','∃ y, P']])});
- assert.equal(result.status,'ambiguous');
- assert.deepEqual(result.candidates.map(candidate=>candidate.operation),['universal-introduction','existential-elimination']);
- assert.equal(result.candidates[1].type,'Nat');
- const mismatch=elementInterpretationCandidates(request,{goal:'Nat → P',scope:['P','he'],
-  facts:new Map([['P','Prop'],['he','∃ y : Int, P']])});
- assert.deepEqual(mismatch.candidates.map(candidate=>candidate.operation),['universal-introduction']);
+
+test('Lean-expanded set quantifiers recover their membership obligation structurally',()=>{
+ const request=parseElementRequest('take an arbitrary element z : $Nat$ in A satisfying $P(z)$');
+ const result=elementInterpretationCandidates(request,{goal:'∀ (x : Nat), x ∈ A → P x',scope:['A'],
+  facts:new Map([['A','List Nat']])});
+ assert.equal(result.status,'unique');
+ assert.equal(result.candidates[0].operation,'universal-introduction');
+ assert.equal(result.candidates[0].restrictionSet,'A');
+ assert.equal(result.candidates[0].requiredCondition,'(z ∈ A)');
+ const operation=planGoalOperation('∀ (x : Nat), x ∈ A → P x',
+  {kind:'introduce',name:'z',type:'Nat'});
+ assert.equal(operation.restrictionSet,'A');
+ assert.equal(operation.focusProperty,'(P z)');
+ assert.equal(operation.subgoals[0].goal,'((z ∈ A) → (P z))');
+ assert.throws(()=>planGoalOperation('∀ (x : Nat), x ∈ A → P x',
+  {kind:'introduce',name:'z',type:'Int'}),/binder domain/);
+ const unrelated=elementInterpretationCandidates(request,{goal:'∀ (x : Nat), y ∈ A → P x',scope:['A'],
+  facts:new Map([['A','List Nat']])});
+ assert.equal(unrelated.candidates.length,0,'membership of an unrelated y is not a bound restriction');
 });
 
+test('Lean-expanded bounded existentials keep membership in the extracted evidence',()=>{
+ const request=parseElementRequest('take an element z : $Nat$ in A satisfying $P(z)$ from h');
+ const source='∃ (x : Nat), x ∈ A ∧ P x';
+ const result=elementInterpretationCandidates(request,{goal:'True',scope:['A','h'],
+  facts:new Map([['A','List Nat'],['h',source]])});
+ assert.equal(result.status,'unique');
+ assert.equal(result.candidates[0].operation,'existential-elimination');
+ assert.equal(result.candidates[0].restrictionSet,'A');
+ assert.equal(result.candidates[0].evidenceType,'((z ∈ A) ∧ (P z))');
+ const mismatch=elementInterpretationCandidates(parseElementRequest(
+  'take an element z : $Int$ in A satisfying $P(z)$ from h'),
+  {goal:'True',scope:['A','h'],facts:new Map([['A','List Nat'],['h',source]])});
+ assert.equal(mismatch.status,'incompatible-type');
+ assert.deepEqual(mismatch.candidates,[]);
+});
 test('Chinese arbitrary wording rules out existential extraction',()=>{
  const request=parseElementRequest('取任意元素 x：$Nat$ 满足 $P(x)$');
  const result=elementInterpretationCandidates(request,{goal:'∀ y : Nat, P y',scope:['he'],facts:new Map([['he','∃ y : Nat, P y']])});
