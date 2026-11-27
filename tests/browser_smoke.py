@@ -195,15 +195,15 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
             case_node.locator(":scope > button.typedEdit").click()
             case_page.locator("#chainEditor summary").click()
             case_page.locator("#chainFormat").select_option("natural")
-            case_text="establish hr : $R$ | f p\n分情况讨论 h，建立 hT : $T$\n  左支 hp\n    $T$ | g hp\n  右支 hq\n    $T$ | k hq\nestablish ht : $T$ | hT\ncases j, establish jT : $T$\n  left case hu\n    $T$ | l hu\n  right case hv\n    $T$ | m hv\n$T$ | jT"
-            partial_case_text="分情况讨论 h，建立 hT : $T$\n  左支 hp\n    unsupported ⊛\n  右支 hq\n    $T$ | k hq\nestablish ht : $T$ | hT\ncases j, establish jT : $T$\n  left case hu\n    $T$ | l hu\n  right case hv\n    $T$ | m hv\n$T$ | jT"
+            case_text="establish hr : $True$ | f p\n分情况讨论 h，建立 hT : $True$\n  左支 hp\n    $True$ | g hp\n  右支 hq\n    $True$ | k hq\nestablish ht : $True$ | hT\ncases j, establish jT : $True$\n  left case hu\n    $True$ | l hu\n  right case hv\n    $True$ | m hv\n$True$ | jT"
+            partial_case_text="分情况讨论 h，建立 hT : $True$\n  左支 hp\n    unsupported ⊛\n  右支 hq\n    $True$ | k hq\nestablish ht : $True$ | hT\ncases j, establish jT : $True$\n  left case hu\n    $True$ | l hu\n  right case hv\n    $True$ | m hv\n$True$ | jT"
             case_page.locator("#chainText").fill(partial_case_text)
-            expect(case_page.locator("#draftTranslation")).to_contain_text("inl hp : P ⊢ T · open")
+            expect(case_page.locator("#draftTranslation")).to_contain_text("inl hp : True ⊢ True · open")
             expect(case_page.locator("#draftTranslation")).to_contain_text("cases j")
             expect(case_page.locator("#draftTranslation")).to_contain_text("Line 6 · translated · depends-on-open")
             assert case_page.locator("#patchTerm").input_value()=="", "an open branch must not stage a Lean candidate"
             case_page.locator("#chainText").fill(case_text)
-            expect(case_page.locator("#draftTranslation")).to_contain_text("cases h into inl hp: P / inr hq: Q")
+            expect(case_page.locator("#draftTranslation")).to_contain_text("cases h into inl hp: True / inr hq: True")
             case_page.locator("#inferChain").click()
             expect(case_page.locator("#chainBindings")).to_contain_text("hT",timeout=120000)
             expect(case_page.locator("#chainBindings")).not_to_contain_text("hp")
