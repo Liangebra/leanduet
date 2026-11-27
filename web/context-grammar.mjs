@@ -46,7 +46,9 @@ export function contextCandidates(goal,names,facts){
  function add(schema,rule,args){
   const term=[rule,...args].join(' ');
   if(seen.has(term))return;
-  seen.add(term);out.push({schema,term,premises:[...names],arguments:args,rule});
+  const referenced=new Set([rule,...args].flatMap(part=>String(part).match(/[A-Za-z_][A-Za-z0-9_']*/g)||[]));
+  const premises=names.filter(name=>referenced.has(name));
+  seen.add(term);out.push({schema,term,premises,arguments:args,rule});
  }
  if(entries.length===1){
   const {name,type:t}=entries[0];
