@@ -65,19 +65,50 @@ export function parseFormula(input,{syntax='math'}={}){
   else if(t.kind==='frac'){i++;left={kind:'binary',op:'/',left:group('{','}',depth),right:group('{','}',depth)};}
   else if(t.kind==='op'&&['¬','-'].includes(t.value)){i++;left={kind:'unary',op:t.value,body:expr(t.value==='¬'?45:75,depth+1)};}
   else if(t.kind==='op'&&['∀','∃'].includes(t.value)){
-    i++;const wrapped=syntax==='lean'&&peek().kind==='(';if(wrapped)take('(');
-    const name=take('id').value;
-    if(!wrapped&&peek().kind==='op'&&peek().value==='∈'){
-      take('op','∈');const set=expr(0,depth+1);take(',');
-      if(hasFreeName(scopedFormula(set),name))throw Error('Bounded quantifier set would capture '+name+'; rename the binder.');
-      left={kind:'bounded',op:t.value,name,set,body:expr(0,depth+1)};
-    }else if(!wrapped&&syntax==='lean'&&peek().kind===','){
-      take(',');left={kind:'binder',op:t.value,name,domain:null,body:expr(0,depth+1)};
-    }else{
-      take(':');const domain=expr(0,depth+1);if(wrapped)take(')');take(',');
-      left={kind:'binder',op:t.value,name,domain,body:expr(0,depth+1)};
+    i++;const binders=[];let bounded=false;
+    while(true){
+      const wrapped=syntax==='lean'&&peek().kind==='(';
+      if(wrapped){
+        take('(');const names=[take('id').value];
+        while(peek().kind==='id')names.push(take('id').value);
+        let domain=null;
+        if(peek().kind===':'){take(':');domain=expr(0,depth+1);}
+        take(')');
+        // A shared binder type is parsed outside the names it declares.
+        // Reject same-spelled free references instead of accidentally
+        // capturing them when the group is represented as nested binders.
+        if(names.length>1&&domain){
+          const scopedDomain=scopedFormula(domain);
+          if(names.some(name=>hasFreeName(scopedDomain,name)))
+            throw Error('A grouped binder type would capture a declared name; separate the binder groups.');
+        }
+        for(const name of names)binders.push({name,domain});
+      }else{
+        const name=take('id').value;
+        if(peek().kind==='op'&&peek().value==='∈'){
+          if(binders.length)throw Error('A bounded quantifier must begin with its restricted binder.');
+          take('op','∈');const set=expr(0,depth+1);take(',');
+          if(hasFreeName(scopedFormula(set),name))
+            throw Error('Bounded quantifier set would capture '+name+'; rename the binder.');
+          left={kind:'bounded',op:t.value,name,set,body:expr(0,depth+1)};bounded=true;break;
+        }
+        let domain=null;
+        if(peek().kind===':'){take(':');domain=expr(0,depth+1);}
+        binders.push({name,domain});
+      }
+      if(peek().kind===',')break;
+      if(syntax==='lean'&&['(','id'].includes(peek().kind))continue;
+      take(',');
     }
-  }else throw Error('Expected a formula at '+t.pos);
+    if(!bounded){
+      take(',');let body=expr(0,depth+1);
+      for(let index=binders.length-1;index>=0;index--){
+        const binder=binders[index];
+        body={kind:'binder',op:t.value,name:binder.name,domain:binder.domain,body};
+      }
+      left=body;
+    }
+  }lse throw Error('Expected a formula at '+t.pos);
   while(true){
    t=peek();
    // Lean adjacency denotes application, unlike presentation math.
