@@ -188,6 +188,48 @@ with TemporaryDirectory() as tmp:
     subprocess.run(["lean",str(target)],cwd=root,check=True)
 print("Nested branch-local case elimination elaborates in the structured backend; only the common result escapes")
 
+# A top-level proof may interleave ordinary local facts with several separate
+# scoped case blocks. Verify the combined candidate rather than only its JS AST.
+sequence_script = """
+import {compileNaturalDraft} from './web/natural-draft.mjs';
+const facts=new Map([['P','Prop'],['Q','Prop'],['U','Prop'],['V','Prop'],['R','Prop'],['T','Prop'],
+ ['h','P ∨ Q'],['j','U ∨ V'],['p','P'],['f','P → R'],['g','P → T'],['k','Q → T'],['l','U → T'],['m','V → T']]);
+const input='establish hr : $R$ | f p\\n'+
+ 'cases h, establish hT : $T$\\n  left case hp\\n    $T$ | g hp\\n  right case hq\\n    $T$ | k hq\\n'+
+ 'establish ht : $T$ | hT\\n'+
+ 'cases j, establish jT : $T$\\n  left case hu\\n    $T$ | l hu\\n  right case hv\\n    $T$ | m hv\\n'+
+ '$T$ | jT';
+const result=compileNaturalDraft(input,[...facts.keys()],facts,{goal:'T'});
+if(!result.complete||result.graph.nodes.filter(n=>n.kind==='cases').length!==2)throw new Error('Interleaved scope sequence did not close structurally');
+console.log(JSON.stringify(result.term));
+"""
+sequence_term=json.loads(subprocess.run(["node","--input-type=module"],input=sequence_script,text=True,cwd=root,check=True,capture_output=True).stdout)
+with TemporaryDirectory() as tmp:
+    target=Path(tmp)/"InterleavedCaseSequence.lean"
+    target.write_text("theorem interleaved_cases (P Q U V R T : Prop) (h : P ∨ Q) (j : U ∨ V) (p : P) (f : P → R) (g : P → T) (k : Q → T) (l : U → T) (m : V → T) : T := "+sequence_term+"\n",encoding="utf-8")
+    subprocess.run(["lean",str(target)],cwd=root,check=True)
+print("Ordinary proof lines interleaved with sequential case scopes elaborate in Lean")
+
+# The same prefix/child-scope composition is needed inside an outer branch.
+branch_sequence_script = """
+import {compileNaturalDraft} from './web/natural-draft.mjs';
+const facts=new Map([['P','Prop'],['Q','Prop'],['U','Prop'],['V','Prop'],['T','Prop'],
+ ['h','P ∨ Q'],['j','U ∨ V'],['f','P → U'],['g','U → T'],['k','V → T'],['m','Q → T']]);
+const input='cases h, establish ht : $T$\\n'+
+ '  left case hp\\n    establish hu : $U$ | f hp\\n'+
+ '    cases j, establish jt : $T$\\n      left case hj\\n        $T$ | g hu\\n      right case hv\\n        $T$ | k hv\\n'+
+ '    $T$ | jt\\n  right case hq\\n    $T$ | m hq\\n$T$ | ht';
+const result=compileNaturalDraft(input,[...facts.keys()],facts,{goal:'T'});
+if(!result.complete)throw new Error('Nested branch sequence did not close structurally');
+console.log(JSON.stringify(result.term));
+"""
+branch_sequence_term=json.loads(subprocess.run(["node","--input-type=module"],input=branch_sequence_script,text=True,cwd=root,check=True,capture_output=True).stdout)
+with TemporaryDirectory() as tmp:
+    target=Path(tmp)/"BranchSequence.lean"
+    target.write_text("theorem branch_sequence (P Q U V T : Prop) (h : P ∨ Q) (j : U ∨ V) (f : P → U) (g : U → T) (k : V → T) (m : Q → T) : T := "+branch_sequence_term+"\n",encoding="utf-8")
+    subprocess.run(["lean",str(target)],cwd=root,check=True)
+print("An outer branch with a local prefix and nested case scope elaborates in Lean")
+
 # Lean permits a constructor-bound hypothesis to reuse a parent display name.
 # The semantic draft must give that local occurrence a fresh identity and
 # resolve the parent spelling again after both branch scopes close.

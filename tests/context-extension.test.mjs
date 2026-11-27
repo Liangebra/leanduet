@@ -108,6 +108,9 @@ test('disjunction elimination forks branch identities and returns only its commo
  assert.equal(r.steps[0].kind,'cases');
  assert.match(r.term,/cases h with[\s\S]*exact f hp[\s\S]*exact g hq/);
  const node=r.graph.nodes.find(n=>n.kind==='cases');
+ assert.equal(r.completionKind,'structural-export-ready');
+ assert.equal(r.leanVerification,'not-run');
+ assert.equal(node.resolutionStatus,'candidate-unverified');
  assert.equal(node.branches.length,2);
  assert.notEqual(node.branches[0].binding.id,node.branches[1].binding.id);
  assert.deepEqual(node.branches.map(b=>b.constructor),['inl','inr']);
@@ -118,6 +121,59 @@ test('disjunction elimination forks branch identities and returns only its commo
  assert.ok(affectedByBranchProof.includes('line:6'),'editing a branch proof invalidates the parent continuation');
  assert.equal(r.graph.nodes.some(n=>['hp','hq'].includes(n.name)),false,'branch binders stay inside branch graphs');
  assert.ok(r.graph.nodes.find(n=>n.kind==='conclude').dependencies.includes(node.id),'the common result is available to the continuation');
+});
+
+test('ordinary proof lines can surround sequential scoped case blocks',()=>{
+ const facts=new Map([['P','Prop'],['Q','Prop'],['U','Prop'],['V','Prop'],['R','Prop'],['T','Prop'],
+  ['h','P ∨ Q'],['j','U ∨ V'],['p','P'],['f','P → R'],['g','P → T'],['k','Q → T'],['l','U → T'],['m','V → T']]);
+ const input='establish hr : $R$ | f p\n'+
+  'cases h, establish hT : $T$\n  left case hp\n    $T$ | g hp\n  right case hq\n    $T$ | k hq\n'+
+  'establish ht : $T$ | hT\n'+
+  'cases j, establish jT : $T$\n  left case hu\n    $T$ | l hu\n  right case hv\n    $T$ | m hv\n'+
+  '$T$ | jT';
+ const session=createDraftSession(),scope=[...facts.keys()];
+ const result=session.evaluate(input,scope,facts,{goal:'T'});
+ assert.equal(result.complete,true);
+ assert.deepEqual(result.steps.map(step=>step.kind),['establish','cases','establish','cases','conclude']);
+ assert.deepEqual(result.graph.nodes.filter(node=>node.kind==='cases').map(node=>node.id),['line:2','line:8']);
+ assert.match(result.term,/have hr : R := f p[\s\S]*cases h with[\s\S]*have ht : T := hT[\s\S]*cases j with[\s\S]*exact jT/);
+ const edited=input.replace('$T$ | jT','$T$ | ht');
+ const incremental=session.evaluate(edited,scope,facts,{goal:'T'});
+ const cold=createDraftSession().evaluate(edited,scope,facts,{goal:'T'});
+ assert.ok(incremental.reusedRows>0,'the unchanged linear prefix should survive the later edit');
+ assert.deepEqual(incremental.rows,cold.rows);
+ assert.deepEqual(incremental.steps,cold.steps);
+ assert.deepEqual(incremental.graph,cold.graph);
+});
+
+test('a failed prose prefix still leaves later sequential case structure available',()=>{
+ const facts=new Map([['P','Prop'],['Q','Prop'],['U','Prop'],['V','Prop'],['T','Prop'],
+  ['h','P ∨ Q'],['j','U ∨ V'],['k','Q → T'],['l','U → T'],['m','V → T']]);
+ const input='unsupported ⊛\n'+
+  'cases h, establish hT : $T$\n  left case hp\n    unsupported ⊛\n  right case hq\n    $T$ | k hq\n'+
+  'establish ht : $T$ | hT\n'+
+  'cases j, establish jT : $T$\n  left case hu\n    $T$ | l hu\n  right case hv\n    $T$ | m hv\n$T$ | jT';
+ const result=createDraftSession().evaluate(input,[...facts.keys()],facts,{goal:'T'});
+ assert.equal(result.complete,false);
+ assert.equal(result.term,null);
+ assert.equal(result.graph.nodes.filter(node=>node.kind==='cases').length,2);
+ assert.ok(result.rows.some(row=>row.raw==='establish ht : $T$ | hT'));
+ assert.equal(result.rows.find(row=>row.raw==='unsupported ⊛').resolutionStatus,'unsupported');
+});
+
+test('a branch may establish a local fact before a nested case block',()=>{
+ const facts=new Map([['P','Prop'],['Q','Prop'],['U','Prop'],['V','Prop'],['T','Prop'],
+  ['h','P ∨ Q'],['j','U ∨ V'],['f','P → U'],['g','U → T'],['k','V → T'],['m','Q → T']]);
+ const input='cases h, establish ht : $T$\n'+
+  '  left case hp\n    establish hu : $U$ | f hp\n'+
+  '    cases j, establish jt : $T$\n      left case hj\n        $T$ | g hu\n      right case hv\n        $T$ | k hv\n'+
+  '    $T$ | jt\n  right case hq\n    $T$ | m hq\n$T$ | ht';
+ const result=createDraftSession().evaluate(input,[...facts.keys()],facts,{goal:'T'});
+ assert.equal(result.complete,true);
+ const countCases=graph=>(graph.nodes||[]).reduce((count,node)=>count+(node.kind==='cases'?1:0)+
+  (node.branches||[]).reduce((nested,branch)=>nested+countCases(branch.graph||{nodes:[]}),0),0);
+ assert.equal(countCases(result.graph),2);
+ assert.match(result.term,/have hu : U := f hp[\s\S]*cases j with[\s\S]*exact ht/);
 });
 
 test('sibling branches may reuse display names without sharing object identity',()=>{
@@ -175,6 +231,10 @@ test('an open case branch does not hide the other branch semantic graph',()=>{
  const input='cases h, establish hR : $R$\n  left case hp\n    unsupported ⊛\n  right case hq\n    $R$ | g hq\n$R$ | hR';
  const result=createDraftSession().evaluate(input,[...facts.keys()],facts,{goal:'R'});
  const node=result.graph.nodes.find(n=>n.kind==='cases');
+ assert.equal(node.resolutionStatus,'open-obligation');
+ assert.equal(result.completionKind,'incomplete');
+ assert.equal(result.leanVerification,'not-run');
+ assert.equal(result.rows.find(row=>row.raw==='unsupported ⊛').resolutionStatus,'unsupported');
  assert.equal(result.complete,false);
  assert.deepEqual(node.branches.map(branch=>branch.status),['open','complete']);
  assert.ok(node.branches.every(branch=>branch.graph));

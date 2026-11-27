@@ -75,6 +75,47 @@ test('bare conclusion remains an open search unless the user chooses a candidate
  const plain=draftProof('$P$',['h'],facts);
  const chosen=draftProof('$P$',['h'],facts,{choices:new Map([[1,'h']])});
  assert.equal(plain.rows[0].proofStatus,'open');
+ assert.equal(plain.rows[0].resolutionStatus,'needs-choice');
  assert.equal(chosen.rows[0].step.application,'h');
  assert.equal(chosen.rows[0].proofStatus,'candidate');
+ assert.equal(chosen.rows[0].resolutionStatus,'candidate-unverified');
+ assert.equal(chosen.leanVerification,'not-run');
+ assert.equal(chosen.semanticFidelity,'not-assessed');
+ assert.equal(chosen.completionKind,'structural-export-ready');
+});
+
+test('draft results separate structural readiness, Lean verification, and semantic fidelity',()=>{
+ const result=draftProof('$P$ | hp',['hp'],new Map([['hp','P']]));
+ assert.equal(result.complete,true);
+ assert.equal(result.completionKind,'structural-export-ready');
+ assert.equal(result.leanVerification,'not-run');
+ assert.equal(result.semanticFidelity,'not-assessed');
+ assert.equal(result.rows[0].resolutionStatus,'candidate-unverified');
+ assert.equal(result.graph.nodes.at(-1).resolutionStatus,'candidate-unverified');
+});
+
+test('semantic resolution distinguishes unsupported wording, missing context, and unsupported matches',()=>{
+ const unsupported=draftProof('I conjecture this statement',['h']);
+ assert.equal(unsupported.rows[0].resolutionStatus,'unsupported');
+ const missing=draftProof('建立 hp : $?$,由 future\n$P$',['P']);
+ assert.equal(missing.rows[0].resolutionStatus,'needs-context');
+ const noMatch=draftProof('由 hp 与 f 得到 $Z$',['hp','f'],new Map([['hp','P'],['f','P → Q']]));
+ assert.equal(noMatch.rows[0].resolutionStatus,'no-supported-match');
+});
+
+test('semantic resolution preserves candidate ambiguity and reports stale choices',()=>{
+ const facts=new Map([['h','P ∧ P']]);
+ const ambiguous=draftProof('建立 hp : $?$,由 h\n$P$',[...facts.keys()],facts);
+ assert.equal(ambiguous.rows[0].resolutionStatus,'ambiguous');
+ assert.equal(ambiguous.rows[0].candidates.length,2);
+ const stale=draftProof('建立 hp : $?$,由 h\n$P$',[...facts.keys()],facts,{choices:new Map([[1,'And.left missing']])});
+ assert.equal(stale.rows[0].resolutionStatus,'incompatible-choice');
+});
+
+test('jointly incompatible proposition constraints are not reported as missing context',()=>{
+ const facts=new Map([['h','P ∧ Q'],['f','P → R'],['g','Q → R']]);
+ const draft='建立 hp : $?$,由 h\n由 hp 与 f 得到 $R$\n由 hp 与 g 得到 $R$';
+ const result=draftProof(draft,[...facts.keys()],facts);
+ assert.equal(result.rows[0].resolutionStatus,'incompatible-constraints');
+ assert.equal(result.rows[0].constraintGroup.status,'contradiction');
 });

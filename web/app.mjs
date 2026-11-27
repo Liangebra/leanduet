@@ -43,6 +43,25 @@ function invalidate({retainReading=false}={}){rev++;clearTimeout(liveTimer);clea
 function dirty(){state('leanDirty',lean.value===base.lean?'Synced':'Edited',lean.value===base.lean?'':'dirty');state('proseDirty',prose.value===base.prose?'Synced':'Edited',prose.value===base.prose?'':'dirty');gutter();if(!local)showStaticNarrative();}
 function gutter(){refreshEditor();$('gutter').textContent=lean.value.split('\n').map((_,i)=>i+1).join('\n');$('gutter').scrollTop=lean.scrollTop;$('cursor').textContent='Ln '+(lean.value.slice(0,lean.selectionStart).split('\n').length);}
 function element(tag,txt,cls){const e=document.createElement(tag);if(txt!==undefined)e.textContent=txt;if(cls)e.className=cls;return e;}
+const resolutionLabels={
+ 'candidate-unverified':'Candidate generated · Lean not checked',
+ 'depends-on-open':'Depends on an open obligation',
+ 'open-obligation':'Open proof obligation',
+ 'needs-context':'Needs more context',
+ 'needs-choice':'A candidate is available · choose how to proceed',
+ 'ambiguous':'Multiple supported interpretations remain',
+ 'budget-exhausted':'Candidate search budget exhausted',
+ 'incompatible-choice':'Current choice no longer fits',
+ 'incompatible-constraints':'Draft constraints conflict',
+ 'no-supported-match':'No match in the supported rule set',
+ 'unsupported':'Wording or rule is not supported',
+ 'incompatible-target':'Does not match the current goal'
+};
+function appendResolutionStatus(parent,row){
+ const status=row.resolutionStatus||'open-obligation';
+ parent.dataset.resolutionStatus=status;
+ parent.append(element('small',ui.t(resolutionLabels[status]||status),'resolutionStatus'));
+}
 function formula(parent,source){
   // Conservative offline token rendering. Unknown syntax is kept as source.
   if(!source||!/^[\p{L}\p{N}\s_=:→∧∨¬↔∀∃()'+*≤≥<>∘∈∉⊆∪∩-]+$/u.test(source)){parent.append(element('code',source));return;}
@@ -164,7 +183,7 @@ function refreshOffline(){
    if(scope.length>128||scope.some(s=>!/^[A-Za-z_][A-Za-z0-9_']{0,63}$/.test(s)))throw Error('Enter up to 128 simple Lean context names.');
    const r=offlineSession.evaluate($('offlineDraft').value,scope);
    for(const row of r.rows){
-     const p=element('div',undefined,'ruleResult');p.append(element('small','Line '+row.line+' · '+row.status+(row.proofStatus?' · '+row.proofStatus:'')),element('span',row.raw));
+     const p=element('div',undefined,'ruleResult');p.append(element('small','Line '+row.line+' · '+row.status+(row.proofStatus?' · '+row.proofStatus:'')),element('span',row.raw));appendResolutionStatus(p,row);
      if(row.reason)p.append(element('small',row.reason));out.append(p);
    }
    if(r.term){offlineTerm=r.term;out.append(element('p','Candidate fragment · not checked','hint'),element('pre',r.term));$('saveDraftFragment').disabled=false;}
@@ -555,6 +574,7 @@ function previewDraft({edited=false}={}){
      const d=element('div',undefined,'ruleResult');
      d.dataset.objectId=draftIdentity.ids.get(x.graphId||'line:'+x.line)||'';
      d.append(element('small','Line '+x.line+' · '+x.status+(x.proofStatus?' · '+x.proofStatus:'')),element('span',x.raw));
+     appendResolutionStatus(d,x);
      if(x.step)d.append(element('code',['introduce','assume'].includes(x.step.kind)?'intro '+x.step.name:x.step.kind==='obtain'?'obtain ⟨'+x.step.name+', '+x.step.evidenceName+'⟩ from '+x.step.source+' : '+x.step.type+'; '+x.step.evidenceType:x.step.kind==='define'?'let '+x.step.name+' : '+x.step.type+' := '+x.step.value:x.step.kind==='establish'?'have '+x.step.name+' : '+x.step.type+' := '+x.step.application:x.step.kind==='cases'?'cases '+x.step.source+' into '+x.step.branches.map(b=>b.constructor+' '+b.name+': '+b.type).join(' / ')+'; establish '+x.step.name+' : '+x.step.type:'show '+x.step.type+'; '+x.step.application));
      if((x.step?.kind==='cases'||x.kind==='cases')&&x.branches?.length){
       const branches=element('details');branches.append(element('summary','Branch-local assumptions · common result '+(x.step?.name||x.name)+' : '+x.type));

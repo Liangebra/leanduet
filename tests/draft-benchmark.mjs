@@ -1,7 +1,7 @@
 // Opt-in synthetic latency and cache-equivalence checks: node tests/draft-benchmark.mjs
 import {performance} from 'node:perf_hooks';
 import assert from 'node:assert/strict';
-import {draftProof,createDraftSession} from '../web/natural-draft.mjs';
+import {draftProof,compileNaturalDraft,createDraftSession} from '../web/natural-draft.mjs';
 
 const warmup=24,samples=160;
 const facts=new Map([['p','P'],['h15','P']]);
@@ -52,12 +52,27 @@ const caseScope=[...caseFacts.keys()],deepCase=nestedCases(0,8),caseDraft=create
 const caseLineCount=deepCase.split('\n').filter(line=>line.trim()).length;
 assert.ok(caseLineCount<=64,'nested case benchmark must remain inside the supported source bound');
 
+const sequenceFacts=new Map([['P','Prop'],['Q','Prop'],['U','Prop'],['V','Prop'],['R','Prop'],['T','Prop'],
+ ['h','P ∨ Q'],['j','U ∨ V'],['p','P'],['f','P → R'],['g','P → T'],['k','Q → T'],['l','U → T'],['m','V → T']]);
+const sequenceScope=[...sequenceFacts.keys()];
+const interleaved=['establish hr : $R$ | f p',
+ 'cases h, establish hT : $T$',
+ '  left case hp','    $T$ | g hp','  right case hq','    $T$ | k hq',
+ 'establish ht : $T$ | hT',
+ 'cases j, establish jT : $T$',
+ '  left case hu','    $T$ | l hu','  right case hv','    $T$ | m hv',
+ '$T$ | jT'].join('\n');
+const interleavedEdit=interleaved.replace('$T$ | jT','$T$ | ht');
+const sequenceSession=createDraftSession();
+
 const results=[
  measure({name:'cold full evaluation · 16 proof lines / 62 typed locals',evaluate:cold.evaluate,reference:cold.reference,inputAt:()=>lastH14}),
  measure({name:'warm exact replay · 16 proof lines / 62 typed locals',evaluate:text=>warm.evaluate(text,scope,facts),reference:cold.reference,inputAt:()=>lastH14,expectedReuse:16}),
  measure({name:'single-character final premise edit · 15-row prefix',evaluate:text=>toggle.evaluate(text,scope,facts),reference:cold.reference,inputAt:i=>i%2?lastH14:lastH15,expectedReuse:15}),
  measure({name:'local proof-dependency edit · 7-row prefix',evaluate:text=>edit.evaluate(text,scope,facts),reference:cold.reference,inputAt:i=>i%2?lastH14:localEdit,expectedReuse:7}),
- measure({name:'nested case scopes · '+caseLineCount+' lines / 8 levels',evaluate:()=>caseDraft.evaluate(deepCase,caseScope,caseFacts,{goal:'P'}),reference:()=>caseReference.evaluate(deepCase,caseScope,caseFacts,{goal:'P'}),inputAt:()=>deepCase})
+ measure({name:'nested case scopes · '+caseLineCount+' lines / 8 levels',evaluate:()=>caseDraft.evaluate(deepCase,caseScope,caseFacts,{goal:'P'}),reference:()=>caseReference.evaluate(deepCase,caseScope,caseFacts,{goal:'P'}),inputAt:()=>deepCase}),
+ measure({name:'interleaved sequence · cold / 2 case blocks',evaluate:text=>compileNaturalDraft(text,sequenceScope,sequenceFacts,{goal:'T'}),reference:text=>compileNaturalDraft(text,sequenceScope,sequenceFacts,{goal:'T'}),inputAt:()=>interleaved}),
+ measure({name:'interleaved sequence · replay and terminal edit',evaluate:text=>sequenceSession.evaluate(text,sequenceScope,sequenceFacts,{goal:'T'}),reference:text=>compileNaturalDraft(text,sequenceScope,sequenceFacts,{goal:'T'}),inputAt:i=>i%2?interleaved:interleavedEdit})
 ];
 
 textOutput({node:process.version,platform:process.platform,architecture:process.arch,warmup,samples,results});

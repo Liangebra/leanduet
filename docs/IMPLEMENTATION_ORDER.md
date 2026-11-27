@@ -29,6 +29,26 @@ Edges: 1 -> 2 -> 3 -> 4; 1+3+4 -> 5; 3+4+5 -> 6;
 2+3+6 -> 7; all -> 8. Inference adds constraints back into the candidate
 forest; bidirectional tests expose weaknesses in identity.
 
+## Current scope-sequence capability
+
+The browser evaluator can compose ordinary supported inference lines with
+multiple explicit binary-disjunction blocks in one proof: a linear prefix can
+introduce local facts, a case result returns to its parent scope, and a later
+case block can use that result. The same composition works inside a branch.
+Each introduction receives a revision-local scope identity; display names are
+resolved against the active lexical scope. Physical source line numbers remain
+the addresses used by candidate choices and graph nodes, including across
+blank lines.
+
+An unresolved prefix remains visible in the semantic graph and prevents the
+combined draft from being complete, even when later case blocks are structurally
+usable. This is still a bounded parser for supported inference lines and
+explicit binary disjunctions, not general mathematical prose or arbitrary
+inductive case analysis. Case bodies are recomputed after edits; only the
+existing linear draft cache is reused where its context key permits. Tests
+compare the edited sequence with a cold evaluation, and the structured backend
+integration compiles a generated interleaved sequence with Lean in CI.
+
 ## First graph implementation
 
 The natural draft returns a versioned revision-local graph. Context ordinals
@@ -293,3 +313,18 @@ The continuation also receives the set of expired branch-local declaration
 names. Unqualified local references cannot silently become global rule
 references after scope closure; fresh introductions may reuse a display
 name. This remains conservative and does not certify global name resolution.
+
+### Resolution status is not proof status
+
+Draft rows expose `resolutionStatus` separately from `proofStatus` and the
+legacy presentation `status`. The finite resolver distinguishes an unverified
+candidate, an open dependency, an unselected proof obligation, missing context,
+multiple candidates, exhausted search, a stale user choice, inconsistent
+constraints, no match in the bounded supported rules, unsupported wording, and
+a target mismatch. “No match” is local to the supported rule set; it does not
+show that no mathematical explanation exists. At the result level,
+`completionKind: structural-export-ready` means the draft can be rendered;
+`leanVerification: not-run` and `semanticFidelity: not-assessed` remain explicit
+until independent checking and author-intent review occur. This classification
+does not yet generate structural parse alternatives for distinct operations
+such as arbitrary-element introduction versus witness extraction.

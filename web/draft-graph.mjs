@@ -39,9 +39,9 @@ export function buildDraftGraph(scope,facts,rows,{goal=null}={}){
   const id='line:'+row.line,step=row.step,parsed=formula(row.type),value=step?.kind==='define'?formula(step.value):null;
   if(step?.kind==='obtain'){
    const sourceRefs=refs([step.source]);
-   declare({id,kind:'witness',name:step.name,type:step.type,raw:row.raw,modifiers:row.modifiers||[],formula:parsed,proofStatus:row.proofStatus,status:row.status,alternatives:[],scopeRefs:[...scopeRefs],dependencies:[...new Set([...scopeRefs,...sourceRefs,...parsed.refs])]});
+   declare({id,kind:'witness',name:step.name,type:step.type,raw:row.raw,modifiers:row.modifiers||[],formula:parsed,proofStatus:row.proofStatus,resolutionStatus:row.resolutionStatus||'candidate-unverified',status:row.status,alternatives:[],scopeRefs:[...scopeRefs],dependencies:[...new Set([...scopeRefs,...sourceRefs,...parsed.refs])]});
    const evidenceId=id+':evidence',evidence=formula(step.evidenceType);
-   declare({id:evidenceId,kind:'evidence',name:step.evidenceName,type:step.evidenceType,raw:row.raw,formula:evidence,proofStatus:row.proofStatus,status:row.status,alternatives:[],scopeRefs:[...scopeRefs,id],dependencies:[...new Set([...scopeRefs,id,...sourceRefs,...evidence.refs])]});
+   declare({id:evidenceId,kind:'evidence',name:step.evidenceName,type:step.evidenceType,raw:row.raw,formula:evidence,proofStatus:row.proofStatus,resolutionStatus:row.resolutionStatus||'candidate-unverified',status:row.status,alternatives:[],scopeRefs:[...scopeRefs,id],dependencies:[...new Set([...scopeRefs,id,...sourceRefs,...evidence.refs])]});
    scopeRefs.push(id,evidenceId);continue;
   }
   function alternative(c){
@@ -65,7 +65,7 @@ export function buildDraftGraph(scope,facts,rows,{goal=null}={}){
    dependencies:branch.dependencies||[],graph:branch.graph||null,status:branch.status||'open'
   })):undefined;
   const node={id,kind:step?.kind||(row.kind==='cases'?'cases':'unresolved'),name:step?.name||(row.kind==='infer-proposition'?row.name:row.name||null),type:row.type||null,raw:row.raw,modifiers:row.modifiers||[],formula:parsed,
-   proofStatus:row.proofStatus||'open',status:row.status,application,alternatives,value,...(row.domain?{origin:'infer-proposition',typeDomain:row.domain.map(alternative),constraints:row.constraints,constraintRefs,constraintGroup:group?.id||null}:{}),
+   proofStatus:row.proofStatus||'open',resolutionStatus:row.resolutionStatus||'open-obligation',status:row.status,application,alternatives,value,...(row.domain?{origin:'infer-proposition',typeDomain:row.domain.map(alternative),constraints:row.constraints,constraintRefs,constraintGroup:group?.id||null}:{}),
    ...(branches?{branches}:{}),selectedCandidate:selected?.id||null,scopeRefs:[...scopeRefs],dependencies:[...new Set([...scopeRefs,...parsed.refs,...(value?.refs||[]),...proofRefs,...caseRefs])]};
   declare(node);
   if(['introduce','assume','cases'].includes(node.kind))scopeRefs.push(id);

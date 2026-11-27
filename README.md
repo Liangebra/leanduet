@@ -35,7 +35,7 @@ The [online editor](https://liangebra.github.io/leanduet/) is a static demo. Run
 - Select a proof occurrence, search applicable rules, and review a checked replacement.
 - Enter a supported LaTeX formula for typed proof completion, or compose controlled mathematical sentences with intermediate propositions inferred by Lean.
 - Edit existential witnesses together with their dependent evidence.
-- Draft nested two-branch proofs for an explicit disjunction, with separate branch-local assumptions and a shared result.
+- Interleave ordinary proof lines with multiple nested two-branch proofs for explicit disjunctions; branch-local assumptions stay scoped, and only shared results return to the parent.
 - Preview a dependency-closed lemma and a checked refactoring that replaces the selected proof with its application. Multi-theorem editing remains experimental.
 - Save locally, export Lean or a portable workspace, and read typed narratives in English, Chinese or Japanese, or import [community language packs](docs/LANGUAGE_PACKS.md).
 
