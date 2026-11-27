@@ -8,6 +8,7 @@ import subprocess
 from tempfile import TemporaryDirectory
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from semantic import extract, search, patch, inspect_ir, abstract_preview, factor_preview
+from semantic import infer_chain
 
 project=Path(sys.argv[1]).resolve()
 mathlib_cases=json.loads((Path(__file__).resolve().parent/"fixtures"/"mathlib-cases.json").read_text(encoding="utf-8"))
@@ -72,3 +73,30 @@ assert set(mathlib_case["expectedContextClosure"]).issubset(needed_names),needed
 for instance in mathlib_case["requiredTypeclassClosure"]:
     assert any(instance in d["type"] for d in needed),needed
 print("Mathlib topology: extracted proof retains its dependent data and topology-instance closure")
+
+# Exercise a child proof scope with a real proposition and theorem family. The
+# Lean backend must return only the local lemma binding to its parent frame.
+lemma_steps=[{
+    "kind":"local-lemma","name":"himage","type":"IsCompact (f '' s)",
+    "subgoals":[{"id":"proof","goal":"IsCompact (f '' s)","steps":[{
+        "kind":"conclude","type":"IsCompact (f '' s)","application":"IsCompact.image hs hf"
+    }]}]
+},{"kind":"conclude","type":"IsCompact (f '' s)","application":"himage"}]
+backend_lemma=infer_chain(source,node["path"],lemma_steps,project)
+assert [binding["name"] for binding in backend_lemma["bindings"]]==["himage"],backend_lemma
+assert backend_lemma["goal"]=="IsCompact (f '' s)",backend_lemma
+
+local_draft_script=r"""
+import {compileNaturalDraft} from './web/natural-draft.mjs';
+const example="""+json.dumps(mathlib_case,ensure_ascii=False)+r""";
+const result=compileNaturalDraft(example.localLemmaDraft,example.scope,new Map(Object.entries(example.context)),{goal:example.goal});
+if(!result.complete||result.steps[0]?.kind!=='local-lemma')throw new Error(JSON.stringify(result));
+console.log(JSON.stringify(result.term));
+"""
+local_term=json.loads(subprocess.run(["node","--input-type=module"],input=local_draft_script,text=True,cwd=root,check=True,capture_output=True).stdout)
+local_declaration=mathlib_case["leanImport"]+"\n\n"+mathlib_case["leanTheoremHeader"].replace("compact_image_example","compact_image_local_lemma")+" := "+local_term+"\n"
+with TemporaryDirectory() as tmp:
+    target=Path(tmp)/"CompactImageLocalLemma.lean"
+    target.write_text(local_declaration,encoding="utf-8")
+    subprocess.run(["lake","env","lean",str(target)],cwd=project,check=True)
+print("Mathlib topology: browser and backend local-lemma candidates compile with scoped dependencies")

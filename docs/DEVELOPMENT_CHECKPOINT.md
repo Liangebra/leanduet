@@ -70,6 +70,10 @@ eight-stage plan.
 - Generated local-lemma Lean has not yet been compiled in this workspace.
   The browser smoke also has not run locally because Chromium is unavailable;
   the new browser workflow test must pass on the PR head before merge.
+- The Mathlib integration now has a real compact-image local-lemma fixture:
+  it exercises both browser candidate generation and backend scope return,
+  then asks the pinned Mathlib toolchain to compile the generated theorem.
+  This remote integration result is pending.
 - The earlier #37 synthetic candidate-evaluation benchmark predates the
   bounded-quantifier extension. It is not a browser-latency measurement and
   is not updated by the local-lemma change.

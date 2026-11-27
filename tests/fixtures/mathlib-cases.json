@@ -5,6 +5,7 @@
     "description": "A continuous image of a compact set is compact.",
     "naturalProof": "Since s is compact and f is continuous, the image f '' s is compact by the continuous-image theorem.",
     "naturalDraft": "因此 $IsCompact (f '' s)$，由紧集的连续像，使用 hs 和 hf",
+    "localLemmaDraft": "local lemma himage : $IsCompact (f '' s)$\n  proof\n    因此 $IsCompact (f '' s)$，由紧集的连续像，使用 hs 和 hf\n$IsCompact (f '' s)$ | himage",
     "goal": "IsCompact (f '' s)",
     "scope": ["f", "s", "hs", "hf"],
     "context": {
