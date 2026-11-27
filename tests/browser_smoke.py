@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 6509)
-Total output lines: 359
-
 """Real browser regression checks. Run after installing playwright + Chromium."""
 import os
 import subprocess
@@ -175,7 +172,31 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
             expect(patch_page.locator("#draftTranslation .ruleResult").nth(1)).not_to_contain_text("Clear choice")
             patch_page.locator("#chainFormat").select_option("controlled")
             patch_page.locator("#chainText").fill("建立 hq | f using p\n结论 | g using hq")
-            patch_page.loc…509 tokens truncated…情况讨论 h，建立 hT : $True$\n  左支 hp\n    unsupported ⊛\n  右支 hq\n    $True$ | k hq\nestablish ht : $True$ | hT\ncases j, establish jT : $True$\n  left case hu\n    $True$ | l hu\n  right case hv\n    $True$ | m hv\n$True$ | jT"
+            patch_page.locator("#inferChain").click()
+            expect(patch_page.locator("#chainBindings")).to_contain_text("Q",timeout=60000)
+            expect(patch_page.locator("#patchTerm")).to_have_value("by\n  have hq := f p\n  exact g hq")
+            patch_page.locator("#checkPatch").click()
+            expect(patch_page.locator("#patchStatus")).to_contain_text(__import__("re").compile("Checked by Lean|No structural change"),timeout=120000)
+            case_page=browser.new_page(viewport={"width":1440,"height":900})
+            case_page.on("pageerror",lambda error:errors.append(str(error)))
+            case_page.goto(url)
+            case_source="""theorem interleaved_demo (h : True ∨ True) (j : True ∨ True) (p : True)
+    (f g k l m : True → True) : True := by
+  exact Or.elim h (fun hp => g hp) (fun hq => k hq)
+"""
+            case_page.locator("#lean").fill(case_source)
+            case_page.once("dialog",lambda d:d.accept())
+            case_page.locator("#adopt").click()
+            case_page.locator('[data-view="typed"]').click()
+            case_page.locator("#extractTerm").click()
+            expect(case_page.locator("#typedStatus")).to_contain_text("Extracted from Lean elaboration",timeout=60000)
+            case_page.locator("#typedTree").evaluate("(root) => root.querySelectorAll('details.typedNode').forEach(x=>x.open=true)")
+            case_node=case_page.locator("#typedTree summary").filter(has_text=__import__("re").compile("^Apply Or\\.elim$")).last.locator("xpath=..")
+            case_node.locator(":scope > button.typedEdit").click()
+            case_page.locator("#chainEditor summary").click()
+            case_page.locator("#chainFormat").select_option("natural")
+            case_text="establish hr : $True$ | f p\n分情况讨论 h，建立 hT : $True$\n  左支 hp\n    $True$ | g hp\n  右支 hq\n    $True$ | k hq\nestablish ht : $True$ | hT\ncases j, establish jT : $True$\n  left case hu\n    $True$ | l hu\n  right case hv\n    $True$ | m hv\n$True$ | jT"
+            partial_case_text="分情况讨论 h，建立 hT : $True$\n  左支 hp\n    unsupported ⊛\n  右支 hq\n    $True$ | k hq\nestablish ht : $True$ | hT\ncases j, establish jT : $True$\n  left case hu\n    $True$ | l hu\n  right case hv\n    $True$ | m hv\n$True$ | jT"
             case_page.locator("#chainText").fill(partial_case_text)
             expect(case_page.locator("#draftTranslation")).to_contain_text("inl hp : True ⊢ True · open")
             expect(case_page.locator("#draftTranslation")).to_contain_text("cases j")
