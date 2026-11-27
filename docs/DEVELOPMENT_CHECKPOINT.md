@@ -12,6 +12,8 @@ The local `research/scoped-draft-cache` worktree adds bounded scope-local row ca
 
 This continues stage 2 and stage 7 of the original eight-stage order; PR #32 also makes progress on stage 3 by exposing distinct resolution states. No general natural-language parser, arbitrary inductive elimination, or broad Lean type inference is introduced.
 
+The base already supports intuitionistic negation introduction in a linear draft: assuming `P` under goal `¬ P`/`Not P` leaves `False`, and the fixture requires an explicit contradiction proof such as `hnot hp`. `False.elim` is handled separately. This does not yet provide a reusable nested child-goal scope for arbitrary local subproofs.
+
 ## Checked local state
 
 - In the cache worktree: Node suite 209/209; Python unit suite 17/17; Python byte-compilation and `git diff --check` passed.
@@ -27,7 +29,7 @@ Case analysis remains explicit binary `Or` elimination, bounded to eight nested 
 
 1. Finish PR #32's corrected browser smoke and full CI, review the latest diff, merge only if all checks pass, then verify main and Pages deployment.
 2. Rebase the local scope-cache work on the merged head, run its CI, and submit it separately with the measured limits above.
-3. Generalize proof operations around child goals, context extension and closure; begin with conjunction introduction, then add intuitionistic negation introduction and contradiction elimination without silently adding classical axioms.
+3. Generalize proof operations around child goals, context extension and closure. Move existing negation introduction into this operation model, then add conjunction subgoal splitting and local subproof return; do not silently add classical axioms.
 4. Add structure-level candidates for “take an element satisfying …”, keeping arbitrary-variable introduction, witness extraction, definition, subtype introduction, and an open existence obligation distinct.
 5. Add a reviewed analysis or linear-algebra proof to the small real-math corpus, with source language, expected structure, generated Lean, and independent compilation.
 
