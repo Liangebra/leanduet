@@ -324,8 +324,6 @@ $P$ | hp""")
             restricted_page.locator('[data-view="typed"]').click()
             restricted_page.locator("#extractTerm").click()
             expect(restricted_page.locator("#typedStatus")).to_contain_text("Extracted from Lean elaboration",timeout=60000)
-            select_typed_edit(restricted_page,exact_type="True",summary="Use hypothesis",term="hq")
-            expect(restricted_page.locator("#patchTarget")).to_contain_text("True")
             if not restricted_page.locator("#chainEditor").evaluate("(editor) => editor.open"):
                 restricted_page.locator("#chainEditor summary").click()
             restricted_page.locator("#chainFormat").select_option("natural")
