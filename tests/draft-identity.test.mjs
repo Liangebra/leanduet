@@ -27,6 +27,21 @@ test('same wording with ambiguous repeated occurrences is not reconciled',()=>{
  assert.notEqual(current.ids.get('line:1'),old.ids.get('line:1'));
  assert.notEqual(current.ids.get('line:2'),old.ids.get('line:1'));
 });
+test('ambiguous duplicates stay fresh while a repeated step after a unique anchor keeps identity',()=>{
+ const old=reconcileDraftIdentity(null,graph('$P$\n$Q$\n$P$'));
+ const current=reconcileDraftIdentity(old,graph('$P$\n$P$\n$Q$\n$P$'));
+ assert.notEqual(current.ids.get('line:1'),old.ids.get('line:1'));
+ assert.notEqual(current.ids.get('line:2'),old.ids.get('line:1'));
+ assert.equal(current.ids.get('line:4'),old.ids.get('line:3'));
+});
+test('deleting one repeated step preserves only the uniquely anchored suffix',()=>{
+ const old=reconcileDraftIdentity(null,graph('$P$\n$P$\n$Q$\n$P$'));
+ const current=reconcileDraftIdentity(old,graph('$P$\n$Q$\n$P$'));
+ assert.notEqual(current.ids.get('line:1'),old.ids.get('line:1'));
+ assert.notEqual(current.ids.get('line:1'),old.ids.get('line:2'));
+ assert.equal(current.ids.get('line:2'),old.ids.get('line:3'));
+ assert.equal(current.ids.get('line:3'),old.ids.get('line:4'));
+});
 test('changed context conservatively retires all identities and choices',()=>{
  const choices=new Map([[1,'And.right h']]);
  const old=reconcileDraftIdentity(null,graph(original,facts,choices));
