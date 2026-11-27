@@ -145,7 +145,7 @@ test('unsupported matches, missing sources, and search budgets stay distinct',()
 test('an element-operation choice survives unrelated text edits after selection',()=>{
  const session=createDraftSession(),goal='Nat → P',scope=['P','he'];
  const facts=new Map([['P','Prop'],['he','∃ y : Nat, P']]);
- const original='take an element z : $Nat$ satisfying $P$\\nunsupported ⊛';
+ const original='take an element z : $Nat$ satisfying $P$\nunsupported ⊛';
  const first=session.evaluate(original,scope,facts,{goal});
  const candidate=first.rows[0].candidates.find(value=>value.operation==='universal-introduction');
  assert.ok(candidate);
@@ -153,7 +153,7 @@ test('an element-operation choice survives unrelated text edits after selection'
  const selected=session.evaluate(original,scope,facts,{goal,choices});
  assert.equal(selected.rows[0].step.kind,'introduce');
  const previous=reconcileDraftIdentity(null,selected.graph);
- const edited='take an element z : $Nat$ satisfying $P$\\nchanged unsupported ⊛';
+ const edited='take an element z : $Nat$ satisfying $P$\nchanged unsupported ⊛';
  const probe=session.evaluate(edited,scope,facts,{goal});
  const current=reconcileDraftIdentity(previous,probe.graph);
  assert.deepEqual([...migrateDraftChoices(previous,current,choices)],[[1,candidate.choice]]);
