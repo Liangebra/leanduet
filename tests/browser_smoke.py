@@ -296,6 +296,7 @@ $P(x)$ | hp"""
             operation_page.locator("#chainText").fill(operation_text)
             operation_row=operation_page.locator("#draftTranslation .ruleResult").first
             expect(operation_row).to_contain_text("universal-variable introduction")
+            expect(operation_row).to_contain_text("Other operation readings ruled out by the explicit goal")
             expect(operation_row).to_contain_text("existential witness extraction")
             operation_row.get_by_role("button",name="Use this candidate").first.click()
             expect(operation_row).to_contain_text("Clear choice")
