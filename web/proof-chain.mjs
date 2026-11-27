@@ -96,6 +96,11 @@ export function renderChain(steps){
       const body=renderChain(s.subgoals?.[0]?.steps||[]).split('\n').slice(1);
       lines.push(...body.map(line=>'  '+line));
     }
+    else if(s.kind==='local-lemma'){
+      lines.push('  have '+s.name+' : '+s.type+' := by');
+      const body=renderChain(s.subgoals?.[0]?.steps||[]).split('\n').slice(1);
+      lines.push(...body.map(line=>'  '+line));
+    }
     else if(s.kind==='define')lines.push('  let '+s.name+' : '+s.type+' := '+s.value);
     else if(s.kind==='establish')lines.push('  have '+s.name+(s.type===null?'':' : '+s.type)+' := '+(s.application==='?'?'by exact?':s.application));
     else {

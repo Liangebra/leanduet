@@ -40,3 +40,14 @@ test('Mathlib corpus seed matches the existing structural candidate',()=>{
   assert.match(example.alignmentStatus,/draft correspondence/);
  }
 });
+
+test('compact-image local lemma returns only its stated proposition',()=>{
+ const example=mathlibCases[0];
+ const result=compileNaturalDraft(example.localLemmaDraft,example.scope,new Map(Object.entries(example.context)),{goal:example.goal});
+ assert.equal(result.complete,true);
+ assert.deepEqual(result.steps.map(step=>step.kind),['local-lemma','conclude']);
+ assert.equal(result.steps[0].subgoals[0].goal,'(IsCompact (f \'\' s))');
+ assert.match(result.term,/have himage : \(IsCompact \(f '' s\)\) := by[\s\S]*exact IsCompact\.image hs hf[\s\S]*exact himage/);
+ assert.equal(result.rows[0].proofStatus,'candidate');
+ assert.equal(result.rows.at(-1).proofStatus,'candidate');
+});

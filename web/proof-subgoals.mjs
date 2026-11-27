@@ -1,6 +1,7 @@
 import {buildDraftGraph} from './draft-graph.mjs';
+import {compileFormula} from './math-formula.mjs';
 import {planGoalOperation} from './context-extension.mjs';
-import {closeProofScope,forkGoalScope,proofDraftClosesGoal,proofScopeFacts,proofScopeNames,resolveProofName} from './proof-scope.mjs';
+import {closeProofScope,extendProofScope,forkGoalScope,proofDraftClosesGoal,proofScopeFacts,proofScopeNames,resolveProofName} from './proof-scope.mjs';
 import {renderChain} from './proof-chain.mjs';
 import {graphNodes,proofContextDependencies,proofResultId,remapProofGraph} from './case-split.mjs';
 
@@ -12,6 +13,27 @@ const operations=[
  {kind:'existential-introduction',header:/^(?:construct witness|choose witness|构造见证|选取见证)\s+([A-Za-z_][A-Za-z0-9_']{0,63})$/iu,
   subgoals:[{id:'witness-property',heading:/^(?:witness property|见证性质)$/iu}]}
 ];
+
+const lemmaName='[A-Za-z_][A-Za-z0-9_\']{0,63}';
+const lemmaFormula='(?:\\$[^$\\n]+\\$|\\\\\\([^]*?\\\\\\))';
+const localLemmaPatterns=[
+ new RegExp('^(?:local lemma|prove lemma)\\s+('+lemmaName+')\\s*[:：]\\s*('+lemmaFormula+')$','iu'),
+ new RegExp('^(?:局部引理|证明引理)\\s*('+lemmaName+')\\s*[:：]\\s*('+lemmaFormula+')$','u')
+];
+
+/** Parse a deliberately explicit local claim header, separate from goal constructors. */
+export function localLemmaHeader(text){
+ const first=String(text||'').split(/\r?\n/).find(line=>line.trim());
+ if(!first)return null;
+ for(const pattern of localLemmaPatterns){
+  const match=pattern.exec(first.trim());
+  if(match){
+   try{return {kind:'local-lemma',name:match[1],type:compileFormula(match[2],{syntax:'lean'}).lean};}
+   catch{return null;}
+  }
+ }
+ return null;
+}
 
 export function goalOperationHeader(text){
  const first=String(text||'').split(/\r?\n/).find(line=>line.trim());
@@ -143,6 +165,110 @@ export function compileGoalOperationProgram(input,frame,{goal=null,choices=new M
   // Any dependency on them is already reflected in the child's proof status.
   openBindings:[...new Set(openBindings)],
   remainingGoal:target,graph,term:complete?renderChain([resultStep]):null};
+}
+
+function parseLocalLemmaBlock(input,lineOffset){
+ if(typeof input!=='string'||input.length>12000)throw Error('Draft exceeds 12000 characters.');
+ const all=String(input).split(/\r?\n/).map((raw,index)=>({raw,index,line:lineOffset+index+1,indent:(/^ */.exec(raw)||[''])[0].length}));
+ if(all.some(line=>line.raw.includes('\t')))throw Error('Use spaces to indent a local lemma proof.');
+ const significant=all.filter(line=>line.raw.trim());
+ if(significant.length>64)throw Error('A local lemma proof may contain at most 64 nonblank lines.');
+ const head=significant[0],operation=head&&localLemmaHeader(head.raw.trim());
+ if(!operation||head.indent!==0)throw Error('Start a local lemma with “local lemma h : $P$”.');
+ const heading=significant[1];
+ if(!heading||heading.indent!==2||! /^(?:proof|证明)$/iu.test(heading.raw.trim()))
+  throw Error('Add an indented “proof” heading below the local lemma.');
+ let bodyFirst=null,tailStart=null;
+ for(const line of significant.slice(2)){
+  if(line.indent===0){tailStart=line.index;break;}
+  if(line.indent<4)throw Error('Indent local lemma proof steps by four spaces.');
+  if(bodyFirst===null)bodyFirst=line.index;
+ }
+ const bodyEnd=tailStart===null?all.length:tailStart;
+ const body=bodyFirst===null?[]:all.slice(bodyFirst,bodyEnd).map(line=>line.raw.trim()?line.raw.slice(4):'');
+ const tail=tailStart===null?[]:all.slice(tailStart).map(line=>line.raw);
+ const bodyLineOffset=bodyFirst===null?(tailStart===null?lineOffset+all.length:all[tailStart].line-1):all[bodyFirst].line-1;
+ return {operation,head,body,bodyLineOffset,tail,
+  tailLineOffset:tailStart===null?lineOffset+all.length:all[tailStart].line-1};
+}
+
+/**
+ * Prove one named claim in an isolated child scope, then return only that
+ * proposition to the parent context. Child declarations expire at closure.
+ */
+export function compileLocalLemmaProgram(input,frame,{goal=null,choices=new Map(),lineOffset=0,closedNames=[],openBindings=[],incompleteContext=false,cache=null}={},compileSegment){
+ if((frame.id.match(/\/(?:case|subgoal|lemma):/g)||[]).length>=8)
+  throw Error('Nested proof scopes are limited to eight levels.');
+ const parsed=parseLocalLemmaBlock(input,lineOffset),{name,type}=parsed.operation;
+ if(resolveProofName(frame,name).status!=='missing')throw Error('A local lemma name must be fresh in its parent scope.');
+ const scopedType=compileFormula(type,{syntax:'lean'}).scoped;
+ function refersToOwnName(term){
+  if(!term||typeof term!=='object')return false;
+  if(term.kind==='free'&&term.name===name)return true;
+  return Object.values(term).some(value=>Array.isArray(value)?value.some(refersToOwnName):refersToOwnName(value));
+ }
+ if(refersToOwnName(scopedType))throw Error('A local lemma statement cannot refer to the name it is introducing.');
+ const headId=frame.id==='root'?'line:'+parsed.head.line:frame.id+'/line:'+parsed.head.line;
+ const childId=frame.id+'/lemma:'+parsed.head.line;
+ const child=forkGoalScope(frame,{id:childId,goal:type});
+ const childResult=compileSegment(parsed.body.join('\n'),child,{goal:type,choices,lineOffset:parsed.bodyLineOffset,
+  closedNames,openBindings,incompleteContext,cache});
+ const structurallyRenderable=childResult.complete;
+ // A child proof may be structurally closed while depending on an upstream
+ // open object. That dependency must flow through the returned lemma, but it
+ // does not erase the proof's local conclusion or its Lean candidate.
+ const proofClosed=structurallyRenderable&&!childResult.rows.some(item=>
+  item.status==='unresolved'||item.proofStatus==='open'||item.step?.application==='?');
+ const parentIds=new Set(frame.bindings.map(binding=>binding.id));
+ const dependencies=proofContextDependencies(childResult.graph||{}).filter(id=>parentIds.has(id));
+ let closure=null;
+ if(structurallyRenderable){
+  const localIds=graphNodes(childResult.graph).filter(node=>!parentIds.has(node.id)).map(node=>node.id);
+  closure=closeProofScope(frame,child,{proofType:type,dependencies:proofContextDependencies(childResult.graph),localIds});
+ }
+ const returnedDependencies=closure?.dependencies||dependencies;
+ const openIds=new Set(openBindings.flatMap(bindingName=>frame.bindings.filter(binding=>binding.name===bindingName).map(binding=>binding.id)));
+ const dependsOnOpen=returnedDependencies.some(id=>openIds.has(id));
+ const proofStatus=!structurallyRenderable?'open':!proofClosed?'open':dependsOnOpen?'depends-on-open':'candidate';
+ const resultId=proofResultId(childResult.graph);
+ const subgoalStatus=proofClosed?(dependsOnOpen?'depends-on-open':'complete'):
+  structurallyRenderable?'open-obligation':'open';
+ const operation={kind:'local-lemma',name,type,parentGoal:goal||frame.goalText,logic:'intuitionistic',
+  subgoal:{id:'proof',goal:type,scopeId:child.id},closure:{kind:'local-binding',name}};
+ const row={kind:'local-lemma',name,type,raw:parsed.head.raw.trim(),line:parsed.head.line,
+  graphId:headId,status:structurallyRenderable?'translated':'unresolved',proofStatus,
+  resolutionStatus:proofStatus==='candidate'?'candidate-unverified':proofStatus==='depends-on-open'?'depends-on-open':'open-obligation',
+  reason:structurallyRenderable?undefined:'The local lemma proof is incomplete; its parent continuation remains provisional.',
+  goalOperation:operation,subgoals:[{id:child.id,key:'proof',kind:'subgoal',goal:type,resultId,
+   dependencies:returnedDependencies,graph:childResult.graph,status:subgoalStatus}],
+  dependencies:[...returnedDependencies,...(resultId?[resultId]:[])]};
+ const step={kind:'local-lemma',name,type,dependencies:returnedDependencies,
+  subgoals:[{id:'proof',goal:type,steps:childResult.steps}]};
+ row.step=step;
+ const lemmaScope=extendProofScope(frame,{id:headId,name,type,kind:'local-lemma'});
+ const tailOpen=[...new Set([...openBindings,...(proofStatus==='candidate'?[]:[name])])];
+ // Every declaration introduced below the lemma belongs to its child proof,
+ // including declarations in nested branches. Remember only their spellings
+ // after the child closes so a later parent expression cannot accidentally
+ // resolve to an out-of-scope object with the same display name.
+ const expiredNames=graphNodes(childResult.graph).filter(node=>node.kind!=='context'&&node.name)
+  .map(node=>node.name);
+ const tailResult=compileSegment(parsed.tail.join('\n'),lemmaScope,{goal,choices,lineOffset:parsed.tailLineOffset,
+  closedNames:[...new Set([...closedNames,...expiredNames])],incompleteContext:!!incompleteContext||!structurallyRenderable||!proofClosed,
+  openBindings:tailOpen,cache});
+ const graph=remapProofGraph(buildDraftGraph(proofScopeNames(frame),proofScopeFacts(frame),[row],{goal:goal||frame.goalText}),frame);
+ const childRows=(childResult.rows||[]).map(item=>({...item,graphId:item.graphId||child.id+'/line:'+item.line}));
+ const nodes=[...graph.nodes],seen=new Set(nodes.map(node=>node.id));
+ for(const node of tailResult.graph.nodes)if(!seen.has(node.id)){nodes.push(node);seen.add(node.id);}
+ const groups=new Map([...(graph.constraintGroups||[]),...(tailResult.graph.constraintGroups||[])].map(group=>[group.id,group]));
+ const rows=[row,...childRows,...(tailResult.rows||[])].sort((left,right)=>left.line-right.line);
+ const complete=tailResult.complete&&!rows.some(item=>item.status==='unresolved');
+ const steps=[step,...(tailResult.steps||[])];
+ return {...tailResult,rows,steps,complete,completionKind:complete?'structural-export-ready':'incomplete',
+  reusedRows:(childResult.reusedRows||0)+(tailResult.reusedRows||0),
+  openBindings:[...new Set([...(proofClosed?openBindings:tailOpen),...(tailResult.openBindings||[])])],
+  graph:{...tailResult.graph,nodes,constraintGroups:[...groups.values()]},
+  term:complete?renderChain(steps):null};
 }
 
 export function compileConjunctionGoal(...args){return compileGoalOperationProgram(...args);}

@@ -85,7 +85,14 @@ represented alongside the other child graphs. Structural renderability is
 distinct from proof closure: a child containing `exact?` can still render, but
 its proof status is `open-obligation`; it is not described as verified or
 semantically faithful. Lean elaboration and the existing local patch check
-remain separate. Arbitrary local-lemma blocks, classical reductio, and general
+remain separate. Named local lemmas are supported in the explicit form
+`local lemma h : $P$`, followed by an indented `proof` block. The child goal
+inherits parent identities; its local declarations are discharged at closure,
+and only dependencies already in the parent context can return with the lemma
+proposition. An incomplete child leaves later rows visible but provisional and
+prevents executable export. The structured backend emits `have h : P := by`
+and Lean independently elaborates it. The grammar does not infer an unstated
+lemma statement or certify authorial intent. Classical reductio and general
 inductive elimination remain unsupported. JavaScript tests compare edited
 child blocks with cold results; generated terms and browser interactions are
 checked in CI because Lean and Chromium are not installed locally.

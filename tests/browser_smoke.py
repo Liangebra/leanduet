@@ -298,6 +298,7 @@ unsupported ⊛"""
             expect(operation_row).to_contain_text("universal-variable introduction")
             expect(operation_row).to_contain_text("existential witness extraction")
             operation_row.get_by_role("button",name="Use this candidate").first.click()
+            expect(operation_page.locator("#chainStatus")).to_contain_text("Candidate choice changed")
             expect(operation_row).to_contain_text("Clear choice")
             operation_text=operation_text.replace("unsupported ⊛", """cases h, establish hp : $P(x)$
   left case hleft
@@ -318,6 +319,39 @@ $P(x)$ | hp""")
             operation_page.locator("#check").click()
             expect(operation_page.locator("#verifyState")).to_have_text("Lean passed",timeout=120000)
             operation_page.close()
+            lemma_page=browser.new_page(viewport={"width":1440,"height":900})
+            lemma_page.on("pageerror",lambda error:errors.append(str(error)))
+            lemma_page.goto(url)
+            lemma_page.locator("#lean").fill("""theorem local_lemma_demo (Q R : Prop) (hq : Q) (gr : Q → R) : R := by
+  have localQ : Q := hq
+  exact gr localQ
+""")
+            lemma_page.once("dialog",lambda d:d.accept())
+            lemma_page.locator("#adopt").click()
+            lemma_page.locator('[data-view="typed"]').click()
+            lemma_page.locator("#extractTerm").click()
+            expect(lemma_page.locator("#typedStatus")).to_contain_text("Extracted from Lean elaboration",timeout=60000)
+            select_typed_edit(lemma_page,exact_type="R",summary="Apply letFun")
+            expect(lemma_page.locator("#patchTarget")).to_contain_text("R")
+            lemma_page.locator("#chainEditor summary").click()
+            lemma_page.locator("#chainFormat").select_option("natural")
+            lemma_text="""local lemma localQ : $Q$
+  proof
+    $Q$ | hq
+$R$ | gr localQ"""
+            lemma_page.locator("#chainText").fill(lemma_text)
+            lemma_row=lemma_page.locator("#draftTranslation .ruleResult").first
+            expect(lemma_row).to_contain_text("local lemma")
+            lemma_page.locator("#inferChain").click()
+            expect(lemma_page.locator("#chainStatus")).to_contain_text("Intermediate propositions inferred by Lean",timeout=120000)
+            expect(lemma_page.locator("#patchTerm")).to_have_value(__import__("re").compile(r"have localQ : Q := by[\s\S]*exact hq[\s\S]*exact gr localQ"))
+            lemma_page.locator("#checkPatch").click()
+            expect(lemma_page.locator("#applyPatch")).to_be_enabled(timeout=120000)
+            lemma_page.once("dialog",lambda d:d.accept())
+            lemma_page.locator("#applyPatch").click()
+            lemma_page.locator("#check").click()
+            expect(lemma_page.locator("#verifyState")).to_have_text("Lean passed",timeout=120000)
+            lemma_page.close()
             restricted_page=browser.new_page(viewport={"width":1440,"height":900})
             restricted_page.on("pageerror",lambda error:errors.append(str(error)))
             restricted_page.goto(url)

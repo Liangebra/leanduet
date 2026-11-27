@@ -127,6 +127,26 @@ graph but the combined draft stays incomplete. This composition does not
 broaden the accepted sentence grammar, and nested case bodies are still
 recomputed rather than incrementally reused.
 
+### Named local-lemma return
+
+The bounded draft accepts `local lemma h : $P$` (also `prove lemma` and
+`局部引理` / `证明引理`) followed by an indented `proof` block. The lemma
+statement is explicit, and the proof body runs in a child scope inheriting the
+parent's object identities. Closing the block checks the child's declared
+target, discharges child-local bindings, and returns only dependencies that
+already existed in the parent together with the new proposition binding.
+Sibling and enclosing proof scopes retain their own identities.
+
+An unfinished proof keeps its claim and later parent rows in the graph as
+open-dependent structure; it cannot export a Lean term. A structurally closed
+body that uses an upstream open object remains a candidate with that dependency
+marked open. The backend emits `have h : P := by ...` and its Lean check is
+independent of browser closure. This operation requires an explicitly stated
+lemma and supported child proof lines; it does not infer a useful lemma,
+automatically choose a proof strategy, or establish informal fidelity. Nested
+scope and source-size limits match the bounded goal operations. The whole
+local-lemma block is currently recomputed after structural edits.
+
 ## Checked same-context round trip
 
 The native decoder reconstructs all supported Expr constructors with exact structural names, universe levels, binder modes and local-slot identity. Each exported context type/value, selected term/type and optional formula is decoded in Lean, checked, compared with its original shape, and re-encoded to the identical JSON. The final decoded term must have a type definitionally equal to the decoded target. The returned roundTrip fields record these checks. This verifies individual exported judgments in their original context; it is not a general formal theorem, cross-project import, independent environment reconstruction, or a proof of the browser parser. No external JSON is executed or accepted by the API. The decoder rejects unknown constructors and out-of-scope slots. Encoding and round-trip checking share a bounded inspection budget.

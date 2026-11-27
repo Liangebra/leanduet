@@ -50,14 +50,15 @@ MIT-licensed. Neither source code nor benchmark data is copied.
 Stage 2 has shared goal-operation plans for universal and implication
 introduction, intuitionistic negation introduction, disjunction elimination,
 conjunction introduction, equivalence introduction, and explicit existential
-introduction. Child goals inherit parent identities but have isolated local
-contexts; local declarations and open proof obligations remain scope-local,
-and the nested identity matcher preserves only uniquely aligned child scopes.
-Existential construction consumes a selected typed local object and leaves its
-predicate as an obligation; equivalence construction proves both directions
-without classical axioms. Generated Lean and browser interaction are checked
-by repository CI before merge. This still does not cover named local-lemma
-return, classical reductio, or general inductive elimination.
+introduction. Named local lemmas now use the same fork/check/close discipline:
+the child inherits parent identities, its local declarations are discharged,
+and only dependencies already in the parent context can cross the boundary.
+An open child remains available for later structural work but makes its
+continuation provisional. Existential construction consumes a selected typed
+local object and leaves its predicate as an obligation; equivalence
+construction proves both directions without classical axioms. The local-lemma
+browser and Lean integration cases are pending CI on the stacked PR. This still
+does not cover classical reductio or general inductive elimination.
 
 The first stage-3 operation family now pairs arbitrary-variable introduction
 with existential witness extraction for one small English/Chinese request

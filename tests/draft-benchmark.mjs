@@ -84,6 +84,15 @@ const elementContextEditFacts=new Map([...elementFacts,['he2','∃ z : Nat, P z'
 const elementContextSession=createDraftSession();
 const fullElementContextDraft=text=>createDraftSession().evaluate(text,elementContextEdit,elementContextEditFacts,{goal:'∀ x : Nat, P x',continuation:true});
 
+const localLemmaFacts=new Map([['hq','Q'],['hp','Q'],['gr','Q → R']]);
+for(let i=0;i<48;i++)localLemmaFacts.set('lemmaNoise'+i,'Noise'+i);
+const localLemmaScope=[...localLemmaFacts.keys()];
+const localLemma=['local lemma localQ : $Q$','  proof','    $Q$ | hq','$R$ | gr localQ'].join('\n');
+const localLemmaOneCharEdit=localLemma.replace('$Q$ | hq','$Q$ | hp');
+const localLemmaLineShift='\n'+localLemma;
+const localLemmaSession=createDraftSession();
+const fullLocalLemma=text=>compileNaturalDraft(text,localLemmaScope,localLemmaFacts,{goal:'R'});
+
 const results=[
  measure({name:'cold full evaluation · 16 proof lines / 62 typed locals',evaluate:cold.evaluate,reference:cold.reference,inputAt:()=>lastH14}),
  measure({name:'warm exact replay · 16 proof lines / 62 typed locals',evaluate:text=>warm.evaluate(text,scope,facts),reference:cold.reference,inputAt:()=>lastH14,expectedReuse:16}),
@@ -99,7 +108,11 @@ const results=[
  measure({name:'structural element candidates · cold / 50 typed locals',evaluate:text=>createDraftSession().evaluate(text,elementScope,elementFacts,{goal:'∀ x : Nat, P x',continuation:true}),reference:fullElementDraft,inputAt:()=>elementRequest}),
  measure({name:'structural element candidates · exact replay',evaluate:text=>elementSession.evaluate(text,elementScope,elementFacts,{goal:'∀ x : Nat, P x',continuation:true}),reference:fullElementDraft,inputAt:()=>elementRequest}),
  measure({name:'structural element candidates · property edit',evaluate:text=>elementSession.evaluate(text,elementScope,elementFacts,{goal:'∀ x : Nat, P x',continuation:true}),reference:fullElementDraft,inputAt:()=>elementRequestEdit,beforeSample:()=>{elementSession.reset();elementSession.evaluate(elementRequest,elementScope,elementFacts,{goal:'∀ x : Nat, P x',continuation:true});}}),
- measure({name:'structural element candidates · new existential premise',evaluate:text=>elementContextSession.evaluate(text,elementContextEdit,elementContextEditFacts,{goal:'∀ x : Nat, P x',continuation:true}),reference:fullElementContextDraft,inputAt:()=>elementRequest,beforeSample:()=>{elementContextSession.reset();elementContextSession.evaluate(elementRequest,elementScope,elementFacts,{goal:'∀ x : Nat, P x',continuation:true});}})
+ measure({name:'structural element candidates · new existential premise',evaluate:text=>elementContextSession.evaluate(text,elementContextEdit,elementContextEditFacts,{goal:'∀ x : Nat, P x',continuation:true}),reference:fullElementContextDraft,inputAt:()=>elementRequest,beforeSample:()=>{elementContextSession.reset();elementContextSession.evaluate(elementRequest,elementScope,elementFacts,{goal:'∀ x : Nat, P x',continuation:true});}}),
+ measure({name:'local lemma · cold / 51 typed locals',evaluate:fullLocalLemma,reference:fullLocalLemma,inputAt:()=>localLemma}),
+ measure({name:'local lemma · exact replay',evaluate:text=>localLemmaSession.evaluate(text,localLemmaScope,localLemmaFacts,{goal:'R'}),reference:fullLocalLemma,inputAt:()=>localLemma}),
+ measure({name:'local lemma · one-premise edit',evaluate:text=>localLemmaSession.evaluate(text,localLemmaScope,localLemmaFacts,{goal:'R'}),reference:fullLocalLemma,inputAt:()=>localLemmaOneCharEdit,beforeSample:()=>{localLemmaSession.reset();localLemmaSession.evaluate(localLemma,localLemmaScope,localLemmaFacts,{goal:'R'});}}),
+ measure({name:'local lemma · source-line shift',evaluate:text=>localLemmaSession.evaluate(text,localLemmaScope,localLemmaFacts,{goal:'R'}),reference:fullLocalLemma,inputAt:()=>localLemmaLineShift,beforeSample:()=>{localLemmaSession.reset();localLemmaSession.evaluate(localLemma,localLemmaScope,localLemmaFacts,{goal:'R'});}})
 ];
 
 textOutput({node:process.version,platform:process.platform,architecture:process.arch,warmup,samples,results});

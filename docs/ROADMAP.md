@@ -7,7 +7,7 @@
 - Community-importable mathematical language packs.
 - Checked dependency-closed lemma abstraction and two-theorem factoring previews.
 - Scope-indexed substitution laws and native judgment encoding/decoding with fresh-context round-trip checks.
-- Experimental binary disjunction elimination and bounded conjunction/equivalence subgoals use nested, isolated scopes. Existential construction is limited to an explicit typed local witness; arbitrary inductive case analysis remains open.
+- Experimental binary disjunction elimination, named local-lemma subproofs, and bounded conjunction/equivalence subgoals use nested, isolated scopes. Existential construction is limited to an explicit typed local witness; arbitrary inductive case analysis remains open.
 
 ## Experimental track
 
