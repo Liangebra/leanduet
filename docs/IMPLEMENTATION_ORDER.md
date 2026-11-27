@@ -217,10 +217,12 @@ fresh internal copy. The graph records both introductions and their scope
 edges; cache replay restores both bindings. Conditional projection lookahead
 stops at this scope boundary. An assumption can also consume a matching
 negated goal, leaving `False` as the residual obligation. This is intuitionistic:
-classical double-negation elimination is never inserted. From `False`, users can
-apply an explicit rule such as `False.elim`. The structured backend checks the
-annotations with Lean. Existential elimination remains a linear scope extension;
-it is not arbitrary dependent pattern matching or implicit type inference.
+classical double-negation elimination is never inserted. A bare local reference
+whose type is known is compared structurally with its stated conclusion;
+nontrivial applications still require Lean's independent check. From `False`,
+users can apply an explicit rule such as `False.elim`. The structured backend
+checks the annotations with Lean. Existential elimination remains a linear scope extension; it is
+not arbitrary dependent pattern matching or implicit type inference.
 
 ## Branch-local disjunction elimination
 
@@ -233,6 +235,11 @@ scope closes. The closure discharges branch-local proof objects and returns
 only dependencies already present in the parent. A fresh parent result
 binding is then available to later steps. Branch trees and their dependencies
 remain visible in the semantic graph, including when a branch is incomplete.
+If either arm is still open, the common result is provisional: parent
+statements are still parsed and linked to it, but their dependency remains
+open and no Lean term is exported. Closed branch-local names stay unavailable
+in that continuation, and its final proposition is still checked against the
+remaining parent goal.
 
 The implementation accepts nested case blocks with at most eight split levels
 and 64 nonblank source lines, but only for explicit binary disjunctions with

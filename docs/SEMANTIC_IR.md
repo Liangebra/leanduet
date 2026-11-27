@@ -66,7 +66,13 @@ an arm checks its common surface target, discharges local identities, and
 returns only parent-context dependencies. The graph keeps both branch trees
 and dependency sets, while the parent continuation refers to the case result.
 An unfinished branch stays in the graph and prevents a complete Lean term
-from being exported.
+from being exported. If a parent continuation follows, the common result is
+represented provisionally so later statements remain available in the graph
+and carry an open dependency on that result. The continuation is never
+rendered as an executable Lean term until the branch closes, and its final
+surface proposition is still checked against the remaining goal. Branch-local
+names remain unavailable after closure, including while another branch is
+open.
 
 This surface check is not Lean elaboration and does not decide arbitrary
 typeclass or definitional-equality questions. The structured backend emits

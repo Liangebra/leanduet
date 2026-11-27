@@ -117,7 +117,7 @@ function proofContextDependencies(graph){
  return [...found];
 }
 
-function incomplete(input,parsed,branchResults,frame,goal,reason){
+function incomplete(input,parsed,branchResults,frame,{goal,choices,closedNames=[],openBindings=[],incompleteContext=false,reason,preserveTail=false,compileSegment}){
  const line=parsed.head.line;
  const branches=branchResults.map(({branch,child,result,closed})=>({
   id:child.id,bindingId:child.localBindingIds[0],constructor:branch.constructor,name:branch.name,type:branch.type,goal:parsed.type,
@@ -128,15 +128,34 @@ function incomplete(input,parsed,branchResults,frame,goal,reason){
   name:parsed.resultName,type:parsed.type,source:parsed.source,graphId:scopedLineId(frame,line),step:null,branches,branchProofIds};
  const graph=remapProofGraph(buildDraftGraph(proofScopeNames(frame),proofScopeFacts(frame),[row],{goal}),frame);
  const branchRows=branchResults.flatMap(({child,result})=>(result?.rows||[]).map(item=>({...item,graphId:item.graphId||scopedLineId(child,item.line)})));
+ if(preserveTail&&parsed.tail.length){
+  const parentIds=new Set(frame.bindings.map(binding=>binding.id));
+  const expired=new Set(closedNames);
+  for(const {result} of branchResults){
+   for(const node of graphNodes(result?.graph))if(node.name&&!parentIds.has(node.id))expired.add(node.name);
+  }
+  const resultFrame=extendProofScope(frame,{id:scopedLineId(frame,line),name:parsed.resultName,type:parsed.type,kind:'cases'});
+  const inherited=[...new Set([...openBindings,parsed.resultName])];
+  const tailResult=compileSegment(parsed.tail.map(x=>x.raw).join('\n'),resultFrame,{
+   goal,choices,lineOffset:parsed.tailLineOffset,closedNames:[...expired],openBindings:inherited,
+   incompleteContext:true
+  });
+  const tailRows=(tailResult.rows||[]).map(item=>({...item,graphId:item.graphId||scopedLineId(resultFrame,item.line)}));
+  const rows=[row,...branchRows,...tailRows].sort((a,b)=>a.line-b.line);
+  const combinedGraph=remapProofGraph(buildDraftGraph(proofScopeNames(frame),proofScopeFacts(frame),[row,...(tailResult.rows||[])],{goal}),frame);
+  return {rows,steps:[],complete:false,reusedRows:0,
+   openBindings:[...new Set([...inherited,...(tailResult.openBindings||[])])],
+   remainingGoal:tailResult.remainingGoal,graph:combinedGraph,term:null};
+ }
  return {rows:[row,...branchRows],steps:[],complete:false,reusedRows:0,
-  openBindings:[],remainingGoal:goal,graph,term:null};
+  openBindings:[...new Set(openBindings)],remainingGoal:goal,graph,term:null};
 }
 
 /**
  * Compile one scoped disjunction block and its parent continuation. Each arm
  * is elaborated in a forked identity context; only the common result returns.
  */
-export function compileCaseProgram(input,frame,{goal=null,choices=new Map(),lineOffset=0,closedNames=[]}={},compileSegment){
+export function compileCaseProgram(input,frame,{goal=null,choices=new Map(),lineOffset=0,closedNames=[],openBindings=[],incompleteContext=false}={},compileSegment){
  if((frame.id.match(/\/case:/g)||[]).length>=8)throw Error('Nested disjunction scope is limited to eight levels.');
  const parsed=parseBlock(input,lineOffset),sourceBinding=resolveProofName(frame,parsed.source);
  if(sourceBinding.status!=='resolved'||typeof sourceBinding.binding.type!=='string')
@@ -154,7 +173,7 @@ export function compileCaseProgram(input,frame,{goal=null,choices=new Map(),line
    id:childId+':binding',name:branch.name,type:branchTypes[branch.constructor],kind:'case-assumption'
   }});
   const body=branch.sourceLines.join('\n');
-  const result=compileSegment(body,child,{goal:parsed.type,choices,lineOffset:branch.bodyLineOffset,closedNames:[...closedNames,...parsed.branches.filter(b=>b!==branch&&b.name!==branch.name).map(b=>b.name)]});
+  const result=compileSegment(body,child,{goal:parsed.type,choices,lineOffset:branch.bodyLineOffset,closedNames:[...closedNames,...parsed.branches.filter(b=>b!==branch&&b.name!==branch.name).map(b=>b.name)],openBindings});
   if(!result.complete){
    const failed=result.rows.find(row=>row.status==='unresolved');
    firstOpen??=failed?{line:failed.line,reason:failed.reason}:{reason:'A case branch is still open.'};
@@ -177,17 +196,20 @@ export function compileCaseProgram(input,frame,{goal=null,choices=new Map(),line
   const closed=closeProofScope(frame,child,{proofType:parsed.type,dependencies:proofContextDependencies(result.graph),localIds});
   branchResults.push({branch:{...branch,type:branchTypes[branch.constructor]},child,result,closed});
  }
- if(firstOpen)return incomplete(input,parsed,branchResults,frame,goal,
-  (firstOpen.line?'Branch proof line '+firstOpen.line+': ':'')+(firstOpen.reason||'A case branch is still open.'));
+ if(firstOpen)return incomplete(input,parsed,branchResults,frame,{goal,choices,closedNames,openBindings,incompleteContext,
+  reason:(firstOpen.line?'Branch proof line '+firstOpen.line+': ':'')+(firstOpen.reason||'A case branch is still open.'),
+  preserveTail:true,compileSegment});
  const branches=branchResults.map(({branch,child,result,closed})=>({
   id:child.id,bindingId:child.localBindingIds[0],constructor:branch.constructor,name:branch.name,type:branch.type,goal:parsed.type,
   steps:result.steps,resultId:proofResultId(result.graph),dependencies:closed.dependencies,graph:result.graph,status:'complete'
  }));
  const branchDependencies=[...new Set(branches.flatMap(branch=>branch.dependencies))];
+ const inheritedOpenIds=new Set(openBindings.map(name=>resolveProofName(frame,name)).filter(result=>result.status==='resolved').map(result=>result.binding.id));
+ const proofStatus=branchDependencies.some(id=>inheritedOpenIds.has(id))?'depends-on-open':'candidate';
  const branchProofIds=branches.map(branch=>branch.resultId).filter(Boolean);
  const step={kind:'cases',source:parsed.source,name:parsed.resultName,type:parsed.type,branches};
  const caseRow={kind:'cases',name:parsed.resultName,type:parsed.type,raw:parsed.head.raw.trim(),line:parsed.head.line,
-  graphId:parentResultId,status:'translated',proofStatus:'candidate',step,branches,branchDependencies,branchProofIds,dependencies:[sourceBinding.binding.id,...branchDependencies,...branchProofIds]};
+  graphId:parentResultId,status:'translated',proofStatus,step,branches,branchDependencies,branchProofIds,dependencies:[sourceBinding.binding.id,...branchDependencies,...branchProofIds]};
  // Names introduced in a branch cannot be reinterpreted as unqualified
  // global rules after closure. Parent bindings retain their original meaning;
  // a fresh parent introduction may deliberately reuse a spelling.
@@ -213,13 +235,13 @@ export function compileCaseProgram(input,frame,{goal=null,choices=new Map(),line
   return null;
  }
  const escaping=freeClosed(compileFormula(parsed.type,{syntax:'lean'}).scoped);
- if(escaping)return incomplete(input,parsed,branchResults,frame,goal,'A branch-local name cannot occur in the parent result: '+escaping);
+ if(escaping)return incomplete(input,parsed,branchResults,frame,{goal,reason:'A branch-local name cannot occur in the parent result: '+escaping});
  let tailResult;
  if(parsed.tail.length){
-  tailResult=compileSegment(parsed.tail.map(x=>x.raw).join('\n'),resultFrame,{goal,choices,lineOffset:parsed.tailLineOffset,closedNames:[...expired]});
+  tailResult=compileSegment(parsed.tail.map(x=>x.raw).join('\n'),resultFrame,{goal,choices,lineOffset:parsed.tailLineOffset,closedNames:[...expired],openBindings,incompleteContext});
  }else{
-  if(goal&&!sameScopedFormula(parsed.type,goal))return incomplete(input,parsed,branchResults,frame,goal,
-   'The case result does not structurally match the enclosing goal; supply a parent continuation.');
+  if(goal&&!sameScopedFormula(parsed.type,goal))return incomplete(input,parsed,branchResults,frame,{goal,
+   reason:'The case result does not structurally match the enclosing goal; supply a parent continuation.'});
   tailResult={rows:[],steps:[{kind:'conclude',type:goal||null,application:parsed.resultName}],complete:true,
    graph:remapProofGraph(buildDraftGraph(proofScopeNames(resultFrame),proofScopeFacts(resultFrame),[],{goal}),resultFrame),
    openBindings:[],reusedRows:0,remainingGoal:goal};

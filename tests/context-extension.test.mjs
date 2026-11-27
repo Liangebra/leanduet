@@ -147,6 +147,57 @@ test('an open case branch does not hide the other branch semantic graph',()=>{
  assert.ok(node.branches.every(branch=>branch.graph));
 });
 
+test('an open branch preserves the parent continuation as dependent semantic structure',()=>{
+ const facts=new Map([['P','Prop'],['Q','Prop'],['R','Prop'],['S','Prop'],['h','P ∨ Q'],['g','Q → R'],['k','R → S']]);
+ const input='cases h, establish hR : $R$\n  left case hp\n    unsupported ⊛\n  right case hq\n    $R$ | g hq\n\nestablish r : $R$ | hR\n$S$ | from r and k';
+ const result=createDraftSession().evaluate(input,[...facts.keys()],facts,{goal:'S'});
+ const node=result.graph.nodes.find(n=>n.kind==='cases');
+ assert.equal(result.complete,false);
+ assert.equal(result.term,null);
+ assert.deepEqual(node.branches.map(branch=>branch.status),['open','complete']);
+ assert.deepEqual(result.rows.filter(row=>row.line>=7).map(row=>row.line),[7,8]);
+ assert.equal(result.rows.find(row=>row.line===7).proofStatus,'depends-on-open');
+ assert.equal(result.rows.find(row=>row.line===8).proofStatus,'depends-on-open');
+ const intermediate=result.graph.nodes.find(n=>n.id==='line:7');
+ const conclusion=result.graph.nodes.find(n=>n.id==='line:8');
+ assert.ok(intermediate.dependencies.includes(node.id),'the continuation cites the provisional common result');
+ assert.ok(conclusion.dependencies.includes(intermediate.id),'later prose remains connected to its local result');
+});
+
+test('resolving an open branch closes the provisional dependency and matches a cold evaluation',()=>{
+ const facts=new Map([['P','Prop'],['Q','Prop'],['R','Prop'],['h','P ∨ Q'],['f','P → R'],['g','Q → R']]);
+ const open='cases h, establish hR : $R$\n  left case hp\n    unsupported ⊛\n  right case hq\n    $R$ | g hq\n$R$ | hR';
+ const resolved=open.replace('unsupported ⊛','$R$ | f hp');
+ const session=createDraftSession();
+ assert.equal(session.evaluate(open,[...facts.keys()],facts,{goal:'R'}).complete,false);
+ const incremental=session.evaluate(resolved,[...facts.keys()],facts,{goal:'R'});
+ const cold=createDraftSession().evaluate(resolved,[...facts.keys()],facts,{goal:'R'});
+ assert.equal(incremental.complete,true);
+ assert.ok(incremental.term);
+ assert.equal(incremental.rows.at(-1).proofStatus,'candidate');
+ assert.equal(incremental.reusedRows,0,'case blocks currently use a full block evaluation');
+ assert.deepEqual(incremental.graph,cold.graph);
+ assert.deepEqual(incremental.rows,cold.rows);
+});
+
+test('a branch local name remains unavailable in a continuation after its branch is open',()=>{
+ const facts=new Map([['P','Prop'],['Q','Prop'],['R','Prop'],['h','P ∨ Q'],['g','Q → R']]);
+ const input='cases h, establish hR : $R$\n  left case hp\n    unsupported ⊛\n  right case hq\n    $R$ | g hq\n$R$ | hp';
+ const result=createDraftSession().evaluate(input,[...facts.keys()],facts,{goal:'R'});
+ assert.equal(result.complete,false);
+ assert.equal(result.term,null);
+ assert.match(result.rows.at(-1).reason,/unavailable local rule|forward local rule reference/);
+});
+
+test('an open upstream branch does not suppress final goal consistency checks',()=>{
+ const facts=new Map([['P','Prop'],['Q','Prop'],['R','Prop'],['h','P ∨ Q'],['g','Q → R'],['q','Q']]);
+ const input='cases h, establish hR : $R$\n  left case hp\n    unsupported ⊛\n  right case hq\n    $R$ | g hq\n$Q$ | q';
+ const result=createDraftSession().evaluate(input,[...facts.keys()],facts,{goal:'R'});
+ assert.equal(result.complete,false);
+ assert.match(result.rows.at(-1).reason,/remaining goal/);
+ assert.equal(result.rows.at(-1).status,'unresolved');
+});
+
 test('nested disjunctions preserve lexical branch scopes and match full recomputation',()=>{
  const facts=new Map([['P','Prop'],['Q','Prop'],['U','Prop'],['V','Prop'],['R','Prop'],['h','P ∨ Q'],['j','U ∨ V'],['f','P → U → R'],['g','P → V → R'],['k','Q → R']]);
  const input='分情况讨论 h，建立 hR : $R$\n  左支 hp\n    分情况讨论 j，建立 hpR : $R$\n      左支 hu\n        $R$ | f hp hu\n      右支 hv\n        $R$ | g hp hv\n    $R$ | hpR\n  右支 hq\n    $R$ | k hq\n$R$ | hR';

@@ -193,6 +193,11 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
             case_page.locator("#chainEditor summary").click()
             case_page.locator("#chainFormat").select_option("natural")
             case_text="分情况讨论 h，建立 hR : $R$\n  左支 hp\n    $R$ | f hp\n  右支 hq\n    $R$ | g hq\n$R$ | hR"
+            partial_case_text="分情况讨论 h，建立 hR : $R$\n  左支 hp\n    unsupported ⊛\n  右支 hq\n    $R$ | g hq\n$R$ | hR"
+            case_page.locator("#chainText").fill(partial_case_text)
+            expect(case_page.locator("#draftTranslation")).to_contain_text("inl hp : P ⊢ R · open")
+            expect(case_page.locator("#draftTranslation")).to_contain_text("Line 6 · translated · depends-on-open")
+            assert case_page.locator("#patchTerm").input_value()=="", "an open branch must not stage a Lean candidate"
             case_page.locator("#chainText").fill(case_text)
             expect(case_page.locator("#draftTranslation")).to_contain_text("cases h into inl hp: P / inr hq: Q")
             case_page.locator("#inferChain").click()
