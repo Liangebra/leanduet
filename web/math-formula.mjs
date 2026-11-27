@@ -108,7 +108,7 @@ export function parseFormula(input,{syntax='math'}={}){
       }
       left=body;
     }
-  }lse throw Error('Expected a formula at '+t.pos);
+  }else throw Error('Expected a formula at '+t.pos);
   while(true){
    t=peek();
    // Lean adjacency denotes application, unlike presentation math.
