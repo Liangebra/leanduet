@@ -288,7 +288,7 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
             operation_page.locator("#extractTerm").click()
             expect(operation_page.locator("#typedStatus")).to_contain_text("Extracted from Lean elaboration",timeout=60000)
             select_typed_edit(operation_page,summary="Introduce x")
-            expect(operation_page.locator("#patchTarget")).to_contain_text("∀")
+            expect(operation_page.locator("#patchTarget")).to_contain_text("Nat → P")
             operation_page.locator("#chainEditor summary").click()
             operation_page.locator("#chainFormat").select_option("natural")
             operation_text="""take an element z : $Nat$ satisfying $P$
