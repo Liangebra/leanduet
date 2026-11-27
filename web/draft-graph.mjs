@@ -43,7 +43,7 @@ export function buildDraftGraph(scope,facts,rows,{goal=null}={}){
     const candidateFormula=candidate.type?formula(candidate.type):null;
     return {id:id+':candidate:'+index,schema:candidate.schema,term:candidate.term,
      ...(candidate.choice?{choice:candidate.choice}:{}),...(candidate.type?{type:candidate.type,formula:candidateFormula}:{}),
-     dependencies:[...new Set([...refs(candidate.premises||[]),...(candidateFormula?.refs||[])])],
+     dependencies:[...new Set([...refs(candidate.premises||[]),...(candidateFormula?.refs||[]),...(candidate.restrictionDependencies||[])])],
      ...(candidate.constraints?{constraints:candidate.constraints}:{})};
    });
    declare({id,kind:'witness',name:step.name,type:step.type,raw:row.raw,modifiers:row.modifiers||[],formula:parsed,proofStatus:row.proofStatus,resolutionStatus:row.resolutionStatus||'candidate-unverified',status:row.status,alternatives,selectedCandidate:row.selectedChoice?alternatives.find(candidate=>candidate.choice===row.selectedChoice)?.id||null:null,scopeRefs:[...scopeRefs],dependencies:[...new Set([...scopeRefs,...sourceRefs,...parsed.refs])]});
@@ -54,7 +54,7 @@ export function buildDraftGraph(scope,facts,rows,{goal=null}={}){
   function alternative(c){
    const candidateFormula=c.type?formula(c.type):null;
    return {schema:c.schema,term:c.term,...(c.choice?{choice:c.choice}:{}),...(c.type?{type:c.type,formula:candidateFormula}:{}),
-    dependencies:[...new Set([...refs(c.premises||[]),...(candidateFormula?.refs||[])])],
+    dependencies:[...new Set([...refs(c.premises||[]),...(candidateFormula?.refs||[]),...(c.restrictionDependencies||[])])],
     ...(c.constraints?{constraints:c.constraints}:{})};
   }
   const alternatives=(row.candidates||[]).map((c,i)=>({id:id+':candidate:'+i,...alternative(c)}));
