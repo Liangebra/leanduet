@@ -18,6 +18,18 @@ uses the Lean precedences for `+` and union (65), and `*` and intersection
 (70), so mixed expressions preserve the parsed tree. This is syntax support;
 it does not by itself add union reasoning rules.
 
+Case scopes now resolve a branch-local declaration by lexical identity even
+when it shadows a parent spelling. Closing the branch discharges that local
+identity; a later parent continuation again resolves the original parent
+object. Repeated names in the root context remain ambiguous, and siblings may
+reuse a display name without sharing identity. The graph's positional context
+IDs are remapped through the visible scope projection, so a shadow does not
+redirect an inherited object to the wrong declaration. The bounded formula
+view still cannot preserve a parent free-name identity through arbitrary
+shadowing, so it refuses a shadow that would capture a name in the case goal
+or arm type; generated Lean remains a candidate until the separate compiler
+checks it.
+
 ## Merged foundation
 
 - PR [#22](https://github.com/Liangebra/leanduet/pull/22), merge `0eaf7dd`:

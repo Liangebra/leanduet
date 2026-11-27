@@ -188,6 +188,24 @@ with TemporaryDirectory() as tmp:
     subprocess.run(["lean",str(target)],cwd=root,check=True)
 print("Nested branch-local case elimination elaborates in the structured backend; only the common result escapes")
 
+# Lean permits a constructor-bound hypothesis to reuse a parent display name.
+# The semantic draft must give that local occurrence a fresh identity and
+# resolve the parent spelling again after both branch scopes close.
+shadow_script = """
+import {compileNaturalDraft} from './web/natural-draft.mjs';
+const facts=new Map([['P','Prop'],['Q','Prop'],['R','Prop'],['h','P ∨ Q'],['hp','Q'],['f','P → R'],['g','Q → R']]);
+const input='cases h, establish hR : $R$\\n  left case hp\\n    $R$ | f hp\\n  right case hp\\n    $R$ | g hp\\n$Q$ | hp';
+const result=compileNaturalDraft(input,[...facts.keys()],facts,{goal:'Q'});
+if(!result.complete||!result.term)throw new Error('Lexical case shadowing did not produce a complete candidate');
+console.log(JSON.stringify(result.term));
+"""
+shadow_term=json.loads(subprocess.run(["node","--input-type=module"],input=shadow_script,text=True,cwd=root,check=True,capture_output=True).stdout)
+with TemporaryDirectory() as tmp:
+    target=Path(tmp)/"ShadowedCase.lean"
+    target.write_text("theorem shadowed_case (P Q R : Prop) (h : P ∨ Q) (hp : Q) (f : P → R) (g : Q → R) : Q := "+shadow_term+"\n",encoding="utf-8")
+    subprocess.run(["lean",str(target)],cwd=root,check=True)
+print("A shadowed branch hypothesis compiles and the parent object is visible again after closure")
+
 # Negation introduction is intuitionistic: assume P and discharge the remaining
 # False goal from an explicit local implication P → False. A mere proof of P
 # must not be accepted as a proof of False. Ex-falso remains a separate rule.
