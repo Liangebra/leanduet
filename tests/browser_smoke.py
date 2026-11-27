@@ -247,7 +247,7 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
             set_source="""theorem predicate_intersection_left {α : Type} (A B : α → Prop) :
     ∀ x : α, A x ∧ B x → A x := by
   intro x
-  intro hz
+  intro hx
   exact And.left hx
 """
             case_page.locator("#lean").fill(set_source)
