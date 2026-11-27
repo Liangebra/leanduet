@@ -62,7 +62,7 @@ export function elementInterpretationCandidates(request,{goal=null,scope=[],fact
    const sourceType=facts.get(source);
    if(typeof sourceType!=='string')continue;
    let binding;
-   try{binding=existentialBindings(sourceType,{name:request.name});}catch{continue;}
+   try{binding=existentialBindings(sourceType,{name:request.name,type:request.type});}catch{continue;}
    if(!compatibleType(request.type,binding.type)||!sameScopedFormula(request.property,binding.evidenceType,{syntax:'lean'}))continue;
    const sourceId=scopeIds[index]||'name:'+source;
    let evidenceName='h_'+request.name;
