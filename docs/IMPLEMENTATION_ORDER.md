@@ -182,3 +182,9 @@ The cross-layer integration fixture compiles both correlated assignments using
 Lean and checks that inconsistent selections produce no exported fragment.
 Identity migration and cache replay tests exercise downstream choices that
 change an earlier inferred proposition.
+
+When all surviving proof candidates have the same scoped proposition type,
+the intermediate binding is retained as a typed open proof obligation. Later
+steps may depend on it but no complete fragment is exported until the proof
+choice is resolved. The workbench displays shared compatible assignments
+and supports atomic selection or clearing of a joint assignment.

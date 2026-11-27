@@ -138,7 +138,22 @@ export function draftProof(input,scope=[],context=new Map(),{choices=new Map(),c
      const {domain,candidates,constraints,group}=result;
      const picked=result.overflow?null:choices.has(line)?candidates.find(c=>c.term===choices.get(line)):candidates.length===1?candidates[0]:null;
      if(!picked){
-      unresolved(p,raw,line,last,{candidates,domain,constraints,constraintGroup:group,reason:result.reason||(choices.has(line)?'Selected proposition candidate is no longer compatible.':'Intermediate proposition is ambiguous; choose a candidate or add a structural constraint.')});
+      const details={candidates,domain,constraints,constraintGroup:group,reason:result.reason||(choices.has(line)?'Selected proposition candidate is no longer compatible.':'Intermediate proposition is ambiguous; choose a candidate or add a structural constraint.')};
+      // A type can be known even when the proof is not. Preserve a typed
+      // open obligation if every surviving candidate has the same scoped
+      // type; do not choose a proof merely because the types coincide.
+      if(!result.overflow&&!choices.has(line)&&candidates.length>1){
+       const type=candidates[0].type;
+       const canonical=JSON.stringify(compileFormula(type,{syntax:'lean'}).scoped);
+       if(candidates.every(c=>JSON.stringify(compileFormula(c.type,{syntax:'lean'}).scoped)===canonical)&&!unavailable(type)){
+        p={...p,type};
+        const step=makeStep(p,false,'?');
+        openNames.add(step.name);steps.push(step);
+        details.step=step;
+        details.reason='The proposition type is determined, but its proof is ambiguous; choose a proof candidate.';
+       }
+      }
+      unresolved(p,raw,line,last,details);
       continue;
      }
      p={...p,type:picked.type};

@@ -120,3 +120,30 @@ test('a changed downstream choice invalidates earlier cached assignments',()=>{
  assert.equal(r.reusedRows,0);assert.equal(r.rows[0].step.type,'Q');
  assert.deepEqual(r.rows,draftProof(text,scope,ctx,{choices:new Map([[2,'And.right k']])}).rows);
 });
+
+test('known type survives unresolved proof alternatives without exporting a proof',()=>{
+ const ctx=new Map([['h','P ∧ P'],['f','P → Q']]);
+ const text='建立 hp : $?$,由 h\n由 hp 与 f 得到 $Q$';
+ const r=draftProof(text,[...ctx.keys()],ctx);
+ assert.equal(r.complete,false);
+ assert.equal(r.term,null);
+ assert.equal(r.rows[0].step.type,'P');
+ assert.equal(r.rows[0].step.application,'?');
+ assert.equal(r.rows[0].candidates.length,2);
+ assert.equal(r.rows[0].proofStatus,'open');
+ assert.equal(r.rows[1].step.application,'f hp');
+ assert.equal(r.rows[1].proofStatus,'depends-on-open');
+ const resolved=draftProof(text,[...ctx.keys()],ctx,{choices:new Map([[1,'And.right h']])});
+ assert.equal(resolved.complete,true);
+ assert.equal(resolved.rows[0].step.application,'And.right h');
+});
+test('a typed open hole can provisionally supply a later projection source',()=>{
+ const ctx=new Map([['h','(P ∧ Q) ∧ (P ∧ Q)'],['f','P → R']]);
+ const text='建立 hpq : $?$,由 h\n建立 hp : $?$,由 hpq\n由 hp 与 f 得到 $R$';
+ const r=draftProof(text,[...ctx.keys()],ctx);
+ assert.equal(r.complete,false);
+ assert.equal(r.rows[0].step.application,'?');
+ assert.equal(r.rows[1].step.application,'And.left hpq');
+ assert.equal(r.rows[1].proofStatus,'depends-on-open');
+ assert.equal(r.rows[2].proofStatus,'depends-on-open');
+});

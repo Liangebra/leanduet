@@ -501,6 +501,8 @@ function previewDraft({edited=false}={}){
     }
     const r=draftSession.evaluate(input,scope,facts,{choices:draftChoices,goal:patchNode.type});
     draftIdentity=reconcileDraftIdentity(draftIdentity,r.graph);
+   const shownGroups=new Set();
+   function refreshChoice(){draftChoiceVersion++;$('chainBindings').replaceChildren();$('patchTerm').value='';$('patchTerm').dispatchEvent(new Event('input'));$('chainStatus').textContent='Candidate choice changed. Stage and check again.';previewDraft();}
    for(const x of r.rows){
      const d=element('div',undefined,'ruleResult');
      d.dataset.objectId=draftIdentity.ids.get('line:'+x.line)||'';
@@ -508,7 +510,28 @@ function previewDraft({edited=false}={}){
      if(x.step)d.append(element('code',['introduce','assume'].includes(x.step.kind)?'intro '+x.step.name:x.step.kind==='define'?'let '+x.step.name+' : '+x.step.type+' := '+x.step.value:x.step.kind==='establish'?'have '+x.step.name+' : '+x.step.type+' := '+x.step.application:'show '+x.step.type+'; '+x.step.application));
      if(x.reason)d.append(element('small',x.reason));
      if(x.constraints?.length)d.append(element('small','Later structural constraints: '+x.constraints.map(c=>'line '+c.line+' ('+c.status+')').join(', ')));
-     if(x.constraintGroup?.variables.length>1){const group=x.constraintGroup;d.append(element('small','Joint constraints · '+group.variables.map(v=>v.name).join(', ')+' · '+(group.status==='overflow'?'search incomplete':group.assignments.length+' compatible assignments')));}
+     if(x.constraintGroup?.variables.length>1){
+      const group=x.constraintGroup;
+      if(!shownGroups.has(group.id)){
+       shownGroups.add(group.id);
+       const details=element('details');
+       details.append(element('summary','Joint constraints · '+group.variables.map(v=>v.name).join(', ')+' · '+(group.status==='overflow'?'search incomplete':group.assignments.length+' compatible assignments')));
+       for(const assignment of group.assignments.slice(0,8)){
+        const item=element('div',undefined,'ruleResult');
+        item.append(element('code',assignment.map((term,i)=>group.variables[i].name+' := '+term).join(' · ')));
+        const use=element('button','Use this assignment');use.type='button';
+        use.onclick=()=>{if(!patchNode||!clean())return;group.variables.forEach((v,i)=>draftChoices.set(v.line,assignment[i]));refreshChoice();};
+        item.append(use);details.append(item);
+       }
+       if(group.assignments.length>8)details.append(element('small','Showing the first 8 assignments. Individual candidate choices can narrow the remaining possibilities.'));
+       if(group.variables.some(v=>draftChoices.has(v.line))){
+        const clear=element('button','Clear joint choices');clear.type='button';
+        clear.onclick=()=>{if(!patchNode||!clean())return;group.variables.forEach(v=>draftChoices.delete(v.line));refreshChoice();};
+        details.append(clear);
+       }
+       d.append(details);
+      }
+     }
      if(x.dependencies?.length)d.append(element('small','Depends on open obligations: '+x.dependencies.join(', ')));
      for(const c of x.candidates||[]){
       d.append(element('code',(c.type?c.type+' ← ':'')+c.term+' · '+c.schema));
@@ -518,8 +541,7 @@ function previewDraft({edited=false}={}){
       b.onclick=()=>{
        if(!patchNode||!clean())return;
        if(selected)draftChoices.delete(x.line);else draftChoices.set(x.line,c.term);
-       draftChoiceVersion++;$('chainBindings').replaceChildren();$('patchTerm').value='';$('patchTerm').dispatchEvent(new Event('input'));
-       $('chainStatus').textContent='Candidate choice changed. Stage and check again.';previewDraft();
+       refreshChoice();
       };
       d.append(b);
      }
