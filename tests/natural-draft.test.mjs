@@ -17,6 +17,16 @@ test('unknown assumptions do not vanish and block executable export',()=>{
  assert.equal(d.rows[0].raw,'uniformly $Q$');assert.equal(d.rows[1].status,'provisional');
 });
 
+test('a final inference must match the selected goal, up to bound-variable renaming',()=>{
+ const facts=new Map([['P','Prop'],['hp','P']]);
+ const mismatch=draftProof('$P$ | hp',['P','hp'],facts,{goal:'Q'});
+ assert.equal(mismatch.complete,false);
+ assert.equal(mismatch.term,null);
+ assert.match(mismatch.rows.at(-1).reason,/remaining goal/);
+ const alpha=draftProof('任取 x : $Nat$\n假设 hp : $P(x)$\n$P(x)$ | hp',['P'],new Map(),{goal:'∀ y : Nat, P y → P y'});
+ assert.equal(alpha.complete,true);
+});
+
 test('future intermediate names cannot masquerade as global declarations',()=>{
  const d=draftProof('$P$ | later\nestablish later : $Q$ | f\n$R$ | g',['f','g']);
  assert.equal(d.complete,false);

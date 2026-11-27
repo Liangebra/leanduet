@@ -64,3 +64,18 @@ test('branch-local candidate choices follow their scoped proof identity after li
  assert.deepEqual([...migrated].sort((a,b)=>a[0]-b[0]),[[4,'hp'],[6,'p1']]);
  assert.equal(shifted.ids.get('root/case:2:inl:binding'),old.ids.get('root/case:1:inl:binding'));
 });
+
+test('candidate selection and graph identities use physical lines inside branches and continuation',()=>{
+ const ctx=new Map([['P','Prop'],['Q','Prop'],['h','P ∨ Q'],['p1','P'],['p2','P']]);
+ const input='cases h, establish hR : $P$\n  left case hp\n    establish ha : $P$ | hp\n\n    $P$\n  right case hq\n    $P$\n$P$ | hR\n\n$P$';
+ const choices=new Map([[5,'hp'],[7,'p1'],[10,'hR']]);
+ const r=compileNaturalDraft(input,[...ctx.keys()],ctx,{goal:'P',choices});
+ assert.deepEqual(r.rows.map(row=>row.line),[1,3,5,7,8,10]);
+ assert.equal(r.rows.find(row=>row.line===5).step.application,'hp');
+ assert.equal(r.rows.find(row=>row.line===7).step.application,'p1');
+ assert.equal(r.rows.find(row=>row.line===10).step.application,'hR');
+ const before=reconcileDraftIdentity(null,r.graph);
+ const edited=input.replace('    establish ha : $P$ | hp\n\n','    establish ha : $P$ | hp\n\n\n');
+ const shifted=reconcileDraftIdentity(before,compileNaturalDraft(edited,[...ctx.keys()],ctx,{goal:'P',choices:new Map([[6,'hp'],[8,'p1'],[11,'hR']])}).graph);
+ assert.deepEqual([...migrateDraftChoices(before,shifted,choices)].sort((a,b)=>a[0]-b[0]),[[6,'hp'],[8,'p1'],[11,'hR']]);
+});

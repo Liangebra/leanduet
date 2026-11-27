@@ -97,6 +97,15 @@ export function renderFormula(ast){
 }
 export function compileFormula(text,options){const ast=parseFormula(text,options);return {ast,scoped:scopedFormula(ast),lean:renderFormula(ast)};}
 
+// Structural equivalence after binder names are converted to de Bruijn
+// indices. This is deliberately weaker than Lean definitional equality and
+// is suitable only for conservative draft-goal consistency checks.
+export function sameScopedFormula(left,right,{syntax='lean'}={}){
+ if(typeof left!=='string'||typeof right!=='string')return false;
+ try{return JSON.stringify(compileFormula(left,{syntax}).scoped)===JSON.stringify(compileFormula(right,{syntax}).scoped);}
+ catch{return false;}
+}
+
 
 // Bindings are a separate canonical syntax view. Bound occurrences use
 // de Bruijn indices; free names remain unresolved until Lean elaboration.
