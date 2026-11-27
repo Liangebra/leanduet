@@ -450,14 +450,20 @@ function evaluateScopeAware(input,scope=[],context=new Map(),options={}){
  }
  function combineSegments(prefix,result){
   const seenNodes=new Set(prefix.graph.nodes.map(node=>node.id));
-  const nodes=[...prefix.graph.nodes,...result.graph.nodes.filter(node=>!seenNodes.has(node.id))];
+  // The suffix graph is compiled in the extended lexical context. Its visible
+  // prefix declarations already have introduction nodes in prefix.graph, so
+  // keep only suffix proof nodes here instead of flattening that child context
+  // into the root context. The selected root target is the identity anchor;
+  // residual subgoals belong to their operation rows, not graph.goal.
+  const suffixNodes=result.graph.nodes.filter(node=>node.kind!=='context'&&!seenNodes.has(node.id));
+  const nodes=[...prefix.graph.nodes,...suffixNodes];
   const groups=new Map([...(prefix.graph.constraintGroups||[]),...(result.graph.constraintGroups||[])].map(group=>[group.id,group]));
   const complete=result.complete&&!prefix.rows.some(row=>row.status==='unresolved');
   const steps=[...prefix.steps,...result.steps];
   return {...result,rows:[...prefix.rows,...result.rows].sort((a,b)=>a.line-b.line),steps,complete,
    completionKind:complete?'structural-export-ready':'incomplete',reusedRows:(prefix.reusedRows||0)+(result.reusedRows||0),
    openBindings:[...new Set([...(prefix.openBindings||[]),...(result.openBindings||[])])],
-   graph:{...result.graph,nodes,constraintGroups:[...groups.values()]},term:complete?renderChain(steps):null};
+   graph:{...result.graph,goal:prefix.graph.goal,nodes,constraintGroups:[...groups.values()]},term:complete?renderChain(steps):null};
  }
  function segmentCacheKey(text,currentFrame,segmentOptions){
   const choices=[...(segmentOptions.choices||new Map())].sort(([left],[right])=>String(left).localeCompare(String(right)));
