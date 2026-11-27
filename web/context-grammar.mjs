@@ -16,6 +16,7 @@ const parse=s=>{
  if(parsedTypes.size>=256)parsedTypes.delete(parsedTypes.keys().next().value);
  parsedTypes.set(s,result);return result;
 };
+const isTypeLevelSort=raw=>/^(?:Prop|Type(?:\s+[A-Za-z0-9_'.]+)?|Sort(?:\s+[A-Za-z0-9_'.]+)?)$/.test(String(raw||'').trim());
 export function premiseFrame(text,scope){
  const m=/^(?:由|根据|利用|使用|from\s+|using\s+)(.+)$/iu.exec(text.trim());
  if(!m)return null;
@@ -38,10 +39,12 @@ function specialize(tree,witness,depth=0){
 export function contextCandidates(goal,names,facts){
  const target=parse(goal),out=[],seen=new Set();
  if(!target||!Array.isArray(names)||names.length<1||names.length>4||names.some(n=>!simple.test(n)))return out;
- const entries=names.map(name=>({name,type:parse(facts.get(name)||'')})).filter(entry=>entry.type);
- // A typed context can contain objects whose types are not propositions in
- // this small surface grammar (for example `P : Prop`). Ignore those entries
- // without letting them suppress candidates justified by supported premises.
+ const classified=names.map(name=>({name,raw:facts.get(name)||'',type:parse(facts.get(name)||'')}));
+ // Known Lean sorts describe types, not propositions, so they cannot be a
+ // premise for a proof rule. Other unparsed local types keep this search
+ // conservative because they may hide an additional supported reading.
+ if(classified.some(entry=>!entry.type&&!isTypeLevelSort(entry.raw)))return out;
+ const entries=classified.filter(entry=>entry.type);
  if(!entries.length)return out;
  function add(schema,rule,args){
   const term=[rule,...args].join(' ');
