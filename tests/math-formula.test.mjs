@@ -8,6 +8,10 @@ test('math expression grammar preserves precedence and binder structure',()=>{
  assert.equal(compileFormula(String.raw`\frac{a+b}{c} = d`).lean,'(((a + b) / c) = d)');
  assert.equal(compileFormula('f(g(x), y) = z').lean,'((f (g x) y) = z)');
 });
+test('Lean syntax accepts namespace-qualified references while presentation syntax stays narrow',()=>{
+ assert.equal(compileFormula('P (Nat.succ n)',{syntax:'lean'}).lean,'(P (Nat.succ n))');
+ assert.throws(()=>compileFormula('P (Nat.succ n)'));
+});
 test('unsupported, ambiguous and malformed formulas fail rather than guess',()=>{
  for(const t of ['2x','a < b < c',String.raw`\unknown{x}`,'a = (b','by exact h','a; b','x_{i}'])assert.throws(()=>compileFormula(t),undefined,t);
 });
