@@ -464,6 +464,61 @@ console.log(JSON.stringify(result.term));
                (pair.get("kind")=="opaque" and pair.get("truncated") is True),pair
     print("Lean-compiled aligned set case:",real_math_case["id"])
 
+
+# The shared subgoal engine models one bounded inductive constructor: explicit
+# induction over a universally quantified Nat target, with a local IH in the
+# successor branch and no branch-local object escaping to the parent.
+nat_induction_script="""
+import {compileNaturalDraft} from './web/natural-draft.mjs';
+const constant=compileNaturalDraft(`induction n
+  zero case
+    $Q$ | hq
+  successor case
+    $Q$ | ih`,['Q','hq'],new Map([['Q','Prop'],['hq','Q']]),{goal:'∀ n : Nat, Q'});
+const dependent=compileNaturalDraft(`对 n 归纳
+  基例
+    $0 = 0$ | rfl
+  归纳步
+    $n_step + 1 = n_step + 1$ | rfl`,[],new Map(),{goal:'∀ n : Nat, n = n'});
+const step=compileNaturalDraft(`induction n
+  zero case
+    $P(0)$ | hbase
+  successor case
+    $P(n_step + 1)$ | hstep n_step ih`,['P','hbase','hstep'],new Map([
+  ['P','Nat → Prop'],['hbase','P(0)'],['hstep','∀ k : Nat, P(k) → P(k + 1)']
+]),{goal:'∀ n : Nat, P(n)'});
+const nested=compileNaturalDraft(`induction n
+  zero case
+    induction m
+      zero case
+        $0 = 0$ | rfl
+      successor case
+        $m_step + 1 = m_step + 1$ | rfl
+  successor case
+    induction m
+      zero case
+        $0 = 0$ | rfl
+      successor case
+        $m_step + 1 = m_step + 1$ | rfl`,[],new Map(),{goal:'∀ n : Nat, ∀ m : Nat, m = m'});
+for(const result of [constant,dependent,step,nested])if(!result.complete||result.steps.at(-1)?.kind!=='nat-induction')throw new Error(JSON.stringify(result));
+if(!constant.rows[0].dependencies.includes('context:1'))throw new Error(JSON.stringify(constant.rows[0]));
+if(constant.rows[0].dependencies.some(id=>id.includes('/binding:')))throw new Error('Step-local objects escaped the induction operation');
+console.log(JSON.stringify([constant.term,dependent.term,step.term,nested.term]));
+"""
+induction_constant,induction_dependent,induction_step,induction_nested=json.loads(subprocess.run(
+    ["node","--input-type=module"],input=nat_induction_script,text=True,cwd=root,
+    check=True,capture_output=True).stdout)
+with TemporaryDirectory() as tmp:
+    target=Path(tmp)/"NatInduction.lean"
+    target.write_text("import Lean\ntheorem nat_induction_constant (Q : Prop) (hq : Q) : ∀ n : Nat, Q := "
+        +induction_constant+"\ntheorem nat_induction_reflexive : ∀ n : Nat, n = n := "
+        +induction_dependent+"\ntheorem nat_induction_step (P : Nat → Prop) (hbase : P 0) "
+        +"(hstep : ∀ k : Nat, P k → P (k + 1)) : ∀ n : Nat, P n := "
+        +induction_step+"\ntheorem nat_induction_nested : ∀ n : Nat, ∀ m : Nat, m = m := "
+        +induction_nested+"\n",encoding="utf-8")
+    subprocess.run(["lean",str(target)],cwd=root,check=True)
+print("Explicit Nat induction opens isolated base/successor goals and compiles in Lean")
+
 with TemporaryDirectory() as tmp:
     target=Path(tmp)/"IntuitionisticNegation.lean"
     target.write_text("theorem negation_intro (P : Prop) (hnot : P → False) : ¬ P := "+neg_term+"\n"
