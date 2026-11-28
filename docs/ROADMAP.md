@@ -8,6 +8,7 @@
 - Checked dependency-closed lemma abstraction and two-theorem factoring previews.
 - Scope-indexed substitution laws and native judgment encoding/decoding with fresh-context round-trip checks.
 - Experimental binary disjunction elimination, named local-lemma subproofs, bounded conjunction/equivalence subgoals, and explicit Nat induction use nested, isolated scopes. Existential construction is limited to an explicit typed local witness. Classical reductio is available only as an explicit named operation; induction and case analysis for other inductive types remain open.
+- Nat induction accepts only an explicit universal Nat target. Structural comparison of extracted proof terms ignores binder names, binder visibility annotations, and source metadata while retaining proof constructors and bound-variable occurrences; Lean elaboration and kernel checking remain separate.
 
 ## Experimental track
 
