@@ -102,6 +102,14 @@ export function renderChain(steps){
       const body=renderChain(s.subgoals?.[0]?.steps||[]).split('\n').slice(1);
       lines.push(...body.map(line=>'  '+line));
     }
+    else if(s.kind==='nat-induction'){
+      lines.push('  intro '+s.inductionVariable,'  induction '+s.inductionVariable+' with','  | zero =>');
+      const base=renderChain(s.subgoals?.find(goal=>goal.id==='base')?.steps||[]).split('\n').slice(1);
+      lines.push(...base.map(line=>'  '+line));
+      lines.push('  | succ '+s.goalOperation.stepName+' '+s.goalOperation.inductionHypothesisName+' =>');
+      const successor=renderChain(s.subgoals?.find(goal=>goal.id==='successor')?.steps||[]).split('\n').slice(1);
+      lines.push(...successor.map(line=>'  '+line));
+    }
     else if(s.kind==='local-lemma'){
       lines.push('  have '+s.name+' : '+s.type+' := by');
       const body=renderChain(s.subgoals?.[0]?.steps||[]).split('\n').slice(1);
