@@ -80,7 +80,7 @@ export function reconcileDraftIdentity(previous,graph){
   const oldContext=new Map(oldRoot.filter(n=>n.kind==='context').map(n=>[n.id,n]));
   for(const node of nowRoot.filter(n=>n.kind==='context')){
    const prior=oldContext.get(node.id);
-   if(prior&&same([prior.name,prior.type,prior.ambiguousName],[node.name,node.type,node.ambiguousName]))mapToPrior(node.id,prior.id);
+   if(prior&&prior.name===node.name&&sameTypeText(prior.type,node.type)&&prior.ambiguousName===node.ambiguousName)mapToPrior(node.id,prior.id);
    else ids.set(node.id,fresh());
   }
  }
