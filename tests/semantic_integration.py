@@ -20,6 +20,16 @@ assert any(n["kind"]=="apply" and "hqr" in n.get("reference","") for n in nodes)
 assert any(n["kind"]=="apply" and "hpq" in n.get("reference","") for n in nodes),nodes
 print("Actual elaborated proof term extracted:",len(nodes),"nodes")
 
+# The readable type keeps source binder names; its structural companion erases
+# only binder display names and metadata. Bound-variable occurrences remain.
+alpha_x=extract("theorem alpha_type_x : ∀ x : Nat, x = x := by\n  intro x\n  rfl\n")
+alpha_y=extract("theorem alpha_type_y : ∀ y : Nat, y = y := by\n  intro y\n  rfl\n")
+other_shape=extract("theorem different_type_shape : ∀ x : Nat, True := by\n  intro x\n  trivial\n")
+assert alpha_x["tree"]["type"]!=alpha_y["tree"]["type"],(alpha_x,alpha_y)
+assert alpha_x["tree"]["typeShape"]==alpha_y["tree"]["typeShape"],(alpha_x,alpha_y)
+assert alpha_x["tree"]["typeShape"]!=other_shape["tree"]["typeShape"],(alpha_x,other_shape)
+print("Lean type shapes distinguish formula structure while ignoring binder display names")
+
 
 from semantic import patch
 source2 = """theorem patch_example (P Q R : Prop) (hpq : P → Q) (hqr : Q → R) (hq : Q) : P → R := by
