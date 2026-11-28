@@ -26,10 +26,11 @@ fragment export; explicit formula-only obligations may be exported as
 
 ## Cross-revision identity
 
-Draft correspondence compares parsed goal formulas by their scoped AST. A
-change to a bound variable's display spelling therefore preserves the
-surrounding revision-local identities when the parsed structures are otherwise
-the same. This is alpha correspondence only: it does not identify logically
-equivalent formulas, establish Lean definitional equality, rename source text,
-or certify that a proof narrative is faithful. An unsupported or structurally
-changed goal is treated as a different target and retires the old identities.
+Draft correspondence compares goal formulas and context types by their
+scoped AST. A change to a bound variable's display spelling therefore preserves
+revision-local identities when the parsed structures are otherwise the same.
+Free names and context declaration names remain significant. This is alpha
+correspondence only: it does not identify logically equivalent formulas,
+establish Lean definitional equality, rename source text, or certify that a
+proof narrative is faithful. Unsupported or structurally changed targets or
+types do not retain correspondence.
