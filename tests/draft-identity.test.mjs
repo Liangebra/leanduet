@@ -107,3 +107,101 @@ test('candidate choices inside child goals follow a unique unchanged subgoal aft
  assert.equal(shifted.ids.get('root/subgoal:1:first/line:4'),old.ids.get('root/subgoal:1:first/line:3'));
  assert.deepEqual([...migrateDraftChoices(old,shifted,choices)],[[4,'p1']]);
 });
+
+
+const goalGraph=(goal,type='Nat')=>({schema:1,identity:'revision-local',goal,nodes:[
+ {id:'context:0',kind:'context',name:'h',type,ambiguousName:false}
+]});
+test('alpha-renaming a bound goal variable preserves the surrounding object identity',()=>{
+ const original=reconcileDraftIdentity(null,goalGraph('∀ n : Nat, n = n'));
+ const renamed=reconcileDraftIdentity(original,goalGraph('∀ k : Nat, k = k'));
+ assert.equal(renamed.ids.get('context:0'),original.ids.get('context:0'));
+ assert.equal(renamed.matches.get('context:0'),'context:0');
+});
+test('alpha-renaming a binder inside a context type preserves identity but a structural type change retires it',()=>{
+ const original=reconcileDraftIdentity(null,goalGraph('R','∀ n : Nat, n = n'));
+ const renamed=reconcileDraftIdentity(original,goalGraph('R','∀ k : Nat, k = k'));
+ assert.equal(renamed.ids.get('context:0'),original.ids.get('context:0'));
+ assert.equal(renamed.matches.get('context:0'),'context:0');
+ const changed=reconcileDraftIdentity(original,goalGraph('R','∀ k : Nat, k + 1 = k'));
+ assert.notEqual(changed.ids.get('context:0'),original.ids.get('context:0'));
+ assert.equal(changed.matches.has('context:0'),false);
+});
+test('changing a bound goal proposition retires identities even when its binder is renamed',()=>{
+ const original=reconcileDraftIdentity(null,goalGraph('∀ n : Nat, n = n'));
+ const changed=reconcileDraftIdentity(original,goalGraph('∀ k : Nat, k + 1 = k'));
+ assert.notEqual(changed.ids.get('context:0'),original.ids.get('context:0'));
+ assert.equal(changed.matches.has('context:0'),false);
+});
+
+test('alpha-renamed nested goal scopes reconcile against their shared parent objects',()=>{
+ const makeGraph=(goal,childGoal,scopeId)=>({
+  schema:1,identity:'revision-local',goal,nodes:[
+   {id:'context:0',kind:'context',name:'h',type:'Nat',ambiguousName:false},
+   {id:'line:1',kind:'and-intro',origin:'and-intro',raw:'split conjunction',scopeRefs:[],dependencies:[],
+    formula:{tree:{kind:'id',value:'P'}},value:null,alternatives:[],
+    goalOperation:{kind:'conjunction-introduction',subgoals:[
+     {id:'first',scopeId,goal:childGoal,contextDelta:[]}
+    ]},
+    subgoals:[{id:scopeId,key:'first',kind:'subgoal',goal:childGoal,dependencies:[],graph:{
+     goal:childGoal,nodes:[{id:'context:0',kind:'context',name:'h',type:'Nat',ambiguousName:false}]
+    }}]
+   }
+  ]
+ });
+ const original=reconcileDraftIdentity(null,makeGraph('∀ n : Nat, n = n','∀ n : Nat, n = n','root/subgoal:1:first'));
+ const renamed=reconcileDraftIdentity(original,makeGraph('∀ k : Nat, k = k','∀ k : Nat, k = k','root/subgoal:1:first'));
+ assert.equal(renamed.ids.get('context:0'),original.ids.get('context:0'));
+ assert.equal(renamed.ids.get('root/subgoal:1:first'),original.ids.get('root/subgoal:1:first'));
+});
+
+test('renaming an operation-local assumption preserves its scoped object identity',()=>{
+ const scope=['h'],facts=new Map([['h','¬ ¬ P']]);
+ const source='classical reductio hnot\n  contradiction\n    $False$ | h hnot';
+ const renamed=source.replaceAll('hnot','notP');
+ const original=compileNaturalDraft(source,scope,facts,{goal:'P'});
+ const edited=compileNaturalDraft(renamed,scope,facts,{goal:'P'});
+ assert.equal(original.complete,true,JSON.stringify(original.rows,null,2));
+ assert.equal(edited.complete,true,JSON.stringify(edited.rows,null,2));
+ const before=reconcileDraftIdentity(null,original.graph);
+ const after=reconcileDraftIdentity(before,edited.graph);
+ const oldOperation=original.graph.nodes.find(node=>node.kind==='classical-reductio');
+ const newOperation=edited.graph.nodes.find(node=>node.kind==='classical-reductio');
+ const oldBinding=original.rows[0].subgoals[0].graph.nodes.find(node=>node.kind==='context'&&node.name==='hnot');
+ const newBinding=edited.rows[0].subgoals[0].graph.nodes.find(node=>node.kind==='context'&&node.name==='notP');
+ assert.ok(oldOperation&&newOperation&&oldBinding&&newBinding);
+ assert.equal(after.ids.get(newOperation.id),before.ids.get(oldOperation.id));
+ assert.equal(after.ids.get(newBinding.id),before.ids.get(oldBinding.id));
+});
+test('subgoal-local assumption identities survive unrelated source-line shifts',()=>{
+ const scope=['h'],facts=new Map([['h','¬ ¬ P']]);
+ const source='classical reductio hnot\n  contradiction\n    $False$ | h hnot';
+ const original=compileNaturalDraft(source,scope,facts,{goal:'P'});
+ assert.equal(original.complete,true,JSON.stringify(original.rows,null,2));
+ const old=reconcileDraftIdentity(null,original.graph);
+ const oldBinding=original.rows[0].subgoals[0].graph.nodes.find(node=>node.kind==='context'&&node.name==='hnot');
+ assert.ok(oldBinding);
+ const shifted=compileNaturalDraft('\n'+source,scope,facts,{goal:'P'});
+ const current=reconcileDraftIdentity(old,shifted.graph);
+ const newBinding=shifted.rows[0].subgoals[0].graph.nodes.find(node=>node.kind==='context'&&node.name==='hnot');
+ assert.ok(newBinding);
+ assert.notEqual(newBinding.id,oldBinding.id,'the source path shifts with the block');
+ assert.equal(current.ids.get(newBinding.id),old.ids.get(oldBinding.id),
+  'the same scoped assumption retains identity after a harmless line insertion');
+});
+
+
+test('renaming a universal-introduction variable preserves its object and dependent uses',()=>{
+ const scope=['hall'],facts=new Map([['hall','∀ x : Nat, P x']]);
+ const make=name=>compileNaturalDraft(`take ${name} : $Nat$\n$P(${name})$ | hall ${name}`,scope,facts,
+  {goal:`∀ ${name} : Nat, P ${name}`});
+ const original=make('n'),renamed=make('k');
+ assert.equal(original.complete,true,JSON.stringify(original.rows,null,2));
+ assert.equal(renamed.complete,true,JSON.stringify(renamed.rows,null,2));
+ const before=reconcileDraftIdentity(null,original.graph);
+ const after=reconcileDraftIdentity(before,renamed.graph);
+ assert.equal(after.ids.get('line:1'),before.ids.get('line:1'),
+  'the explicit universal binder keeps identity when its display name changes');
+ assert.equal(after.ids.get('line:2'),before.ids.get('line:2'),
+  'a later use follows the introduced object identity, not the old spelling');
+});

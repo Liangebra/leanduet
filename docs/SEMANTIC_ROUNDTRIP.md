@@ -23,3 +23,16 @@ as a tentative local binding. Subsequent candidate applications expose direct
 and transitive dependence on open obligations. Unresolved prose still blocks
 fragment export; explicit formula-only obligations may be exported as
 `exact?` searches, never as checked proofs.
+
+## Cross-revision identity
+
+Draft correspondence compares goal formulas and context types by their
+scoped AST. A change to a bound variable's display spelling therefore preserves
+revision-local identities when the parsed structures are otherwise the same.
+Parent context names remain significant. Names attached to goal-operation
+binders are normalized to their binding slot in that operation's identity key;
+their later uses must still match through the resulting local identity and type.
+This is alpha correspondence only: it does not identify logically equivalent formulas,
+establish Lean definitional equality, rename source text, or certify that a
+proof narrative is faithful. Unsupported or structurally changed targets or
+types do not retain correspondence.
