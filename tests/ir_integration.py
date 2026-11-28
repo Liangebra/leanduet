@@ -1,5 +1,6 @@
 """Actual structural Lean judgment and formula elaboration, independent of pretty printing."""
 from pathlib import Path
+from tempfile import TemporaryDirectory
 import json, subprocess, sys
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from semantic import extract,inspect_ir
@@ -210,3 +211,172 @@ fresh_shadow_native_type = check_browser_formula(
 assert erase_native_binder_names(shadowed_native_type) == erase_native_binder_names(fresh_shadow_native_type)
 
 print("Browser formula binders retain de Bruijn identity through Lean elaboration and native IR")
+
+
+# Issue #10: lower the browser's versioned closed Nat/Prop projection into the
+# existing typed Lean fragment. A second lowering from the browser's original
+# scoped AST checks erasure independently.
+scoped_bridge_script = """
+import {toScopedSemantics} from './web/math-formula.mjs';
+let input = '';
+for await (const chunk of process.stdin) input += chunk;
+console.log(JSON.stringify(toScopedSemantics(JSON.parse(input))));
+"""
+
+def compile_scoped_browser_formula(text):
+    result = subprocess.run(
+        ["node", "--input-type=module", "-e", scoped_bridge_script],
+        input=json.dumps(text),
+        text=True,
+        capture_output=True,
+        cwd=Path(__file__).resolve().parents[1],
+        check=True,
+    )
+    return json.loads(result.stdout)
+
+def fin_literal(index, context_size):
+    assert isinstance(index, int) and 0 <= index < context_size, (index, context_size)
+    return f"(⟨{index}, by decide⟩ : Fin {context_size})"
+
+def lean_nat_expr(node, context_size):
+    kind=node["kind"]
+    if kind=="var":
+        return (
+            "(LeanDuet.ScopedSemantics.NatExpr.var "+fin_literal(node["index"],context_size)
+            +" : LeanDuet.ScopedSemantics.NatExpr "+str(context_size)+")"
+        )
+    if kind=="zero":
+        return "(LeanDuet.ScopedSemantics.NatExpr.zero : LeanDuet.ScopedSemantics.NatExpr "+str(context_size)+")"
+    if kind=="add":
+        left=lean_nat_expr(node["left"],context_size)
+        right=lean_nat_expr(node["right"],context_size)
+        return (
+            "(LeanDuet.ScopedSemantics.NatExpr.add ("+left+") ("+right+")"
+            +" : LeanDuet.ScopedSemantics.NatExpr "+str(context_size)+")"
+        )
+    raise AssertionError("Unexpected projected NatExpr node: "+repr(node))
+
+def lean_formula(node, context_size):
+    kind=node["kind"]
+    formula_type="LeanDuet.ScopedSemantics.Formula "+str(context_size)
+    if kind=="truth":
+        return "(LeanDuet.ScopedSemantics.Formula.truth : "+formula_type+")"
+    if kind=="falsity":
+        return "(LeanDuet.ScopedSemantics.Formula.falsity : "+formula_type+")"
+    if kind=="equal":
+        left=lean_nat_expr(node["left"],context_size)
+        right=lean_nat_expr(node["right"],context_size)
+        return (
+            "(LeanDuet.ScopedSemantics.Formula.equal ("+left+") ("+right+")"
+            +" : "+formula_type+")"
+        )
+    if kind in ("and","imp"):
+        left=lean_formula(node["left"],context_size)
+        right=lean_formula(node["right"],context_size)
+        constructor="and" if kind=="and" else "imp"
+        return (
+            "(LeanDuet.ScopedSemantics.Formula."+constructor+" ("+left+") ("+right+")"
+            +" : "+formula_type+")"
+        )
+    if kind=="all":
+        body=lean_formula(node["body"],context_size+1)
+        return (
+            "(LeanDuet.ScopedSemantics.Formula.all ("+body+" : "
+            +"LeanDuet.ScopedSemantics.Formula "+str(context_size+1)+")"
+            +" : "+formula_type+")"
+        )
+    raise AssertionError("Unexpected projected Formula node: "+repr(node))
+
+def lean_erased_nat_expr(node, context_size):
+    kind=node["kind"]
+    if kind=="bound":
+        return (
+            "(LeanDuet.Scoped.Term.var "+fin_literal(node["index"],context_size)
+            +" : LeanDuet.Scoped.Term "+str(context_size)+")"
+        )
+    if kind=="number" and node["value"]=="0":
+        return "(LeanDuet.Scoped.Term.atom \"Nat.zero\" : LeanDuet.Scoped.Term "+str(context_size)+")"
+    if kind=="binary" and node["op"]=="+":
+        left=lean_erased_nat_expr(node["left"],context_size)
+        right=lean_erased_nat_expr(node["right"],context_size)
+        return (
+            "(LeanDuet.Scoped.Term.binary \"Nat.add\" ("+left+") ("+right+")"
+            +" : LeanDuet.Scoped.Term "+str(context_size)+")"
+        )
+    raise AssertionError("Unexpected browser Nat expression: "+repr(node))
+
+def lean_erased_formula(node, context_size):
+    kind=node["kind"]
+    term_type="LeanDuet.Scoped.Term "+str(context_size)
+    if kind=="free" and node["name"] in ("True","False"):
+        return "(LeanDuet.Scoped.Term.atom \""+node["name"]+"\" : "+term_type+")"
+    if kind=="binder" and node["op"]=="∀" and node["domain"]=={"kind":"free","name":"Nat"}:
+        body=lean_erased_formula(node["body"],context_size+1)
+        return (
+            "(LeanDuet.Scoped.Term.bind \"∀ Nat\""
+            +" (LeanDuet.Scoped.Term.atom \"Nat\" : "+term_type+")"
+            +" ("+body+" : LeanDuet.Scoped.Term "+str(context_size+1)+")"
+            +" : "+term_type+")"
+        )
+    if kind=="binary":
+        constructors={"=":"Eq","∧":"And","→":"Imp"}
+        assert node["op"] in constructors,node
+        if node["op"]=="=":
+            left=lean_erased_nat_expr(node["left"],context_size)
+            right=lean_erased_nat_expr(node["right"],context_size)
+        else:
+            left=lean_erased_formula(node["left"],context_size)
+            right=lean_erased_formula(node["right"],context_size)
+        return (
+            "(LeanDuet.Scoped.Term.binary \""+constructors[node["op"]]+"\""
+            +" ("+left+") ("+right+") : "+term_type+")"
+        )
+    raise AssertionError("Unexpected browser formula node: "+repr(node))
+
+bridge_inputs = {
+    "nested": r"\forall n : \mathbb{N}, \forall m : \mathbb{N}, n + m = n + m",
+    "alpha": r"\forall i : \mathbb{N}, \forall j : \mathbb{N}, i + j = i + j",
+    "shadow": r"\forall n : \mathbb{N}, \forall n : \mathbb{N}, n = n",
+    "shadow_fresh": r"\forall outer : \mathbb{N}, \forall inner : \mathbb{N}, inner = inner",
+    "connectives": r"\forall n : \mathbb{N}, n = 0 \to (n + 0 = n \land n = n)",
+    "truth": r"\top",
+    "falsity": r"\bot",
+}
+bridge = {}
+for name, formula_text in bridge_inputs.items():
+    candidate=compile_browser_formula(formula_text)
+    projected=compile_scoped_browser_formula(formula_text)
+    assert projected["schema"]=="leanduet.scoped-semantics.formula",projected
+    assert projected["version"]==1 and projected["contextSize"]==0,projected
+    bridge[name]={"candidate":candidate,"projected":projected}
+assert bridge["nested"]["projected"]["formula"]==bridge["alpha"]["projected"]["formula"]
+assert bridge["shadow"]["projected"]["formula"]==bridge["shadow_fresh"]["projected"]["formula"]
+
+lean_checks=[]
+for name, item in bridge.items():
+    core=lean_formula(item["projected"]["formula"],0)
+    erased=lean_erased_formula(item["candidate"]["scoped"],0)
+    lean_checks.append(
+        "example : LeanDuet.ScopedSemantics.eraseFormula ("+core
+        +" : LeanDuet.ScopedSemantics.Formula 0) = ("+erased
+        +" : LeanDuet.Scoped.Term 0) := by rfl"
+    )
+    lean_checks.append(
+        "example : LeanDuet.ScopedSemantics.denote ("+core
+        +" : LeanDuet.ScopedSemantics.Formula 0) (fun i => Fin.elim0 i) ↔ (("
+        +item["candidate"]["lean"]+" : Prop)) := by rfl"
+    )
+for left,right in (("nested","alpha"),("shadow","shadow_fresh")):
+    left_core=lean_formula(bridge[left]["projected"]["formula"],0)
+    right_core=lean_formula(bridge[right]["projected"]["formula"],0)
+    lean_checks.append(
+        "example : ("+left_core+" : LeanDuet.ScopedSemantics.Formula 0) = ("
+        +right_core+" : LeanDuet.ScopedSemantics.Formula 0) := by rfl"
+    )
+root=Path(__file__).resolve().parents[1]
+scoped_source=(root/"lean"/"Scoped.lean").read_text(encoding="utf-8")
+with TemporaryDirectory() as tmp:
+    target=Path(tmp)/"BrowserScopedSemanticsBridge.lean"
+    target.write_text(scoped_source+"\n\n"+"\n".join(lean_checks)+"\n",encoding="utf-8")
+    subprocess.run(["lean",str(target)],cwd=root,check=True,capture_output=True,text=True)
+print("Browser AST projection agrees with ScopedSemantics syntax, erasure, and denotation on the tested fragment")

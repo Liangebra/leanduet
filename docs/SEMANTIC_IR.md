@@ -9,7 +9,7 @@ LeanDuet currently has several representations, not a single completed bidirecti
 - surface formula AST and controlled proof-chain syntax: parsed input before elaboration;
 - TMN / Dependent / Scoped Lean models: mathematical specifications of supported operations.
 
-Do not conflate these. The next integration target is a versioned typed semantic IR whose occurrence identity is distinct from definitional equality and which retains source provenance. Language packs are concrete syntaxes, not extensions to the Lean kernel.
+Do not conflate these. The bounded browser-to-ScopedSemantics projection below is a first typed fragment and test bridge; it is not a completed bidirectional IR. The wider integration target remains a versioned semantic IR whose occurrence identity is distinct from definitional equality and which retains source provenance. Language packs are concrete syntaxes, not extensions to the Lean kernel.
 
 ## Categorical basis
 
@@ -23,7 +23,7 @@ Do not conflate these. The next integration target is a versioned typed semantic
 
 lean/Scoped.lean defines Term n with Fin n variables and binders whose bodies are in Term (n+1). Renaming lifts under binders; simultaneous substitution shifts inserted terms to avoid capture. The model states renaming identity/composition and identity substitution. The concrete families model defines reindexing, its identity/composition and the projection/eta equations for dependent context extension. These are small scope and context laws, not an initiality theorem, complete CwF formalization, or full Lean calculus.
 
-The browser formula parser also produces a canonical scoped view using de Bruijn indices; it retains original names in the surface AST for display and source output. Alpha-equivalent bound names produce identical scoped views, while free names remain unresolved until Lean. The built-in unary spellings `Not P` and `¬ P` share one scoped form; this is a syntax alias, not general definitional equality. The JS implementation is tested but has not been proved equivalent to the Lean model.
+The browser formula parser also produces a canonical scoped view using de Bruijn indices; it retains original names in the surface AST for display and source output. Alpha-equivalent bound names produce identical scoped views, while free names remain unresolved until Lean. The built-in unary spellings `Not P` and `¬ P` share one scoped form; this is a syntax alias, not general definitional equality. The general JS canonicalizer is not proved equivalent to the Lean model; the partial browser projection below is checked only on its stated fragment.
 
 `lean/Scoped.lean` also defines a separate intrinsically typed fragment for
 natural-number expressions and first-order propositions with equality,
@@ -37,9 +37,29 @@ AST or arbitrary Lean `Expr`. It excludes dependent object domains, general
 predicates, constants, partial syntax and the full Lean type system. CI
 compiles the model with the existing `lean/Scoped.lean` check.
 
+
+## Browser formula projection to the typed scoped fragment
+
+The browser exports `toScopedSemantics`, a partial structural map from a
+closed surface formula to versioned JSON with an explicit context size and
+de Bruijn indices. It accepts only explicit Nat binders, bound Nat variables,
+zero, addition, equality, conjunction, implication, truth, and falsity. An
+unannotated binder, free identifier or predicate, nonzero numeral, existential
+or other unsupported operator returns a coded `ScopedSemanticsError`; the
+projection does not infer a domain or declaration identity.
+
+The integration check independently lowers the returned versioned nodes into
+`LeanDuet.ScopedSemantics.Formula` and the browser's original scoped AST into
+generic `LeanDuet.Scoped.Term`. Lean checks erasure equality and that the
+typed fragment's denotation is definitionally equivalent to the browser
+renderer on nested binders, alpha-renaming, same-name shadowing, arithmetic,
+connectives, truth, and falsity. This is a one-way, closed-formula regression
+bridge. It is not a general decoder, not a Lean Expr codec, and not a
+natural-language or proof-route correspondence.
+
 ## Integration plan
 
-Define a context-indexed typed signature with distinct object, proposition, proof and hole sorts. Connect native Expr export with explicit binding identity and universe data. Define a type-preserving elaboration relation from surface syntax, retaining alternative parses if not unique. A local edit becomes a partial context morphism and checked replacement, preserving the surrounding proof complement. Establish substitution composition and then a theorem connecting the actual serialized representation to its Lean interpretation. Only after this link should we claim end-to-end semantic correctness.
+Extend the closed Nat/Prop projection to explicitly typed local contexts and stable object identities. Then connect native Expr export with explicit binding identity and universe data. Define a type-preserving elaboration relation from surface syntax, retaining alternative parses if not unique. A local edit becomes a partial context morphism and checked replacement, preserving the surrounding proof complement. Establish substitution composition and then a theorem connecting the actual serialized representation to its Lean interpretation. Only after this link should we claim end-to-end semantic correctness.
 
 Regex is useful for lexical tokens and finite controlled phrase boundaries; a recursive parser is needed for nested formulas and binders. Plain LaTeX does not uniquely determine mathematical semantics; explicit typed annotations, context and user disambiguation are necessary. Lean LSP identifier completion and bounded proof search are complementary, not the same operation.
 

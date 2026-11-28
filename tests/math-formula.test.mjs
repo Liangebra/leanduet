@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {compileFormula,sameScopedFormula} from '../web/math-formula.mjs';
+import {compileFormula,sameScopedFormula,toScopedSemantics} from '../web/math-formula.mjs';
 test('math expression grammar preserves precedence and binder structure',()=>{
  assert.equal(compileFormula(String.raw`$b = a$`).lean,'(b = a)');
  assert.equal(compileFormula(String.raw`P \land Q \to R`).lean,'((P ∧ Q) → R)');
@@ -103,4 +103,35 @@ test('Lean presentation round trips preserve application and binder structure',(
  }
  assert.throws(()=>compileFormula('P x'));
  assert.throws(()=>compileFormula('f (x,y)',{syntax:'lean'}));
+});
+
+
+test('bounded scoped semantic projection retains typed constructors and bound identity',()=>{
+ const projected=toScopedSemantics('∀ n : Nat, ∀ m : Nat, n + m = n + m');
+ const v1={kind:'var',index:1},v0={kind:'var',index:0};
+ const sum={kind:'add',left:v1,right:v0};
+ assert.deepEqual(projected,{
+  schema:'leanduet.scoped-semantics.formula',
+  version:1,
+  contextSize:0,
+  formula:{kind:'all',body:{kind:'all',body:{kind:'equal',left:sum,right:sum}}}
+ });
+ const alpha=toScopedSemantics('∀ i : Nat, ∀ j : Nat, i + j = i + j');
+ assert.deepEqual(projected,alpha);
+ const shadow=toScopedSemantics('∀ n : Nat, ∀ n : Nat, n = n');
+ const fresh=toScopedSemantics('∀ outer : Nat, ∀ inner : Nat, inner = inner');
+ assert.deepEqual(shadow,fresh);
+ assert.notDeepEqual(shadow,projected);
+});
+
+test('scoped semantic projection reports unsupported mathematics instead of guessing',()=>{
+ const cases=[
+  ['∃ n : Nat, n = 0','unsupported-quantifier'],
+  ['∀ n : Nat, P(n)','unsupported-predicate'],
+  ['∀ n, n = n','missing-domain-annotation'],
+  ['∀ n : Nat, n = 1','unsupported-literal'],
+  ['∀ n : Int, n = n','unsupported-binder-domain']
+ ];
+ for(const [formula,code] of cases)
+  assert.throws(()=>toScopedSemantics(formula),error=>error?.name==='ScopedSemanticsError'&&error.code===code,formula);
 });
