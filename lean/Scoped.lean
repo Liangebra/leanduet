@@ -284,6 +284,7 @@ inductive Formula : Nat → Type where
   | and {n : Nat} : Formula n → Formula n → Formula n
   | imp {n : Nat} : Formula n → Formula n → Formula n
   | all {n : Nat} : Formula (n+1) → Formula n
+  | existsNat {n : Nat} : Formula (n+1) → Formula n
   deriving Repr
 
 def substFormula {n m : Nat} (s : Fin n → NatExpr m) : Formula n → Formula m
@@ -293,6 +294,7 @@ def substFormula {n m : Nat} (s : Fin n → NatExpr m) : Formula n → Formula m
   | .and p q => .and (substFormula s p) (substFormula s q)
   | .imp p q => .imp (substFormula s p) (substFormula s q)
   | .all p => .all (substFormula (liftSub s) p)
+  | .existsNat p => .existsNat (substFormula (liftSub s) p)
 
 def denote {n : Nat} : Formula n → Env n → Prop
   | .truth, _ => True
@@ -301,6 +303,7 @@ def denote {n : Nat} : Formula n → Env n → Prop
   | .and p q, ρ => denote p ρ ∧ denote q ρ
   | .imp p q, ρ => denote p ρ → denote q ρ
   | .all p, ρ => ∀ x : Nat, denote p (extend ρ x)
+  | .existsNat p, ρ => ∃ x : Nat, denote p (extend ρ x)
 
 theorem denote_liftSub_env {n m : Nat} (s : Fin n → NatExpr m)
     (ρ : Env m) (x : Nat) :
@@ -324,6 +327,24 @@ theorem denote_subst {n m : Nat} (p : Formula n) (s : Fin n → NatExpr m)
   | imp p q hp hq => simp [substFormula, denote, hp, hq]
   | all p ih =>
       simp [substFormula, denote, ih, denote_liftSub_env]
+  | existsNat p ih =>
+      -- The induction hypothesis transports each witness proposition in both
+      -- directions. Since this theorem states equality of Prop values, finish
+      -- by propositional extensionality rather than identifying proof terms.
+      change (∃ x : Nat, denote (substFormula (liftSub s) p) (extend ρ x)) =
+        (∃ x : Nat, denote p (extend (fun i => denoteNat (s i) ρ) x))
+      apply propext
+      constructor
+      · rintro ⟨x, hx⟩
+        refine ⟨x, ?_⟩
+        have envAgreement := ih (liftSub s) (extend ρ x)
+        rw [denote_liftSub_env] at envAgreement
+        exact Eq.mp envAgreement hx
+      · rintro ⟨x, hx⟩
+        refine ⟨x, ?_⟩
+        have envAgreement := ih (liftSub s) (extend ρ x)
+        rw [denote_liftSub_env] at envAgreement
+        exact Eq.mpr envAgreement hx
 
 /-- Forget the typing and interpretation annotations into the existing generic
     scope-indexed syntax. This map is only for the fragment above. -/
@@ -340,6 +361,7 @@ def eraseFormula {n : Nat} : Formula n → LeanDuet.Scoped.Term n
   | .and p q => .binary "And" (eraseFormula p) (eraseFormula q)
   | .imp p q => .binary "Imp" (eraseFormula p) (eraseFormula q)
   | .all p => .bind "∀ Nat" (.atom "Nat") (eraseFormula p)
+  | .existsNat p => .bind "∃ Nat" (.atom "Nat") (eraseFormula p)
 
 theorem eraseNat_rename {n m : Nat} (e : NatExpr n) (r : Fin n → Fin m) :
     eraseNat (rename r e) = LeanDuet.Scoped.rename r (eraseNat e) := by
@@ -379,17 +401,47 @@ theorem eraseFormula_subst {n m : Nat} (p : Formula n) (s : Fin n → NatExpr m)
       simp only [substFormula, eraseFormula, LeanDuet.Scoped.subst]
       rw [ih (liftSub s)]
       rw [eraseNat_liftSub s]
+  | existsNat p ih =>
+      simp only [substFormula, eraseFormula, LeanDuet.Scoped.subst]
+      rw [ih (liftSub s)]
+      rw [eraseNat_liftSub s]
 
 /-- A substitution into two free variables specializes to a one-variable
     context without capturing the binder in the formula. -/
 example (ρ : Env 1) :
     denote
       (substFormula (fun _ : Fin 2 => NatExpr.var 0)
-        (Formula.all (Formula.equal (NatExpr.var 1) (NatExpr.var 0)))) ρ =
-      (∀ x : Nat, ρ 0 = x) := by
-  simpa [denote, extend, denoteNat] using
-    (denote_subst
-      (Formula.all (Formula.equal (NatExpr.var 1) (NatExpr.var 0)))
-      (fun _ : Fin 2 => NatExpr.var 0) ρ)
+        (Formula.all (n := 2) (Formula.equal (n := 3) (NatExpr.var 1) (NatExpr.var 0)))) ρ =
+      denote (Formula.all (n := 2) (Formula.equal (n := 3) (NatExpr.var 1) (NatExpr.var 0)))
+        (fun _ : Fin 2 => ρ 0) := by
+  exact denote_subst
+    (Formula.all (n := 2) (Formula.equal (n := 3) (NatExpr.var 1) (NatExpr.var 0)))
+    (fun _ : Fin 2 => NatExpr.var 0) ρ
+
+/-- The existential case exercises the same lifted substitution while keeping
+    the witness bound. Replacing the outer object must leave the witness slot
+    untouched. -/
+example (ρ : Env 0) :
+    let p : Formula 1 :=
+      Formula.existsNat (n := 1)
+        (Formula.equal (n := 2) (NatExpr.var (1 : Fin 2)) (NatExpr.var (0 : Fin 2)))
+    denote (substFormula (fun _ : Fin 1 => NatExpr.zero) p) ρ =
+      denote p (fun _ : Fin 1 => 0) := by
+  exact denote_subst _ _ _
+
+example :
+    let p : Formula 1 :=
+      Formula.existsNat (n := 1)
+        (Formula.equal (n := 2) (NatExpr.var (1 : Fin 2)) (NatExpr.var (0 : Fin 2)))
+    (eraseFormula (substFormula (fun _ : Fin 1 => (NatExpr.zero : NatExpr 0)) p) :
+      LeanDuet.Scoped.Term 0) =
+      LeanDuet.Scoped.subst
+        (fun _ : Fin 1 => (LeanDuet.Scoped.Term.atom "Nat.zero" : LeanDuet.Scoped.Term 0))
+        (eraseFormula p) := by
+  simpa [eraseNat] using
+    (eraseFormula_subst
+      (Formula.existsNat (n := 1)
+        (Formula.equal (n := 2) (NatExpr.var (1 : Fin 2)) (NatExpr.var (0 : Fin 2))))
+      (fun _ : Fin 1 => (NatExpr.zero : NatExpr 0)))
 
 end LeanDuet.ScopedSemantics

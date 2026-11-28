@@ -27,11 +27,15 @@ The browser formula parser also produces a canonical scoped view using de Bruijn
 
 `lean/Scoped.lean` also defines a separate intrinsically typed fragment for
 natural-number expressions and first-order propositions with equality,
-conjunction, implication, and universal quantification over `Nat`. Its Lean
-denotation is preserved by simultaneous capture-avoiding substitution; a
-regression example substitutes through a universal binder. The typed syntax
-erases into the generic `Scoped.Term`, and a second theorem proves that this
-map commutes with substitution. This is an initial mathematical checkpoint
+conjunction, implication, and universal and existential quantification over
+`Nat`. Its Lean denotation is preserved by simultaneous capture-avoiding
+substitution; concrete regressions substitute through both universal and
+existential binders. The denotation theorem states equality of `Prop` values.
+In the existential case, witness transport gives an equivalence and Lean's
+propositional extensionality turns that equivalence into the stated equality;
+the theorem does not identify proof terms. Separately, the typed syntax erases
+into the generic `Scoped.Term`, and a second theorem proves by syntactic
+equality that this map commutes with substitution. This is an initial mathematical checkpoint
 for Issue #10, but it is not a serialization or interpretation of the browser
 AST or arbitrary Lean `Expr`. It excludes dependent object domains, general
 predicates, constants, partial syntax and the full Lean type system. CI
@@ -43,18 +47,19 @@ compiles the model with the existing `lean/Scoped.lean` check.
 The browser exports `toScopedSemantics`, a partial structural map from a
 closed surface formula to versioned JSON with an explicit context size and
 de Bruijn indices. It accepts only explicit Nat binders, bound Nat variables,
-zero, addition, equality, conjunction, implication, truth, and falsity. An
-unannotated binder, free identifier or predicate, nonzero numeral, existential
-or other unsupported operator returns a coded `ScopedSemanticsError`; the
+zero, addition, equality, conjunction, implication, truth, falsity, and
+explicitly typed Nat existential binders. An unannotated binder, free
+identifier or predicate, nonzero numeral, non-Nat quantifier or other
+unsupported operator returns a coded `ScopedSemanticsError`; the
 projection does not infer a domain or declaration identity.
 
 The integration check independently lowers the returned versioned nodes into
 `LeanDuet.ScopedSemantics.Formula` and the browser's original scoped AST into
 generic `LeanDuet.Scoped.Term`. Lean checks erasure equality and that the
 typed fragment's denotation is definitionally equivalent to the browser
-renderer on nested binders, alpha-renaming, same-name shadowing, arithmetic,
-connectives, truth, and falsity. This is a one-way, closed-formula regression
-bridge. It is not a general decoder, not a Lean Expr codec, and not a
+renderer on nested universal and existential binders, alpha-renaming,
+same-name shadowing, arithmetic, connectives, truth, and falsity. This is a
+one-way, closed-formula regression bridge. It is not a general decoder, not a
 natural-language or proof-route correspondence.
 
 ## Explicit local Nat contexts
@@ -64,7 +69,7 @@ context of records `{id, name, type: "Nat"}`. The opaque stable `id` is kept
 separate from the display name. Free names resolve only when exactly one
 context record has that name; an unresolved or duplicate name is an error.
 The context list is ordered oldest-to-newest, so the newest context object has
-index 0 and every enclosing universal binder shifts context indices outward.
+index 0 and every enclosing universal or existential binder shifts context indices outward.
 A formula binder shadows a context display name through the parser's de Bruijn
 scope, without changing the context object's identity.
 
@@ -73,12 +78,12 @@ Lean declarations, proposition-valued local assumptions, dependent types,
 subtypes, or declaration renames by itself. A caller must update the context
 record while retaining its id; this adapter does not infer cross-edit identity.
 The projection's emitted context indices are checked against Lean's
-`ScopedSemantics.denote` using an explicit environment, including a binder
+`ScopedSemantics.denote` using an explicit environment, including a quantified binder
 that shadows a context name. Browser smoke also loads and calls the module
 through the local HTTP server; it is not yet exposed as an interactive editor
 control.
 
-The Lean integration also applies `substFormula` to formulas emitted by this projection and checks concrete commuting cases: replacing the older of two Nat objects while retaining the newer one, and replacing an outer object under one or two universal binders without capturing the bound variables. In these cases the substituted serialized syntax is definitionally the projection of the corresponding updated formula, and the existing `denote_subst` theorem applies to the emitted terms. These tests exercise specific inputs; they do not prove that the JavaScript projection preserves substitution for all formulas.
+The Lean integration also applies `substFormula` to formulas emitted by this projection and checks concrete commuting cases: replacing the older of two Nat objects while retaining the newer one, and replacing an outer object under universal and existential binders without capturing the bound variables. In these cases the substituted serialized syntax is definitionally the projection of the corresponding updated formula, and the `denote_subst` theorem applies to the emitted terms. These tests exercise specific inputs; they do not prove that the JavaScript projection preserves substitution for all formulas.
 
 ## Integration plan
 
