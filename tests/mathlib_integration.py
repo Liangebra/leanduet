@@ -213,11 +213,16 @@ print("Mathlib topology: composition dependency view retains both functions and 
 counterexample_path=Path(__file__).resolve().parent/"mathlib"/"ProofRefactorCounterexamples.lean"
 counterexample_source=counterexample_path.read_text(encoding="utf-8")
 subprocess.run(["lake","env","lean",str(counterexample_path)],cwd=project,check=True)
+direct_marker="\ntheorem compact_image_refactor_direct"
 let_marker="\ntheorem compact_image_refactor_local_let"
-assert let_marker in counterexample_source
-direct_source=counterexample_source.split(let_marker,1)[0]
+assert direct_marker in counterexample_source and let_marker in counterexample_source
+direct_start=counterexample_source.index(direct_marker)
+let_start=counterexample_source.index(let_marker)
+shared_prefix=counterexample_source[:direct_start]
+direct_source=shared_prefix+counterexample_source[direct_start:let_start]
+local_let_source=shared_prefix+counterexample_source[let_start:]
 direct_tree=extract(direct_source,project)["tree"]
-local_let_tree=extract(counterexample_source,project)["tree"]
+local_let_tree=extract(local_let_source,project)["tree"]
 assert direct_tree["type"]==local_let_tree["type"],(direct_tree,local_let_tree)
 assert direct_tree["kind"]=="apply",direct_tree
 assert any(n["kind"]=="let" and n.get("binder")=="imageProof" for n in walk(local_let_tree)),local_let_tree
