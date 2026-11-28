@@ -161,21 +161,26 @@ private partial def collectTacticTrace (fileMap : FileMap) (tree : InfoTree)
 
 elab "#duet_trace " declaration:command : command => do
   let fileMap ← getFileMap
-  let tactics ← withEnableInfoTree true do
-    elabCommandTopLevel declaration
-    let trees ← getInfoTrees
-    let mut tactics := #[]
-    for tree in trees do
-      tactics := tactics ++ (← collectTacticTrace fileMap tree)
-    pure tactics
-  let trees ← getInfoTrees
-  let infoState ← getInfoState
-  let tacticCount := trees.foldl (fun count tree => count + countTacticNodes tree) 0
+  let (tactics, infoTreeEnabled, infoTreeCount, tacticInfoCount) ←
+    withEnableInfoTree true do
+      elabCommandTopLevel declaration
+      let infoState ← getInfoState
+      -- InfoTree holes may be fulfilled by synchronous assignments or deferred tasks.
+      -- Resolve both before inspecting tactic nodes, as Lean does for snapshots.
+      let resolvedInfoState := infoState.substituteLazy.get
+      let trees := resolvedInfoState.trees.map
+        (fun tree => tree.substitute resolvedInfoState.assignment)
+      let mut tactics := #[]
+      for tree in trees do
+        tactics := tactics ++ (← collectTacticTrace fileMap tree)
+      let tacticCount := trees.foldl
+        (fun count tree => count + countTacticNodes tree) 0
+      pure (tactics, infoState.enabled, trees.size, tacticCount)
   let result := Json.mkObj [
     ("schema", toJson (1 : Nat)),
-    ("infoTreeEnabled", toJson infoState.enabled),
-    ("infoTreeCount", toJson trees.size),
-    ("tacticInfoCount", toJson tacticCount),
+    ("infoTreeEnabled", toJson infoTreeEnabled),
+    ("infoTreeCount", toJson infoTreeCount),
+    ("tacticInfoCount", toJson tacticInfoCount),
     ("tactics", Json.arr tactics)
   ]
   logInfo m!"LEANDUET_TRACE_JSON:{result.compress}"
