@@ -179,3 +179,29 @@ for instance in linear_case["requiredTypeclassClosure"]:
     assert any(instance in d["type"] for d in linear_needed),(instance,linear_needed)
 print("Mathlib linear algebra: proof dependency view retains map, variables, and module structure")
 
+# The composition rule exercises function-composition syntax in the shared
+# mathematical AST and retains all three topology structures in Lean context.
+composition_case=next(case for case in mathlib_cases if case["id"]=="continuous-function-composition")
+composition_script=r"""
+import {compileNaturalDraft} from './web/natural-draft.mjs';
+const example="""+json.dumps(composition_case,ensure_ascii=False)+r""";
+const result=compileNaturalDraft(example.naturalDraft,example.scope,new Map(Object.entries(example.context)),{goal:example.goal});
+if(!result.complete||result.rows.at(-1).proofStatus!=='candidate'||result.steps.at(-1)?.application!=="Continuous.comp hg hf")throw new Error(JSON.stringify(result));
+console.log(JSON.stringify(result.term));
+"""
+composition_term=json.loads(subprocess.run(["node","--input-type=module"],input=composition_script,text=True,cwd=root,check=True,capture_output=True).stdout)
+composition_source=composition_case["leanImport"]+"\n\n"+composition_case["leanTheoremHeader"].replace(
+    "continuous_comp_example","continuous_comp_from_natural")+" := "+composition_term+"\n"
+with TemporaryDirectory() as tmp:
+    target=Path(tmp)/"ContinuousCompositionFromNatural.lean"
+    target.write_text(composition_source,encoding="utf-8")
+    subprocess.run(["lake","env","lean",str(target)],cwd=project,check=True)
+print("Mathlib topology: continuous-composition candidate accepted by Lean")
+composition_tree=extract(composition_source,project)["tree"]
+composition_node=next(n for n in walk(composition_tree) if n.get("reference")=="Continuous.comp")
+composition_needed=[d for d in composition_node["scope"] if d["neededForContext"]]
+composition_names={d["name"] for d in composition_needed}
+assert set(composition_case["expectedContextClosure"]).issubset(composition_names),composition_needed
+for instance in composition_case["requiredTypeclassClosure"]:
+    assert any(instance in d["type"] for d in composition_needed),(instance,composition_needed)
+print("Mathlib topology: composition dependency view retains both functions and all three topology instances")
