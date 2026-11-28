@@ -5,6 +5,7 @@ private structure TermReferences where
   termInfoCount : Nat := 0
   declarations : Array String := #[]
   locals : Array Json := #[]
+  deriving Nonempty
 
 private def mergeTermReferences (left right : TermReferences) : TermReferences := Id.run do
   let mut declarations := left.declarations
@@ -95,8 +96,8 @@ private def tracePositionJson (position : Position) : Json :=
     ("column", toJson position.column)
   ]
 
-private def traceRangeJson (fileMap : FileMap) (syntax : Syntax) : Json :=
-  match syntax.getRange? true with
+private def traceRangeJson (fileMap : FileMap) (stx : Syntax) : Json :=
+  match stx.getRange? true with
   | none => Json.null
   | some range =>
     let start := fileMap.toPosition range.start
@@ -118,7 +119,7 @@ private def traceTacticJson (fileMap : FileMap) (ctx? : Option ContextInfo)
     | some ctx => do
       pure (← traceGoalsJson ctx info.mctxBefore info.goalsBefore,
             ← traceGoalsJson ctx info.mctxAfter info.goalsAfter)
-  let opaque := references.termInfoCount == 0
+  let isOpaque := references.termInfoCount == 0
   return Json.mkObj [
     ("syntax", toJson (info.stx.reprint.getD (toString info.stx))),
     ("sourceRange", range),
@@ -128,9 +129,9 @@ private def traceTacticJson (fileMap : FileMap) (ctx? : Option ContextInfo)
     ("termInfoCount", toJson references.termInfoCount),
     ("referencedDeclarations", toJson references.declarations),
     ("referencedLocals", Json.arr references.locals),
-    ("opaque", toJson opaque),
-    ("opaqueRange", if opaque then range else Json.null),
-    ("opaqueMapping", if opaque then
+    ("opaque", toJson isOpaque),
+    ("opaqueRange", if isOpaque then range else Json.null),
+    ("opaqueMapping", if isOpaque then
       toJson "No child TermInfo expression was recorded; opaque tactic text maps to sourceRange."
       else Json.null)
   ]
@@ -139,8 +140,8 @@ private partial def collectTacticTrace (fileMap : FileMap) (tree : InfoTree)
     (ctx? : Option ContextInfo := none) : IO (Array Json) := do
   match tree with
   | .hole _ => return #[]
-  | .context partial child =>
-      collectTacticTrace fileMap child (partial.mergeIntoOuter? ctx?)
+  | .context partialCtx child =>
+      collectTacticTrace fileMap child (partialCtx.mergeIntoOuter? ctx?)
   | .node info children =>
       let mut entries := #[]
       if let .ofTacticInfo tacticInfo := info then

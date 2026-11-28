@@ -71,11 +71,11 @@ def trace(source, project=None):
         if line.strip() and not line.lstrip().startswith("import "):
             raise ValueError("InfoTree tracing accepts only imports before the declaration.")
     declaration = source[match.start():].strip()
-    if re.search(r"\\b(?:sorry|admit|sorryAx)\\b", declaration):
+    if re.search(r"\b(?:sorry|admit|sorryAx)\b", declaration):
         raise ValueError("Incomplete proofs cannot be traced as verified derivations.")
     adapter = _adapter()
-    prefix = "import Lean\\n" + prelude + adapter + "\\n#duet_trace\\n"
-    output = _run_lean(prefix + declaration + "\\n", project, "LEANDUET_TRACE_JSON:")
+    prefix = "import Lean\n" + prelude + adapter + "\n#duet_trace\n"
+    output = _run_lean(prefix + declaration + "\n", project, "LEANDUET_TRACE_JSON:")
     marker = "LEANDUET_TRACE_JSON:"
     encoded = [line.split(marker, 1)[1] for line in output.splitlines() if marker in line]
     if len(encoded) != 1:
@@ -86,7 +86,7 @@ def trace(source, project=None):
     if result.get("schema") != 1:
         raise ValueError("Unsupported InfoTree trace schema.")
     byte_delta = len(prefix.encode("utf-8")) - len(prelude.encode("utf-8"))
-    line_delta = prefix.count("\\n") - prelude.count("\\n")
+    line_delta = prefix.count("\n") - prelude.count("\n")
     for tactic in result.get("tactics", []):
         source_range = tactic.get("sourceRange")
         if source_range is None:
