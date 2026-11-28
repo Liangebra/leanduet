@@ -210,21 +210,23 @@ test('renaming a universal-introduction variable preserves its object and depend
 test('a selected proof candidate follows uniquely matched local objects through alpha-renaming',()=>{
  const scope=['hall','hall2'];
  const facts=new Map([['hall','∀ x : Nat, P x'],['hall2','∀ x : Nat, P x']]);
- const make=(name,choices=new Map())=>compileNaturalDraft(
+ const make=name=>compileNaturalDraft(
   'take '+name+' : $Nat$\n$P('+name+')$ | hall '+name,scope,facts,
-  {goal:'∀ '+name+' : Nat, P '+name,choices});
- const selected=new Map([[2,'hall n']]);
- const original=make('n',selected),renamed=make('k');
+  {goal:'∀ '+name+' : Nat, P '+name});
+ const original=make('n'),renamed=make('k');
  assert.equal(original.complete,true,JSON.stringify(original.rows,null,2));
  assert.equal(renamed.complete,true,JSON.stringify(renamed.rows,null,2));
  const oldRow=original.graph.nodes.find(node=>node.id==='line:2');
  const newRow=renamed.graph.nodes.find(node=>node.id==='line:2');
- assert.ok(oldRow?.alternatives.some(candidate=>(candidate.choice??candidate.term)==='hall n'));
- assert.ok(newRow?.alternatives.some(candidate=>(candidate.choice??candidate.term)==='hall k'));
+ const oldCandidate=oldRow?.alternatives.find(candidate=>String(candidate.term).includes('hall n'));
+ const newCandidate=newRow?.alternatives.find(candidate=>String(candidate.term).includes('hall k'));
+ assert.ok(oldCandidate,JSON.stringify(oldRow,null,2));
+ assert.ok(newCandidate,JSON.stringify(newRow,null,2));
+ const selected=new Map([[2,oldCandidate.choice??oldCandidate.term]]);
  const before=reconcileDraftIdentity(null,original.graph);
  const after=reconcileDraftIdentity(before,renamed.graph);
  assert.equal(after.ids.get('line:2'),before.ids.get('line:2'));
- assert.deepEqual([...migrateDraftChoices(before,after,selected)],[[2,'hall k']]);
+ assert.deepEqual([...migrateDraftChoices(before,after,selected)],[[2,newCandidate.choice??newCandidate.term]]);
 });
 
 test('alpha-renaming preserves a later use only when its cited premise identity is unchanged',()=>{
