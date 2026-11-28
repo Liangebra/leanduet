@@ -183,3 +183,71 @@ export function scopedFormula(ast,scope=[]){
   default:throw Error('Unknown mathematical AST node.');
  }
 }
+
+
+// Project the browser's name-resolved scoped formula into the closed Nat/Prop
+// fragment modeled by LeanDuet.ScopedSemantics. Unsupported syntax is reported
+// explicitly; this projection never guesses a type for an unannotated binder.
+function scopedSemanticsFailure(code, detail) {
+ const error=new Error('Formula is outside the supported scoped semantic fragment: '+detail+'.');
+ error.name='ScopedSemanticsError';
+ error.code=code;
+ throw error;
+}
+function scopedNatExpr(node,contextSize) {
+ if(node?.kind==='bound'){
+  if(!Number.isSafeInteger(node.index)||node.index<0||node.index>=contextSize)
+   scopedSemanticsFailure('invalid-bound-index','a bound natural-number variable is outside its context');
+  return {kind:'var',index:node.index};
+ }
+ if(node?.kind==='number'){
+  if(node.value==='0')return {kind:'zero'};
+  scopedSemanticsFailure('unsupported-literal','only the zero literal has a constructor in this fragment');
+ }
+ if(node?.kind==='binary'&&node.op==='+')
+  return {kind:'add',left:scopedNatExpr(node.left,contextSize),right:scopedNatExpr(node.right,contextSize)};
+ if(node?.kind==='free')
+  scopedSemanticsFailure('unresolved-free-name','free identifier '+node.name+' has no typed object identity');
+ scopedSemanticsFailure('unsupported-term','the term node or operation has no constructor in this fragment');
+}
+function scopedProp(node,contextSize) {
+ if(node?.kind==='free'){
+  if(node.name==='True')return {kind:'truth'};
+  if(node.name==='False')return {kind:'falsity'};
+  scopedSemanticsFailure('unresolved-free-name','free identifier '+node.name+' has no proposition identity');
+ }
+ if(node?.kind==='binder'){
+  if(node.op!=='∀')scopedSemanticsFailure('unsupported-quantifier','only universal quantification over Nat is supported');
+  if(!node.domain)scopedSemanticsFailure('missing-domain-annotation','a Nat binder must have an explicit domain');
+  if(node.domain.kind!=='free'||node.domain.name!=='Nat')
+   scopedSemanticsFailure('unsupported-binder-domain','only an explicit Nat binder is supported');
+  return {kind:'all',body:scopedProp(node.body,contextSize+1)};
+ }
+ if(node?.kind==='binary'){
+  if(node.op==='=')
+   return {kind:'equal',left:scopedNatExpr(node.left,contextSize),right:scopedNatExpr(node.right,contextSize)};
+  if(node.op==='∧')
+   return {kind:'and',left:scopedProp(node.left,contextSize),right:scopedProp(node.right,contextSize)};
+  if(node.op==='→')
+   return {kind:'imp',left:scopedProp(node.left,contextSize),right:scopedProp(node.right,contextSize)};
+  scopedSemanticsFailure('unsupported-proposition-operator','the proposition operator '+node.op+' is not in this fragment');
+ }
+ if(node?.kind==='call')
+  scopedSemanticsFailure('unsupported-predicate','predicate application needs a typed declaration identity');
+ scopedSemanticsFailure('unsupported-proposition','the formula node has no constructor in this fragment');
+}
+
+/**
+ * Return the versioned, closed-formula projection shared with the bounded
+ * LeanDuet.ScopedSemantics model. Bound indices are zero-based from the
+ * innermost binder. This is a partial structural map, not Lean elaboration.
+ */
+export function toScopedSemantics(text,{syntax='math'}={}) {
+ const compiled=compileFormula(text,{syntax});
+ return {
+  schema:'leanduet.scoped-semantics.formula',
+  version:1,
+  contextSize:0,
+  formula:scopedProp(compiled.scoped,0)
+ };
+}
