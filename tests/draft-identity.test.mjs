@@ -155,6 +155,24 @@ test('alpha-renamed nested goal scopes reconcile against their shared parent obj
  assert.equal(renamed.ids.get('root/subgoal:1:first'),original.ids.get('root/subgoal:1:first'));
 });
 
+test('renaming an operation-local assumption preserves its scoped object identity',()=>{
+ const scope=['h'],facts=new Map([['h','¬ ¬ P']]);
+ const source='classical reductio hnot\\n  contradiction\\n    $False$ | h hnot';
+ const renamed=source.replaceAll('hnot','notP');
+ const original=compileNaturalDraft(source,scope,facts,{goal:'P'});
+ const edited=compileNaturalDraft(renamed,scope,facts,{goal:'P'});
+ assert.equal(original.complete,true,JSON.stringify(original.rows,null,2));
+ assert.equal(edited.complete,true,JSON.stringify(edited.rows,null,2));
+ const before=reconcileDraftIdentity(null,original.graph);
+ const after=reconcileDraftIdentity(before,edited.graph);
+ const oldOperation=original.graph.nodes.find(node=>node.kind==='classical-reductio');
+ const newOperation=edited.graph.nodes.find(node=>node.kind==='classical-reductio');
+ const oldBinding=original.rows[0].subgoals[0].graph.nodes.find(node=>node.kind==='context'&&node.name==='hnot');
+ const newBinding=edited.rows[0].subgoals[0].graph.nodes.find(node=>node.kind==='context'&&node.name==='notP');
+ assert.ok(oldOperation&&newOperation&&oldBinding&&newBinding);
+ assert.equal(after.ids.get(newOperation.id),before.ids.get(oldOperation.id));
+ assert.equal(after.ids.get(newBinding.id),before.ids.get(oldBinding.id));
+});
 test('subgoal-local assumption identities survive unrelated source-line shifts',()=>{
  const scope=['h'],facts=new Map([['h','¬ ¬ P']]);
  const source='classical reductio hnot\n  contradiction\n    $False$ | h hnot';

@@ -44,7 +44,33 @@ function sameContextSignature(a,b){
  return left.length===right.length&&left.every((node,index)=>
   node.name===right[index].name&&node.ambiguousName===right[index].ambiguousName&&sameTypeText(node.type,right[index].type));
 }
-const lineKey=n=>JSON.stringify([n.origin||n.kind,n.raw]);
+function formulaShape(text,bindings=[]){
+ if(typeof text!=='string')return null;
+ const names=new Map(bindings.map((binding,index)=>[binding.name,index]));
+ try{
+  const tree=compileFormula(text,{syntax:'lean'}).scoped;
+  function normalize(value){
+   if(!value||typeof value!=='object')return value;
+   if(Array.isArray(value))return value.map(normalize);
+   if(value.kind==='free'&&names.has(value.name))return {kind:'introduced-local',index:names.get(value.name)};
+   return Object.fromEntries(Object.entries(value).map(([key,child])=>[key,normalize(child)]));
+  }
+  return normalize(tree);
+ }catch{return {unsupported:text};}
+}
+function operationLineKey(node){
+ const operation=node?.goalOperation;
+ if(!operation)return null;
+ const subgoals=(operation.subgoals||[]).map(subgoal=>{
+  const bindings=subgoal.contextDelta||[];
+  return [subgoal.id,formulaShape(subgoal.goal,bindings),
+   bindings.map((binding,index)=>[binding.kind,formulaShape(binding.type,bindings.slice(0,index))])];
+ });
+ const closure=operation.closure||{};
+ return JSON.stringify([node.origin||node.kind,node.kind,operation.kind,operation.logic||null,
+  formulaShape(operation.parentGoal),subgoals,closure.kind||null,closure.name||null,operation.witness||null]);
+}
+const lineKey=n=>operationLineKey(n)||JSON.stringify([n.origin||n.kind,n.raw]);
 function candidateKey(c,ids){
  if(c.dependencies.some(id=>!ids.has(id)))return null;
  if(c.type&&!c.formula?.tree)return null;
@@ -131,7 +157,7 @@ export function reconcileDraftIdentity(previous,graph){
    const prior=oldDelta[index],current=newDelta[index];
    const priorId=prior.id||oldSubgoal.id+'/binding:'+index;
    const currentId=current.id||newSubgoal.id+'/binding:'+index;
-   if(prior.kind!==current.kind||prior.name!==current.name)return false;
+   if(prior.kind!==current.kind)return false;
    const priorIdentity=previous?.ids.get(priorId);
    if(priorIdentity===undefined)return false;
    const oldContext=oldContexts.get(priorId),newContext=newContexts.get(currentId);

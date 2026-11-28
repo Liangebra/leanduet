@@ -29,7 +29,8 @@ fragment export; explicit formula-only obligations may be exported as
 Draft correspondence compares goal formulas and context types by their
 scoped AST. A change to a bound variable's display spelling therefore preserves
 revision-local identities when the parsed structures are otherwise the same.
-Free names and context declaration names remain significant. This is alpha
+Parent context names remain significant; operation-introduced child bindings
+match by role and scoped type, so their display names may change. This is alpha
 correspondence only: it does not identify logically equivalent formulas,
 establish Lean definitional equality, rename source text, or certify that a
 proof narrative is faithful. Unsupported or structurally changed targets or
