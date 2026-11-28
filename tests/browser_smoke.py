@@ -52,6 +52,16 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
             errors=[]
             page.on("pageerror",lambda error:errors.append(str(error)))
             page.goto(url)
+            context_projection=page.evaluate("""async () => {
+                const {toScopedSemanticsInContext}=await import('/math-formula.mjs');
+                return toScopedSemanticsInContext('x + y = y + x',{context:[
+                    {id:'object-x',name:'x',type:'Nat'},
+                    {id:'object-y',name:'y',type:'Nat'}
+                ]});
+            }""")
+            assert context_projection["context"][0]["id"]=="object-x"
+            assert context_projection["formula"]["left"]["left"]=={"kind":"var","index":1}
+            assert context_projection["formula"]["left"]["right"]=={"kind":"var","index":0}
             expect(page.locator("#theoremName")).to_have_text("compose imp")
             expect(page.locator("#narrativeStatus")).to_contain_text("Authored example")
             expect(page.locator("#statement math")).to_have_count(3)

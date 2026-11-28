@@ -120,6 +120,19 @@ This is an initial semantic correspondence, not a conversion from the browser
 AST to Lean `Expr`, and it excludes dependent object types, predicates beyond
 equality, arbitrary constants, and incomplete terms.
 
+## Explicit Nat context projection
+
+A separate browser projection accepts a finite, oldest-to-newest context of
+records containing stable id, display name, and the supported type `Nat`.
+The emitted `Formula n` uses Fin indices: the newest context object is index
+zero, shifted outward under each universal binder. Free names resolve only
+when exactly one context entry has that name; binder shadowing is handled by
+the parser's de Bruijn scope. Lean integration checks the emitted indices and
+denotation against an explicit finite environment, including a binder that
+shadows a context display name. This bridge does not yet accept proposition
+assumptions or dependent context entries, infer persistent identity across
+edits, or map the serialized schema to arbitrary Lean `Expr`.
+
 ## Explicit candidate resolution
 
 A draft choice is a line-local selection of a currently available candidate;

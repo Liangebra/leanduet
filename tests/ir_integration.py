@@ -380,3 +380,65 @@ with TemporaryDirectory() as tmp:
     target.write_text(scoped_source+"\n\n"+"\n".join(lean_checks)+"\n",encoding="utf-8")
     subprocess.run(["lean",str(target)],cwd=root,check=True,capture_output=True,text=True)
 print("Browser AST projection agrees with ScopedSemantics syntax, erasure, and denotation on the tested fragment")
+
+
+# Explicit local contexts are the next projection boundary: the JSON context
+# keeps stable object identity separate from its display name, while Lean checks
+# that de Bruijn slots denote the corresponding actual Nat parameters.
+context_bridge_script = """
+import {toScopedSemanticsInContext} from './web/math-formula.mjs';
+let input = '';
+for await (const chunk of process.stdin) input += chunk;
+const payload = JSON.parse(input);
+console.log(JSON.stringify(toScopedSemanticsInContext(payload.text,{context:payload.context})));
+"""
+
+def compile_context_scoped_formula(text, context):
+    result = subprocess.run(
+        ["node", "--input-type=module", "-e", context_bridge_script],
+        input=json.dumps({"text":text,"context":context}),
+        text=True,
+        capture_output=True,
+        cwd=Path(__file__).resolve().parents[1],
+        check=True,
+    )
+    return json.loads(result.stdout)
+
+local_context = [
+    {"id":"object-x","name":"x","type":"Nat"},
+    {"id":"object-y","name":"y","type":"Nat"},
+]
+context_formula_text = "x + y = y + x"
+context_projection = compile_context_scoped_formula(context_formula_text,local_context)
+assert context_projection["schema"]=="leanduet.scoped-semantics.formula-context",context_projection
+assert context_projection["version"]==1 and context_projection["contextSize"]==2,context_projection
+assert context_projection["context"]==local_context,context_projection
+assert context_projection["formula"]=={
+    "kind":"equal",
+    "left":{"kind":"add","left":{"kind":"var","index":1},"right":{"kind":"var","index":0}},
+    "right":{"kind":"add","left":{"kind":"var","index":0},"right":{"kind":"var","index":1}},
+},context_projection
+context_candidate=compile_browser_formula(context_formula_text)
+context_core=lean_formula(context_projection["formula"],2)
+context_environment="(fun i : Fin 2 => Fin.cases y (fun _ => x) i)"
+context_lean_checks=[
+    "example (x y : Nat) : LeanDuet.ScopedSemantics.denote ("+context_core
+    +" : LeanDuet.ScopedSemantics.Formula 2) "+context_environment
+    +" ↔ ("+context_candidate["lean"]+" : Prop) := by rfl"
+]
+
+shadow_formula_text="∀ x : Nat, x + y = y + x"
+shadow_projection=compile_context_scoped_formula(shadow_formula_text,local_context)
+shadow_candidate=compile_browser_formula(shadow_formula_text)
+shadow_core=lean_formula(shadow_projection["formula"],2)
+context_lean_checks.append(
+    "example (x y : Nat) : LeanDuet.ScopedSemantics.denote ("+shadow_core
+    +" : LeanDuet.ScopedSemantics.Formula 2) "+context_environment
+    +" ↔ ("+shadow_candidate["lean"]+" : Prop) := by rfl"
+)
+
+with TemporaryDirectory() as tmp:
+    target=Path(tmp)/"BrowserScopedContextBridge.lean"
+    target.write_text(scoped_source+"\n\n"+"\n".join(context_lean_checks)+"\n",encoding="utf-8")
+    subprocess.run(["lean",str(target)],cwd=root,check=True,capture_output=True,text=True)
+print("Explicit Nat context identities project to the expected Fin slots and preserve Lean denotation")

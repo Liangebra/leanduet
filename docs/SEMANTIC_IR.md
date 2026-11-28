@@ -57,9 +57,32 @@ connectives, truth, and falsity. This is a one-way, closed-formula regression
 bridge. It is not a general decoder, not a Lean Expr codec, and not a
 natural-language or proof-route correspondence.
 
+## Explicit local Nat contexts
+
+A separate `toScopedSemanticsInContext` projection accepts an explicit finite
+context of records `{id, name, type: "Nat"}`. The opaque stable `id` is kept
+separate from the display name. Free names resolve only when exactly one
+context record has that name; an unresolved or duplicate name is an error.
+The context list is ordered oldest-to-newest, so the newest context object has
+index 0 and every enclosing universal binder shifts context indices outward.
+A formula binder shadows a context display name through the parser's de Bruijn
+scope, without changing the context object's identity.
+
+This remains a partial structural projection. It does not resolve arbitrary
+Lean declarations, proposition-valued local assumptions, dependent types,
+subtypes, or declaration renames by itself. A caller must update the context
+record while retaining its id; this adapter does not infer cross-edit identity.
+The projection's emitted context indices are checked against Lean's
+`ScopedSemantics.denote` using an explicit environment, including a binder
+that shadows a context name. Browser smoke also loads and calls the module
+through the local HTTP server; it is not yet exposed as an interactive editor
+control.
+
 ## Integration plan
 
-Extend the closed Nat/Prop projection to explicitly typed local contexts and stable object identities. Then connect native Expr export with explicit binding identity and universe data. Define a type-preserving elaboration relation from surface syntax, retaining alternative parses if not unique. A local edit becomes a partial context morphism and checked replacement, preserving the surrounding proof complement. Establish substitution composition and then a theorem connecting the actual serialized representation to its Lean interpretation. Only after this link should we claim end-to-end semantic correctness.
+The browser now exposes two separate, versioned projections into the bounded Nat/Prop fragment: one for closed formulas and one for formulas over an explicit finite context of Nat objects. In the contextual schema, stable object ids remain metadata distinct from de Bruijn references, and free display names resolve only when unique. The Lean integration checks the context indices and denotation against an explicit environment, including one universal binder that shadows a context name.
+
+This remains a one-way partial projection. Proposition-valued local assumptions, dependent contexts, arbitrary Lean declarations, cross-edit identity reconciliation, and source provenance are not yet represented by this bridge. Next, connect the supported syntax to native Lean Expr with explicit binding identity and universe data. Then specify typed context morphisms and checked local replacements that preserve the surrounding proof complement. The concrete substitution tests are useful examples, but a theorem about the JavaScript projection still requires a formal connection to its serialized output. Do not claim end-to-end semantic correctness before that connection.
 
 Regex is useful for lexical tokens and finite controlled phrase boundaries; a recursive parser is needed for nested formulas and binders. Plain LaTeX does not uniquely determine mathematical semantics; explicit typed annotations, context and user disambiguation are necessary. Lean LSP identifier completion and bounded proof search are complementary, not the same operation.
 
