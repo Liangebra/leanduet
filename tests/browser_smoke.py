@@ -446,6 +446,29 @@ $R$ | gr localQ"""
             patch_page.locator("#compileChain").click()
             expect(patch_page.locator("#chainStatus")).to_contain_text("unknown, ambiguous or forward reference")
             patch_page.close()
+            composition_page=browser.new_page(viewport={"width":1440,"height":900})
+            composition_page.on("pageerror",lambda error:errors.append(str(error)))
+            composition_page.goto(url)
+            composition_source="""theorem composition_formula_in_browser (f g : Nat → Nat) :
+    (f ∘ g) = (f ∘ g) := by
+  rfl
+"""
+            composition_page.locator("#lean").fill(composition_source)
+            composition_page.once("dialog",lambda d:d.accept())
+            composition_page.locator("#adopt").click()
+            composition_page.locator('[data-view="typed"]').click()
+            composition_page.locator("#extractTerm").click()
+            expect(composition_page.locator("#typedStatus")).to_contain_text("Extracted from Lean elaboration",timeout=60000)
+            select_typed_edit(composition_page,includes=("f ∘ g",))
+            if not composition_page.locator("#chainEditor").evaluate("(editor) => editor.open"):
+                composition_page.locator("#chainEditor summary").click()
+            composition_page.locator("#chainFormat").select_option("formula")
+            composition_page.locator("#chainText").fill("$f ∘ g = f ∘ g$")
+            composition_page.locator("#compileChain").click()
+            expect(composition_page.locator("#chainStatus")).to_contain_text("1 steps compiled to a candidate")
+            composition_candidate=composition_page.locator("#patchTerm").input_value()
+            assert "show" in composition_candidate and composition_candidate.count("∘")==2,composition_candidate
+            composition_page.close()
             live_page=browser.new_page(viewport={"width":1440,"height":900})
             live_page.on("pageerror",lambda error:errors.append(str(error)))
             live_page.goto(url)
