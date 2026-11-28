@@ -124,3 +124,24 @@ test('changing a bound goal proposition retires identities even when its binder 
  assert.notEqual(changed.ids.get('context:0'),original.ids.get('context:0'));
  assert.equal(changed.matches.has('context:0'),false);
 });
+
+test('alpha-renamed nested goal scopes reconcile against their shared parent objects',()=>{
+ const makeGraph=(goal,childGoal,scopeId)=>({
+  schema:1,identity:'revision-local',goal,nodes:[
+   {id:'context:0',kind:'context',name:'h',type:'Nat',ambiguousName:false},
+   {id:'line:1',kind:'and-intro',origin:'and-intro',raw:'split conjunction',scopeRefs:[],dependencies:[],
+    formula:{tree:{kind:'id',value:'P'}},value:null,alternatives:[],
+    goalOperation:{kind:'conjunction-introduction',subgoals:[
+     {id:'first',scopeId,goal:childGoal,contextDelta:[]}
+    ]},
+    subgoals:[{id:scopeId,key:'first',kind:'subgoal',goal:childGoal,dependencies:[],graph:{
+     goal:childGoal,nodes:[{id:'context:0',kind:'context',name:'h',type:'Nat',ambiguousName:false}]
+    }}]
+   }
+  ]
+ });
+ const original=reconcileDraftIdentity(null,makeGraph('∀ n : Nat, n = n','∀ n : Nat, n = n','root/subgoal:1:first'));
+ const renamed=reconcileDraftIdentity(original,makeGraph('∀ k : Nat, k = k','∀ k : Nat, k = k','root/subgoal:1:first'));
+ assert.equal(renamed.ids.get('context:0'),original.ids.get('context:0'));
+ assert.equal(renamed.ids.get('root/subgoal:1:first'),original.ids.get('root/subgoal:1:first'));
+});
