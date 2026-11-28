@@ -53,7 +53,7 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
             page.on("pageerror",lambda error:errors.append(str(error)))
             page.goto(url)
             context_projection=page.evaluate("""async () => {
-                const {toScopedSemanticsInContext}=await import('/web/math-formula.mjs');
+                const {toScopedSemanticsInContext}=await import('/math-formula.mjs');
                 return toScopedSemanticsInContext('x + y = y + x',{context:[
                     {id:'object-x',name:'x',type:'Nat'},
                     {id:'object-y',name:'y',type:'Nat'}
