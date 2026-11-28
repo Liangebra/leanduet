@@ -61,8 +61,7 @@ are source-line counts.
 
 A goal record contains `target` (Lean pretty-printed text) and
 `localContext` (an array of `name`, `contextIndex`, and pretty-printed
-`type`). Context indices are positions within that observation, not persistent
-object identities across edits. Reference arrays may reflect what occurs
+`type`). Context indices are zero-based positions in Lean's full LocalContext iteration for that observation. Implementation-detail entries are hidden from the displayed context but still occupy indices, so visible indices may start above zero or have gaps. They are not persistent object identities across edits. Reference arrays may reflect what occurs
 syntactically in elaborated terms; they are not a transitive declaration
 closure, a proof-minimization result, or a claim that every occurrence is
 logically necessary.
