@@ -133,3 +133,39 @@ def without_alternatives(t):
 assert without_alternatives(fast["tree"])==without_alternatives(full["tree"])
 assert all(not n.get("applications") for n in walk(fast["tree"]))
 print("Reading profile preserves occurrence tree and skips eager search")
+
+
+# The trace adapter reads Lean's actual TacticInfo nodes. Goal transitions and
+# source ranges are taken from the elaborator, never reconstructed from indentation.
+from semantic import trace
+trace_source = """theorem trace_pair (P Q : Prop) (hp : P) (hq : Q) : P ∧ Q := by
+  constructor
+  · exact hp
+  · exact hq
+"""
+trace_result = trace(trace_source)
+assert trace_result["schema"] == 1 and trace_result["declaration"] == "trace_pair", trace_result
+trace_nodes = trace_result["tactics"]
+assert trace_nodes, trace_result
+for node in trace_nodes:
+    span = node["sourceRange"]
+    assert 0 <= span["startByte"] < span["endByte"] <= len(trace_source.encode("utf-8")), node
+    assert 1 <= span["start"]["line"] <= span["end"]["line"], node
+constructor = next(node for node in trace_nodes if node["syntax"].strip().startswith("constructor"))
+assert len(constructor["goalsBefore"]) == 1, constructor
+assert len(constructor["goalsAfter"]) == 2, constructor
+assert "∧" in constructor["goalsBefore"][0]["target"], constructor
+assert {d["name"] for d in constructor["goalsBefore"][0]["localContext"]} >= {"hp", "hq"}, constructor
+exact_hp = next(node for node in trace_nodes if node["syntax"].strip() == "exact hp")
+assert len(exact_hp["goalsBefore"]) == 1 and exact_hp["goalsAfter"] == [], exact_hp
+assert "hp" in {d["name"] for d in exact_hp["referencedLocals"]}, exact_hp
+assert exact_hp["sourceRange"]["start"]["line"] == 3, exact_hp
+
+opaque_source = """theorem opaque_trace (P : Prop) (h : P) : P := by
+  assumption
+"""
+opaque_result = trace(opaque_source)
+opaque_tactic = next(node for node in opaque_result["tactics"] if node["syntax"].strip() == "assumption")
+assert opaque_tactic["opaque"] is True, opaque_tactic
+assert opaque_tactic["opaqueRange"] == opaque_tactic["sourceRange"], opaque_tactic
+print("Pinned Lean InfoTree trace captured nested goals, local context, references and opaque source ranges")

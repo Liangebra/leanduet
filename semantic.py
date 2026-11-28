@@ -46,7 +46,8 @@ def _run_lean(text, project=None, marker=None, trace=False):
     raise ValueError("No semantic result was produced.")
 
 def _adapter():
-    return (ROOT / "lean" / "Extract.lean").read_text(encoding="utf-8")
+    return ((ROOT / "lean" / "Extract.lean").read_text(encoding="utf-8") + "\n" +
+            (ROOT / "lean" / "InfoTreeTrace.lean").read_text(encoding="utf-8"))
 
 def extract(source, project=None, *, reading_only=False):
     name = _name(source)
@@ -54,6 +55,52 @@ def extract(source, project=None, *, reading_only=False):
         raise ValueError("Incomplete proofs cannot be inspected as verified derivations.")
     return _run_lean("import Lean\n" + source.rstrip() + "\n\n" + _adapter() +
                      ("\n#duet_extract_fast " if reading_only else "\n#duet_extract ") + name + "\n", project)
+
+
+
+def trace(source, project=None):
+    """Capture tactic ranges and goal/context snapshots from Lean's InfoTree.
+
+    The initial adapter accepts one declaration preceded only by imports. It
+    never treats indentation as proof dependency information.
+    """
+    name = _name(source)
+    match = NAME.search(source)
+    prelude = source[:match.start()]
+    for line in prelude.splitlines():
+        if line.strip() and not line.lstrip().startswith("import "):
+            raise ValueError("InfoTree tracing accepts only imports before the declaration.")
+    declaration = source[match.start():].strip()
+    if re.search(r"\\b(?:sorry|admit|sorryAx)\\b", declaration):
+        raise ValueError("Incomplete proofs cannot be traced as verified derivations.")
+    adapter = _adapter()
+    prefix = "import Lean\\n" + prelude + adapter + "\\n#duet_trace\\n"
+    output = _run_lean(prefix + declaration + "\\n", project, "LEANDUET_TRACE_JSON:")
+    marker = "LEANDUET_TRACE_JSON:"
+    encoded = [line.split(marker, 1)[1] for line in output.splitlines() if marker in line]
+    if len(encoded) != 1:
+        raise ValueError("Lean did not produce exactly one InfoTree trace.")
+    if len(encoded[0].encode("utf-8")) > MAX_OUTPUT:
+        raise ValueError("InfoTree trace exceeds the current inspection limit.")
+    result = json.loads(encoded[0])
+    if result.get("schema") != 1:
+        raise ValueError("Unsupported InfoTree trace schema.")
+    byte_delta = len(prefix.encode("utf-8")) - len(prelude.encode("utf-8"))
+    line_delta = prefix.count("\\n") - prelude.count("\\n")
+    for tactic in result.get("tactics", []):
+        source_range = tactic.get("sourceRange")
+        if source_range is None:
+            continue
+        source_range["startByte"] -= byte_delta
+        source_range["endByte"] -= byte_delta
+        source_range["start"]["line"] -= line_delta
+        source_range["end"]["line"] -= line_delta
+        if source_range["startByte"] < 0 or source_range["endByte"] > len(source.encode("utf-8")):
+            raise ValueError("InfoTree source range lies outside the supplied declaration.")
+    result["declaration"] = name
+    result["sourceEncoding"] = "UTF-8"
+    result["rangeConvention"] = "half-open UTF-8 byte offsets; 1-based lines; 0-based Unicode-scalar columns"
+    return result
 
 def _safe_proof(source):
     if re.search(r"\b(?:sorry|admit|sorryAx)\b", source):
