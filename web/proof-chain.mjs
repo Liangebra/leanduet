@@ -91,6 +91,12 @@ export function renderChain(steps){
         lines.push(...body.map(line=>'  '+line));
       }
     }
+    else if(s.kind==='classical-reductio'){
+      lines.push('  apply Classical.byContradiction','  intro '+s.assumptionName);
+      if(s.assumptionType)lines.push('  change '+s.assumptionType+' at '+s.assumptionName);
+      const body=renderChain(s.subgoals?.[0]?.steps||[]).split('\n').slice(1);
+      lines.push(...body);
+    }
     else if(s.kind==='exists-intro'){
       lines.push('  refine ⟨'+s.witness+', ?_⟩','  ·');
       const body=renderChain(s.subgoals?.[0]?.steps||[]).split('\n').slice(1);
