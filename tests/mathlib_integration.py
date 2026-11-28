@@ -213,7 +213,7 @@ print("Mathlib topology: composition dependency view retains both functions and 
 counterexample_path=Path(__file__).resolve().parent/"mathlib"/"ProofRefactorCounterexamples.lean"
 counterexample_source=counterexample_path.read_text(encoding="utf-8")
 subprocess.run(["lake","env","lean",str(counterexample_path)],cwd=project,check=True)
-let_marker="\\ntheorem compact_image_refactor_local_let"
+let_marker="\ntheorem compact_image_refactor_local_let"
 assert let_marker in counterexample_source
 direct_source=counterexample_source.split(let_marker,1)[0]
 direct_tree=extract(direct_source,project)["tree"]
