@@ -498,3 +498,11 @@ Lean's `P (Nat.succ n)` target. Other inductive types, non-universal targets,
 generalized induction hypotheses, and automatic induction discovery remain
 unsupported. Candidate status still does not mean Lean-verified until the
 separate checker accepts the generated term.
+
+## Constructive contradiction elimination
+
+A matching local pair `hnot : ¬ P` and `hp : P` can yield the intuitionistic
+contradiction `hnot hp : False`; another target may follow by `False.elim`.
+The candidate generator retains distinct premise identities and does not infer
+double-negation elimination. This is local context reasoning, separate from
+classical reductio, which must remain an explicit operation.
