@@ -104,9 +104,15 @@ partial def inspect (e : Expr) (fuel : Nat) (path : String := "root") (suggestio
   let term := (← ppExpr e).pretty
   let ty ← inferType e
   let typ := (← ppExpr ty).pretty
+  -- Binder display names are not part of a proposition's scoped structure.
+  -- Keep the readable type above, and expose a second comparison view that
+  -- erases only binder names while retaining variable occurrences and heads.
+  let typeShape := (← ppExpr (shape ty)).pretty
   let editable ← isProp ty
   let scope ← localScope ty editable e
-  if fuel == 0 then return node path editable scope "opaque" term typ #[] [("truncated", toJson true)]
+  if fuel == 0 then
+    return node path editable scope "opaque" term typ #[] [
+      ("truncated", toJson true), ("typeShape", toJson typeShape)]
   match e with
   | .lam n t b bi =>
       let binderType := (← ppExpr t).pretty
@@ -114,14 +120,16 @@ partial def inspect (e : Expr) (fuel : Nat) (path : String := "root") (suggestio
       withLocalDecl n bi t fun x => do
         let child ← inspect (b.instantiate1 x) (fuel - 1) (path ++ "/body") suggestions
         return node path editable scope kind term typ #[child]
-          [("binder", toJson n.toString), ("binderType", toJson binderType)]
+          [("binder", toJson n.toString), ("binderType", toJson binderType),
+            ("typeShape", toJson typeShape)]
   | .letE n t v b _ =>
       let binderType := (← ppExpr t).pretty
       let value ← inspect v (fuel - 1) (path ++ "/value") suggestions
       withLetDecl n t v fun x => do
         let body ← inspect (b.instantiate1 x) (fuel - 1) (path ++ "/body") suggestions
         return node path editable scope "let" term typ #[value, body]
-          [("binder", toJson n.toString), ("binderType", toJson binderType)]
+          [("binder", toJson n.toString), ("binderType", toJson binderType),
+            ("typeShape", toJson typeShape)]
   | .app .. =>
       let alternatives ← if editable && suggestions then localApplications ty else pure #[]
       let head := e.getAppFn
@@ -148,11 +156,16 @@ partial def inspect (e : Expr) (fuel : Nat) (path : String := "root") (suggestio
         | _ => headText
       return node path editable scope "apply" term typ children
         [("reference", toJson ref), ("referenceType", toJson headType), ("applications", Json.arr alternatives), ("argumentCount", toJson args.size),
+          ("typeShape", toJson typeShape),
           ("omittedProofArguments", toJson omittedProofArguments)]
-  | .const n _ => return node path editable scope "reference" term typ #[] [("reference", toJson n.toString)]
-  | .fvar _ => return node path editable scope "hypothesis" term typ
+  | .const n _ =>
+      return node path editable scope "reference" term typ #[] [
+        ("reference", toJson n.toString), ("typeShape", toJson typeShape)]
+  | .fvar _ =>
+      return node path editable scope "hypothesis" term typ #[] [("typeShape", toJson typeShape)]
   | .mdata _ body => inspect body (fuel - 1) path suggestions
-  | _ => return node path editable scope "opaque" term typ
+  | _ =>
+      return node path editable scope "opaque" term typ #[] [("typeShape", toJson typeShape)]
 
 elab "#duet_extract " n:ident : command => do
   liftTermElabM do
