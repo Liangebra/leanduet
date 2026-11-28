@@ -180,3 +180,27 @@ statement types, and checks the two dependency closures. This is a concrete
 counterexample to selecting proof dependencies by proposition type or
 treating source-level factoring as proof-shape preservation. It does not
 establish a general source-to-proof alignment or minimality theorem.
+
+The same fixture now adds a dependent existential witness in `Fin (n + 1)`.
+The integration compiles direct and local-let versions, checks that the local
+let's value is `x` and its type depends on `n`, and confirms that the
+`Exists.intro` closure retains `h2`, the predicate and witness context while
+excluding same-typed `h1`. This is one checked dependent example, not a
+general proof of dependency minimality.
+
+## Browser formula to native IR regression (Issue #10)
+
+`tests/ir_integration.py` now drives the browser formula parser on nested
+natural-number quantifiers, addition and equality. It checks the browser's
+de Bruijn indices, emits a Lean theorem from the rendered formula, and uses
+Lean's elaborator plus the native judgment round-trip checker to compare the
+formula and theorem type. Cases cover distinct binder renaming and repeated
+binder names in nested scopes; the latter must resolve to the innermost
+binder. Native binder display names are erased before structural comparison,
+while `matchesGoal` is still checked by Lean.
+
+This is an executable regression on a narrow fragment. It does not prove that
+the JavaScript parser implements `ScopedSemantics`, that all browser ASTs map
+to native `Expr`, or that structural equality is general mathematical
+equivalence. Free identifiers, dependent domains, partial formulas and other
+unsupported grammar remain outside this test.
