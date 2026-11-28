@@ -91,3 +91,122 @@ assert r["standaloneChecked"] and r["statementDefEq"] and r["proofComplementPres
 assert "theorem LeanDuetExtractedLemma" in r["source"] and "theorem ir_factor" in r["source"],r
 assert "g (LeanDuetExtractedLemma" in r["source"],r
 print("Factoring a nested inference produces a standalone checked two-theorem document")
+
+
+# Issue #10: compare the browser's canonical binder view with Lean's native IR
+# on a small typed fragment. The browser formula is the source of the Lean
+# statement below; Lean elaboration and the native round-trip checker remain
+# the authority for typing.
+formula_script = """
+import {compileFormula} from './web/math-formula.mjs';
+let input = '';
+for await (const chunk of process.stdin) input += chunk;
+console.log(JSON.stringify(compileFormula(JSON.parse(input))));
+"""
+
+def compile_browser_formula(text):
+    result = subprocess.run(
+        ["node", "--input-type=module", "-e", formula_script],
+        input=json.dumps(text),
+        text=True,
+        capture_output=True,
+        cwd=Path(__file__).resolve().parents[1],
+        check=True,
+    )
+    return json.loads(result.stdout)
+
+def expression_nodes(expr):
+    if isinstance(expr, list):
+        yield expr
+        for child in expr:
+            if isinstance(child, list):
+                yield from expression_nodes(child)
+
+def erase_native_binder_names(expr):
+    # Expr binder names are display hints; bound indices carry identity.
+    if not isinstance(expr, list):
+        return expr
+    if len(expr) == 5 and expr[0] in ("lambda", "pi"):
+        return [expr[0], expr[2], erase_native_binder_names(expr[3]),
+                erase_native_binder_names(expr[4])]
+    return [erase_native_binder_names(child) for child in expr]
+
+formula_text = r"\forall n : \mathbb{N}, \forall m : \mathbb{N}, n + m = n + m"
+browser_formula = compile_browser_formula(formula_text)
+scoped = browser_formula["scoped"]
+assert scoped["kind"] == "binder" and scoped["op"] == "∀", scoped
+outer_body = scoped["body"]
+assert outer_body["kind"] == "binder" and outer_body["op"] == "∀", scoped
+equality = outer_body["body"]
+assert equality["kind"] == "binary" and equality["op"] == "=", scoped
+assert equality["left"]["kind"] == "binary" and equality["left"]["op"] == "+", scoped
+assert equality["left"] == equality["right"], scoped
+assert equality["left"]["left"] == {"kind": "bound", "index": 1}, scoped
+assert equality["left"]["right"] == {"kind": "bound", "index": 0}, scoped
+
+# Renaming binders changes their presentation but not either scoped syntax
+# or the native Lean expression after binder display names are erased.
+renamed_formula = compile_browser_formula(
+    r"\forall i : \mathbb{N}, \forall j : \mathbb{N}, i + j = i + j"
+)
+assert renamed_formula["scoped"] == scoped
+assert renamed_formula["lean"] != browser_formula["lean"]
+
+# Reusing a display name in a nested binder is lexical shadowing, not a
+# reference to the outer object. The canonical term should match a fresh-name
+# presentation that refers to its innermost binder twice.
+shadowed_formula = compile_browser_formula(
+    r"\forall n : \mathbb{N}, \forall n : \mathbb{N}, n = n"
+)
+fresh_shadow_equivalent = compile_browser_formula(
+    r"\forall outer : \mathbb{N}, \forall inner : \mathbb{N}, inner = inner"
+)
+shadowed_scoped = shadowed_formula["scoped"]
+shadowed_equality = shadowed_scoped["body"]["body"]
+assert shadowed_scoped["body"]["kind"] == "binder", shadowed_scoped
+assert shadowed_equality["kind"] == "binary" and shadowed_equality["op"] == "=", shadowed_scoped
+assert shadowed_equality["left"] == {"kind": "bound", "index": 0}, shadowed_scoped
+assert shadowed_equality["right"] == {"kind": "bound", "index": 0}, shadowed_scoped
+assert shadowed_scoped == fresh_shadow_equivalent["scoped"]
+assert shadowed_formula["lean"] != fresh_shadow_equivalent["lean"]
+
+def check_browser_formula(candidate, theorem_name, expected_bound_indices=(0, 0, 1, 1)):
+    source = (
+        f"theorem {theorem_name} : {candidate['lean']} := by\n"
+        "  intro _ _\n"
+        "  rfl\n"
+    )
+    # Extracting and inspecting this declaration uses Lean's real elaborator.
+    extract(source)
+    ir = inspect_ir(source, "root", candidate["lean"])
+    validate(ir)
+    judgment = ir["judgment"]
+    assert judgment["formula"]["matchesGoal"], ir
+    # Lean may hygienically rename binder display names in the theorem type.
+    # Compare alpha-normalized shape; matchesGoal is Lean's elaborated check.
+    assert erase_native_binder_names(judgment["formula"]["term"]) == erase_native_binder_names(judgment["type"]), ir
+    native_type = judgment["type"]
+    assert native_type[0] == "pi", native_type
+    assert native_type[3][0] == "const" and "Nat" in json.dumps(native_type[3][1]), native_type
+    inner = native_type[4]
+    assert inner[0] == "pi", native_type
+    assert inner[3][0] == "const" and "Nat" in json.dumps(inner[3][1]), native_type
+    body = inner[4]
+    indices = [node[1] for node in expression_nodes(body)
+               if len(node) == 2 and node[0] == "bound"]
+    assert sorted(indices) == list(expected_bound_indices), native_type
+    assert "Eq" in json.dumps(body), native_type
+    return native_type
+
+native_type = check_browser_formula(browser_formula, "browser_formula_native_ir")
+renamed_native_type = check_browser_formula(renamed_formula, "browser_formula_alpha_native_ir")
+assert erase_native_binder_names(native_type) == erase_native_binder_names(renamed_native_type)
+shadowed_native_type = check_browser_formula(
+    shadowed_formula, "browser_formula_shadowed_native_ir", expected_bound_indices=(0, 0)
+)
+fresh_shadow_native_type = check_browser_formula(
+    fresh_shadow_equivalent, "browser_formula_fresh_shadow_native_ir", expected_bound_indices=(0, 0)
+)
+assert erase_native_binder_names(shadowed_native_type) == erase_native_binder_names(fresh_shadow_native_type)
+
+print("Browser formula binders retain de Bruijn identity through Lean elaboration and native IR")
