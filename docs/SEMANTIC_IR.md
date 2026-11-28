@@ -78,6 +78,15 @@ that shadows a context name. Browser smoke also loads and calls the module
 through the local HTTP server; it is not yet exposed as an interactive editor
 control.
 
+The Lean integration also applies `substFormula` to formulas emitted by this
+projection and checks two concrete commuting cases: replacing the older of
+two Nat objects while retaining the newer one, and replacing an outer object
+under a universal binder without capturing the bound variable. In both cases
+the substituted serialized syntax is definitionally the projection of the
+corresponding updated formula, and the existing `denote_subst` theorem applies
+to those emitted terms. These regressions exercise concrete inputs; they do
+not prove the JavaScript projection preserves substitution for all formulas.
+
 ## Integration plan
 
 Extend the closed Nat/Prop projection to explicitly typed local contexts and stable object identities. Then connect native Expr export with explicit binding identity and universe data. Define a type-preserving elaboration relation from surface syntax, retaining alternative parses if not unique. A local edit becomes a partial context morphism and checked replacement, preserving the surrounding proof complement. Establish substitution composition and then a theorem connecting the actual serialized representation to its Lean interpretation. Only after this link should we claim end-to-end semantic correctness.
