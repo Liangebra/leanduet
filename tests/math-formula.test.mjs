@@ -12,10 +12,6 @@ test('Lean syntax accepts namespace-qualified references while presentation synt
  assert.equal(compileFormula('P (Nat.succ n)',{syntax:'lean'}).lean,'(P (Nat.succ n))');
  assert.throws(()=>compileFormula('P (Nat.succ n)'));
 });
-test('Lean syntax accepts namespace-qualified references while presentation syntax stays narrow',()=>{
- assert.equal(compileFormula('P (Nat.succ n)',{syntax:'lean'}).lean,'(P (Nat.succ n))');
- assert.throws(()=>compileFormula('P (Nat.succ n)'));
-});
 test('unsupported, ambiguous and malformed formulas fail rather than guess',()=>{
  for(const t of ['2x','a < b < c',String.raw`\unknown{x}`,'a = (b','by exact h','a; b','x_{i}'])assert.throws(()=>compileFormula(t),undefined,t);
 });
