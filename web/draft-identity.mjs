@@ -70,7 +70,7 @@ function operationLineKey(node){
  return JSON.stringify([node.origin||node.kind,node.kind,operation.kind,operation.logic||null,
   formulaShape(operation.parentGoal),subgoals,closure.kind||null,closure.name||null,operation.witness||null]);
 }
-const lineKey=n=>operationLineKey(n)||JSON.stringify([n.origin||n.kind,n.raw]);
+const lineKey=n=>n.origin==='element-request'?JSON.stringify([n.origin,n.raw]):operationLineKey(n)||JSON.stringify([n.origin||n.kind,n.raw]);
 function candidateKey(c,ids){
  if(c.dependencies.some(id=>!ids.has(id)))return null;
  if(c.type&&!c.formula?.tree)return null;

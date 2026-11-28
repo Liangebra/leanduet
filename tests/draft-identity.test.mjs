@@ -157,7 +157,7 @@ test('alpha-renamed nested goal scopes reconcile against their shared parent obj
 
 test('renaming an operation-local assumption preserves its scoped object identity',()=>{
  const scope=['h'],facts=new Map([['h','¬ ¬ P']]);
- const source='classical reductio hnot\\n  contradiction\\n    $False$ | h hnot';
+ const source='classical reductio hnot\n  contradiction\n    $False$ | h hnot';
  const renamed=source.replaceAll('hnot','notP');
  const original=compileNaturalDraft(source,scope,facts,{goal:'P'});
  const edited=compileNaturalDraft(renamed,scope,facts,{goal:'P'});
