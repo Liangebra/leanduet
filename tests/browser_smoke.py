@@ -689,7 +689,7 @@ $R$ | gr localQ"""
             negation_page.locator("#chainText").fill("From hnot and hp, we obtain $Q$")
             expect(negation_page.locator("#draftTranslation")).to_contain_text("False.elim (hnot hp)")
             negation_page.locator("#compileChain").click()
-            expect(negation_page.locator("#patchTerm")).to_have_value(__import__("re").compile(r"False\\.elim \\(hnot hp\\)"))
+            expect(negation_page.locator("#patchTerm")).to_have_value(__import__("re").compile(r"False\.elim \(hnot hp\)"))
             negation_page.locator("#checkPatch").click()
             expect(negation_page.locator("#applyPatch")).to_be_enabled(timeout=120000)
             negation_page.once("dialog",lambda d:d.accept())
