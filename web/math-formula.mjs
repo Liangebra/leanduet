@@ -2,10 +2,10 @@
 // candidate. TeX is not executed; unknown macros and ambiguous adjacency fail.
 const commands={land:'∧',wedge:'∧',lor:'∨',vee:'∨',neg:'¬',lnot:'¬',to:'→',implies:'→',Rightarrow:'→',iff:'↔',Leftrightarrow:'↔',le:'≤',leq:'≤',ge:'≥',geq:'≥',ne:'≠',neq:'≠',in:'∈',subseteq:'⊆',cap:'∩',inter:'∩',cup:'∪',union:'∪',cdot:'*',times:'*',forall:'∀',exists:'∃',alpha:'α',beta:'β',gamma:'γ',delta:'δ',epsilon:'ε',theta:'θ',lambda:'λ',mu:'μ',pi:'π',rho:'ρ',sigma:'σ',phi:'φ',psi:'ψ',omega:'ω',top:'True',bot:'False'};
 // Match Lean's arithmetic and set-operator precedences: + and ∪ at 65;
-// *, ∩ at 70. This matters when users mix these symbols in one formula.
+// *, ∩ at 70; function composition follows Lean's infixr:90 notation.
 // The bounded `''` image operator follows Mathlib v4.19.0's
 // `Mathlib/Data/Set/Operations.lean` declaration `infixl:80 " '' " => image`.
-const bin={'↔':[10,11],'→':[20,20],'∨':[30,31],'∧':[40,41],'=':[50,51],'≠':[50,51],'<':[50,51],'>':[50,51],'≤':[50,51],'≥':[50,51],'∈':[50,51],'⊆':[50,51],'∪':[65,66],'+':[65,66],'-':[65,66],'∩':[70,71],'*':[70,71],'/':[70,71],"''":[80,81],'^':[80,80]};
+const bin={'↔':[10,11],'→':[20,20],'∨':[30,31],'∧':[40,41],'=':[50,51],'≠':[50,51],'<':[50,51],'>':[50,51],'≤':[50,51],'≥':[50,51],'∈':[50,51],'⊆':[50,51],'∪':[65,66],'+':[65,66],'-':[65,66],'∩':[70,71],'*':[70,71],'/':[70,71],'∘':[90,90],"''":[80,81],'^':[80,80]};
 const relation=new Set(['=','≠','<','>','≤','≥','∈','⊆','↔']);
 const reserved=new Set('by fun match let in if then else do have show from where theorem lemma def import namespace end section set_option sorry admit sorryAx true false Type Prop'.split(' '));
 function tokenize(s,{syntax='math'}={}){
