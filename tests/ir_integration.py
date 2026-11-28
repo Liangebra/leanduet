@@ -1,5 +1,6 @@
 """Actual structural Lean judgment and formula elaboration, independent of pretty printing."""
 from pathlib import Path
+from tempfile import TemporaryDirectory
 import json, subprocess, sys
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from semantic import extract,inspect_ir
