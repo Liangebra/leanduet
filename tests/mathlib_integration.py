@@ -219,7 +219,10 @@ direct_start=counterexample_source.index(direct_marker)
 let_start=counterexample_source.index(let_marker)
 shared_prefix=counterexample_source[:direct_start]
 direct_source=shared_prefix+counterexample_source[direct_start:let_start]
-local_let_source=shared_prefix+counterexample_source[let_start:]
+fin_direct_marker="\ntheorem fin_witness_refactor_direct"
+fin_let_marker="\ntheorem fin_witness_refactor_local_let"
+fin_start=counterexample_source.index(fin_direct_marker)
+local_let_source=shared_prefix+counterexample_source[let_start:fin_start]
 direct_tree=extract(direct_source,project)["tree"]
 local_let_tree=extract(local_let_source,project)["tree"]
 assert direct_tree["type"]==local_let_tree["type"],(direct_tree,local_let_tree)
@@ -239,3 +242,45 @@ let_scope={d["name"]:d for d in let_value["scope"]}
 assert let_scope["h1"]["type"]==let_scope["h2"]["type"],let_scope
 assert let_scope["h2"]["neededForContext"] and not let_scope["h1"]["neededForContext"],let_scope
 print("Mathlib refactoring counterexample: same-typed premise identity and local-let term shape checked")
+
+
+# A dependent Fin witness adds a second axis to issue #9: the carrier depends
+# on n and the predicate proof depends on x. Keep proof identity distinct from
+# equality of the proposition types while checking the local-let presentation.
+fin_direct_marker="\ntheorem fin_witness_refactor_direct"
+fin_let_marker="\ntheorem fin_witness_refactor_local_let"
+assert fin_direct_marker in counterexample_source and fin_let_marker in counterexample_source
+fin_start=counterexample_source.index(fin_direct_marker)
+fin_let_start=counterexample_source.index(fin_let_marker)
+fin_direct_source=shared_prefix+counterexample_source[fin_start:fin_let_start]
+fin_local_let_source=shared_prefix+counterexample_source[fin_let_start:]
+fin_direct_tree=extract(fin_direct_source,project)["tree"]
+fin_local_let_tree=extract(fin_local_let_source,project)["tree"]
+assert fin_direct_tree["type"]==fin_local_let_tree["type"],(fin_direct_tree,fin_local_let_tree)
+assert "Fin" in fin_direct_tree["type"],fin_direct_tree["type"]
+
+def is_exists_intro(node):
+    return node.get("reference","").endswith("Exists.intro")
+
+fin_direct_node=next(node for node in walk(fin_direct_tree) if is_exists_intro(node))
+fin_direct_scope={declaration["name"]:declaration for declaration in fin_direct_node["scope"]}
+assert fin_direct_scope["h1"]["type"]==fin_direct_scope["h2"]["type"],fin_direct_scope
+assert fin_direct_scope["h2"]["neededForContext"] and not fin_direct_scope["h1"]["neededForContext"],fin_direct_scope
+assert {"n","p","x","h2"}.issubset(
+    {name for name,declaration in fin_direct_scope.items() if declaration["neededForContext"]}
+),fin_direct_scope
+
+fin_local_let_node=next(node for node in walk(fin_local_let_tree)
+                        if node["kind"]=="let" and node.get("binder")=="finWitness")
+fin_local_value=fin_local_let_node["children"][0]
+assert fin_local_value["kind"]=="hypothesis" and fin_local_value["term"]=="x",fin_local_let_node
+assert "Fin" in fin_local_let_node["binderType"] and "n" in fin_local_let_node["binderType"],fin_local_let_node
+fin_local_exists=next(node for node in walk(fin_local_let_tree) if is_exists_intro(node))
+fin_local_scope={declaration["name"]:declaration for declaration in fin_local_exists["scope"]}
+assert fin_local_scope["finWitness"]["neededForContext"],fin_local_scope
+assert fin_local_scope["h1"]["type"]==fin_local_scope["h2"]["type"],fin_local_scope
+assert fin_local_scope["h2"]["neededForContext"] and not fin_local_scope["h1"]["neededForContext"],fin_local_scope
+assert {"n","p","x","h2"}.issubset(
+    {name for name,declaration in fin_local_scope.items() if declaration["neededForContext"]}
+),fin_local_scope
+print("Mathlib refactoring counterexample: dependent Fin witness and same-type premise identities checked")
