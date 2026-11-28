@@ -90,8 +90,8 @@ function candidateKey(c,ids,nodesById){
   if(dependencyNames.has(node.name)&&dependencyNames.get(node.name)!==identity)ambiguousNames.add(node.name);
   else dependencyNames.set(node.name,identity);
  }
- const normalizedTerm=String(c.term).replace(/[\\p{L}_][\\p{L}\\p{N}_']*/gu,name=>
-  dependencyNames.has(name)&&!ambiguousNames.has(name)?'\\u0000local:'+dependencyNames.get(name)+'\\u0000':name);
+ const normalizedTerm=String(c.term).replace(/[\p{L}_][\p{L}\p{N}_']*/gu,name=>
+  dependencyNames.has(name)&&!ambiguousNames.has(name)?String.fromCharCode(0)+'local:'+dependencyNames.get(name)+String.fromCharCode(0):name);
  return JSON.stringify([c.schema,normalizedTerm,c.type?stableTree(c.formula.tree,ids):null,c.dependencies.map(id=>ids.get(id)).sort()]);
 }
 function matchingContent(a,b,oldIds,newIds){
@@ -335,7 +335,8 @@ export function migrateDraftChoices(previous,current,choices){
  const result=new Map();
  if(!previous)return result;
  const oldById=new Map(allNodes(previous.graph).map(n=>[n.id,n]));
- for(const n of allNodes(current.graph)){
+ const currentById=new Map(allNodes(current.graph).map(n=>[n.id,n]));
+ for(const n of currentById.values()){
   const oldId=current.matches.get(n.id);
   const oldLine=/\/line:(\d+)$|^line:(\d+)$/.exec(oldId||'');
   const newLine=/\/line:(\d+)$|^line:(\d+)$/.exec(n.id);
@@ -344,10 +345,8 @@ export function migrateDraftChoices(previous,current,choices){
   const p=oldById.get(oldId);
   const oldCandidates=p?.alternatives.filter(c=>(c.choice??c.term)===selected)||[];
   if(oldCandidates.length!==1)continue;
-  const oldNodesById=new Map(allNodes(previous.graph).map(node=>[node.id,node]));
-  const currentNodesById=new Map(allNodes(current.graph).map(node=>[node.id,node]));
-  const key=candidateKey(oldCandidates[0],previous.ids,oldNodesById);if(!key)continue;
-  const compatible=n.alternatives.filter(c=>candidateKey(c,current.ids,currentNodesById)===key);
+  const key=candidateKey(oldCandidates[0],previous.ids,oldById);if(!key)continue;
+  const compatible=n.alternatives.filter(c=>candidateKey(c,current.ids,currentById)===key);
   if(compatible.length===1)result.set(Number(newLine[1]||newLine[2]),compatible[0].choice??compatible[0].term);
  }
  return result;
