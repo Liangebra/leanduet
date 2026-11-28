@@ -76,10 +76,23 @@ function operationLineKey(node){
   formulaShape(operation.parentGoal),subgoals,closure.kind||null,closureKey,operation.witness||null]);
 }
 const lineKey=n=>n.origin==='element-request'?JSON.stringify([n.origin,n.raw]):operationLineKey(n)||JSON.stringify([n.origin||n.kind,n.raw]);
-function candidateKey(c,ids){
+function candidateKey(c,ids,nodesById){
  if(c.dependencies.some(id=>!ids.has(id)))return null;
  if(c.type&&!c.formula?.tree)return null;
- return JSON.stringify([c.schema,c.term,c.type?stableTree(c.formula.tree,ids):null,c.dependencies.map(id=>ids.get(id)).sort()]);
+ // A candidate term can change spelling when a uniquely matched local object
+ // is alpha-renamed. Normalize only names that resolve to context objects
+ // explicitly listed among this candidate's dependencies; ambiguous shadowed
+ // names stay textual, so proof routes are not merged by spelling alone.
+ const dependencyNames=new Map(),ambiguousNames=new Set();
+ for(const id of c.dependencies){
+  const node=nodesById.get(id),identity=ids.get(id);
+  if(node?.kind!=='context'||typeof node.name!=='string'||identity===undefined)continue;
+  if(dependencyNames.has(node.name)&&dependencyNames.get(node.name)!==identity)ambiguousNames.add(node.name);
+  else dependencyNames.set(node.name,identity);
+ }
+ const normalizedTerm=String(c.term).replace(/[\\p{L}_][\\p{L}\\p{N}_']*/gu,name=>
+  dependencyNames.has(name)&&!ambiguousNames.has(name)?'\\u0000local:'+dependencyNames.get(name)+'\\u0000':name);
+ return JSON.stringify([c.schema,normalizedTerm,c.type?stableTree(c.formula.tree,ids):null,c.dependencies.map(id=>ids.get(id)).sort()]);
 }
 function matchingContent(a,b,oldIds,newIds){
  const oldScope=(a.scopeRefs||[]).map(x=>oldIds.get(x));
@@ -331,8 +344,10 @@ export function migrateDraftChoices(previous,current,choices){
   const p=oldById.get(oldId);
   const oldCandidates=p?.alternatives.filter(c=>(c.choice??c.term)===selected)||[];
   if(oldCandidates.length!==1)continue;
-  const key=candidateKey(oldCandidates[0],previous.ids);if(!key)continue;
-  const compatible=n.alternatives.filter(c=>candidateKey(c,current.ids)===key);
+  const oldNodesById=new Map(allNodes(previous.graph).map(node=>[node.id,node]));
+  const currentNodesById=new Map(allNodes(current.graph).map(node=>[node.id,node]));
+  const key=candidateKey(oldCandidates[0],previous.ids,oldNodesById);if(!key)continue;
+  const compatible=n.alternatives.filter(c=>candidateKey(c,current.ids,currentNodesById)===key);
   if(compatible.length===1)result.set(Number(newLine[1]||newLine[2]),compatible[0].choice??compatible[0].term);
  }
  return result;

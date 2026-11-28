@@ -35,5 +35,5 @@ a later source row retains correspondence only when its text is identical
 modulo those uniquely matched local spellings and its scoped formula and
 references still agree. This is alpha correspondence only: it does not identify logically equivalent formulas,
 establish Lean definitional equality, rename source text, or certify that a
-proof narrative is faithful. Unsupported or structurally changed targets or
+proof narrative is faithful. A selected candidate may follow a local alpha-renaming only when every renamed reference is a uniquely identified dependency in that candidate; ambiguous names and changed proof dependencies do not migrate. Unsupported or structurally changed targets or
 types do not retain correspondence.
