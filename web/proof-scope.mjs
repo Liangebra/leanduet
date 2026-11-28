@@ -50,7 +50,7 @@ export function forkProofScope(parent,{id,goal,binding,allowShadow=false}){
 }
 
 /** Open a child goal with the parent's context and no new assumption. */
-export function forkGoalScope(parent,{id,goal,bindings=[]}={}){
+export function forkGoalScope(parent,{id,goal,bindings=[],allowShadow=false}={}){
  if(typeof id!=='string'||!id||id===parent.id)throw Error('A child proof scope needs a distinct identity.');
  if(!Array.isArray(bindings))throw Error('A child proof scope needs an array of context additions.');
  const child={id,parentId:parent.id,goal:formulaKey(goal),goalText:goal,
@@ -59,7 +59,9 @@ export function forkGoalScope(parent,{id,goal,bindings=[]}={}){
   if(!binding||typeof binding.id!=='string'||!identifier.test(binding.name||'')||typeof binding.type!=='string')
    throw Error('Invalid child-scope context binding.');
   if(child.bindings.some(item=>item.id===binding.id))throw Error('Proof-scope identity already exists.');
-  if(resolveProofName(child,binding.name).status!=='missing')
+  // Operation-local binders may intentionally reuse a visible spelling.
+  // Resolution then selects this nearest local identity; the parent is unchanged.
+  if(!allowShadow&&resolveProofName(child,binding.name).status!=='missing')
    throw Error('A child-scope context name must be fresh in its parent.');
   child.bindings.push({...binding,local:true});
   child.localBindingIds.push(binding.id);
