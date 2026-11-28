@@ -205,3 +205,34 @@ assert set(composition_case["expectedContextClosure"]).issubset(composition_name
 for instance in composition_case["requiredTypeclassClosure"]:
     assert any(instance in d["type"] for d in composition_needed),(instance,composition_needed)
 print("Mathlib topology: composition dependency view retains both functions and all three topology instances")
+
+
+# Issue #9: a real proof-refactoring counterexample. Both declarations state
+# the same Mathlib proposition. The direct subterm uses h2, not the distinct
+# same-typed h1; the local-let version changes the elaborated term structure.
+counterexample_path=Path(__file__).resolve().parent/"mathlib"/"ProofRefactorCounterexamples.lean"
+counterexample_source=counterexample_path.read_text(encoding="utf-8")
+subprocess.run(["lake","env","lean",str(counterexample_path)],cwd=project,check=True)
+let_marker="\\ntheorem compact_image_refactor_local_let"
+assert let_marker in counterexample_source
+direct_source=counterexample_source.split(let_marker,1)[0]
+direct_tree=extract(direct_source,project)["tree"]
+local_let_tree=extract(counterexample_source,project)["tree"]
+assert direct_tree["type"]==local_let_tree["type"],(direct_tree,local_let_tree)
+assert direct_tree["kind"]=="apply",direct_tree
+assert any(n["kind"]=="let" and n.get("binder")=="imageProof" for n in walk(local_let_tree)),local_let_tree
+assert not any(n["kind"]=="let" and n.get("binder")=="imageProof" for n in walk(direct_tree)),direct_tree
+
+direct_node=next(n for n in walk(direct_tree) if n.get("reference")=="IsCompact.image")
+direct_scope={d["name"]:d for d in direct_node["scope"]}
+assert direct_scope["h1"]["type"]==direct_scope["h2"]["type"],direct_scope
+assert direct_scope["h2"]["neededForContext"],direct_scope
+assert not direct_scope["h1"]["neededForContext"],direct_scope
+assert {"s","f","h2","hf"}.issubset({name for name,d in direct_scope.items() if d["neededForContext"]}),direct_scope
+
+let_node=next(n for n in walk(local_let_tree) if n["kind"]=="let" and n.get("binder")=="imageProof")
+let_value=next(n for n in walk(let_node["children"][0]) if n.get("reference")=="IsCompact.image")
+let_scope={d["name"]:d for d in let_value["scope"]}
+assert let_scope["h1"]["type"]==let_scope["h2"]["type"],let_scope
+assert let_scope["h2"]["neededForContext"] and not let_scope["h1"]["neededForContext"],let_scope
+print("Mathlib refactoring counterexample: same-typed premise identity and local-let term shape checked")
