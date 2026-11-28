@@ -142,7 +142,7 @@ export function compileGoalOperationProgram(input,frame,{goal=null,choices=new M
  for(let index=0;index<parsed.subgoals.length;index++){
   const subgoal=parsed.subgoals[index],plan=operation.subgoals[index],childId=frame.id+'/subgoal:'+parsed.head.line+':'+subgoal.id;
   const bindings=(plan.contextDelta||[]).map((binding,bindingIndex)=>({...binding,id:childId+'/binding:'+bindingIndex}));
-  const child=forkGoalScope(frame,{id:childId,goal:plan.goal,bindings});
+  const child=forkGoalScope(frame,{id:childId,goal:plan.goal,bindings,allowShadow:true});
   const siblingNames=reserved.flatMap((names,siblingIndex)=>siblingIndex===index?[]:[...names]);
   const result=compileSegment(subgoal.sourceLines.join('\n'),child,{goal:plan.goal,choices,lineOffset:subgoal.bodyLineOffset,
    closedNames:[...new Set([...closedNames,...siblingNames])],openBindings,cache});
