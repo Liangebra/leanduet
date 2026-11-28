@@ -173,8 +173,8 @@ The export printer now requests explicit binder types, universe levels, coercion
 `tests/mathlib/ProofRefactorCounterexamples.lean` gives two compiling Mathlib
 proofs of the same compact-image proposition. Both contexts contain distinct
 `h1 h2 : IsCompact s`, while the selected subterm is
-`IsCompact.image h2 hf). The dependency view must retain `h2` and exclude
-`h1), even though their types coincide. A second proof binds that subterm to
+`IsCompact.image h2 hf`. The dependency view must retain `h2` and exclude
+`h1`, even though their types coincide. A second proof binds that subterm to
 a local `imageProof`; its elaborated occurrence tree contains a let node.
 The Mathlib integration check compiles both declarations, compares their
 statement types, and checks the two dependency closures. This is a concrete
