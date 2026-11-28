@@ -126,11 +126,12 @@ export function reconcileDraftIdentity(previous,graph){
    if(priorIdentity===undefined)return false;
    const oldContext=oldContexts.get(prior.id),newContext=newContexts.get(current.id);
    if(!oldContext||!newContext||oldContext.ambiguousName||newContext.ambiguousName)return false;
-   let sameType=false;
-   try{
-    sameType=same(stableTree(oldContext.formula?.tree,previous.ids),
-     stableTree(newContext.formula?.tree,trialIds));
-   }catch{}
+   const oldType=oldContext.formula?.tree,newType=newContext.formula?.tree;
+   let sameType=oldContext.type===newContext.type;
+   if(oldType&&newType){
+    try{sameType=same(stableTree(oldType,previous.ids),stableTree(newType,trialIds));}
+    catch{sameType=false;}
+   }
    if(!sameType)return false;
    if(trialIds.has(current.id)&&trialIds.get(current.id)!==priorIdentity)return false;
    trialIds.set(current.id,priorIdentity);
