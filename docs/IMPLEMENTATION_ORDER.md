@@ -498,3 +498,16 @@ Lean's `P (Nat.succ n)` target. Other inductive types, non-universal targets,
 generalized induction hypotheses, and automatic induction discovery remain
 unsupported. Candidate status still does not mean Lean-verified until the
 separate checker accepts the generated term.
+
+## Explicit natural-number induction
+
+The structured proof editor also accepts `induction n` (or `对 n 归纳`) only
+when the current goal is an explicitly typed `∀ n : Nat, P n`. It opens a
+zero/base child goal and a successor child goal. The successor context contains
+a fresh Nat step object and `ih : P n`; both are local to that child, and the
+induction recursor discharges them when the parent proof is closed. The
+successor target is displayed as `P (n + 1)`, which is definitionally equal to
+Lean's `P (Nat.succ n)` target. Other inductive types, non-universal targets,
+generalized induction hypotheses, and automatic induction discovery remain
+unsupported. Candidate status still does not mean Lean-verified until the
+separate checker accepts the generated term.
