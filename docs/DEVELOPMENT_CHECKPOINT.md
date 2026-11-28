@@ -4,33 +4,61 @@ Updated 2026-11-27 (UTC).
 
 ## Current repository state
 
-- Main includes PR #22 (source positions, residual-goal closure checks, and branch-local name expiry), PR #43 (constructive ex-falso from an explicit `False` premise), PR #37 (structural operation candidates), PR #38 (set-restricted element operations), and PR #39 (scoped local lemma subproofs).
-- PR #39 was squash-merged as `5c6205e7df9f0a55f422a6d74be22f71e9a499a9`. Its exact head `3d899d39ec508d93d20cfc9f2d97af853d5421c6` passed both full Tests runs (`46077887989`, `46077892803`) and pinned Mathlib integration (`46077892834`). The browser path selected the actual elaborated `letFun` node, built a local-lemma draft, checked/applied its Lean patch, and rechecked the theorem.
-- The main push, Mathlib integration, and Pages deployment for the #39 merge were started as runs `46078929296`, `46078929261`, and `46078929322`; verify their final result before treating main as fully green.
-- PR #40 adds the subgroup multiplication-closure acceptance case alongside the compact-image topology case. Its earlier stacked head is being synchronized onto current main; the synchronized head still needs full Tests and pinned Mathlib validation.
-- PR #42 corrects the incremental benchmark baseline to use the public full compiler path and compares every cached result structurally with a cold result. It still needs synchronization and a fresh run on the final stack.
-- PR #44 is an independent Urdu language-pack contribution. Its fork workflow is `action_required`; its tests are not verified.
+- Main includes PR #22 (source positions, residual-goal checks and branch-local name expiry), PR #37/#38 (bounded element-operation candidates), PR #39 (scoped local lemmas), PR #40 (Mathlib subgroup closure) and PR #45 (conservative repeated-row identity reconciliation).
+- PR #45 was squash-merged as `9cc0c7ea122df39cc3b4026c8f52b6f64592a3e4`. Its exact head `175c35bbe23bc5804e0fc656281b6e4f6f2e3c60` passed full Tests run `46081647742`; the main push Tests run `46083385839` is still being checked, and Pages deployment `46083385823` succeeded.
+- PR #42's benchmark implementation passed full Tests run `46082417456` on exact head `5ecaa856efde5fef2eba34b4b02e7ede1e68129a`. This branch is now synchronized with #45's main commit and the checkpoint records results from the corrected public cold-compiler baseline; rerun the full workflow on the synchronized head before merging.
+- PR #46 adds a linear-map additivity case. Its two generated Lean candidates compiled under pinned Mathlib 4.19. The integration then exposed an overly strict test lookup for the extracted declaration name; the current branch revises that lookup and is being revalidated. Do not count the corpus case as fully verified until its dependency-closure checks pass.
+- Contributor PR #44 (Urdu language pack) remains open from a fork with workflow `action_required`; it is not treated as validated.
 
 ## Mathematical and engineering state
 
-Proof scopes form a tree. Child goals inherit parent object identities; sibling locals remain isolated; branches close only against their stated residual goals; child-local declarations expire; only parent-visible dependencies can return. Conjunction, equivalence, existential construction, intuitionistic negation introduction, and ex-falso remain constructive operations. Classical reductio is not silently introduced.
+Proof scopes form a tree. Child goals inherit parent object identities; sibling locals remain isolated; branch closure checks the residual goal; local declarations expire at scope exit; only parent-visible dependencies return. Conjunction, equivalence, existential construction, intuitionistic negation introduction and explicit ex-falso are constructive operations. Classical reductio is not silently introduced.
 
-Bounded element requests preserve the set restriction and its local identity. A displayed element type is required; a known local carrier can reject a mismatch; a universal introduction creates membership as an explicit premise; an existential witness carries both membership and its property. The browser keeps universal-introduction and existential-extraction readings separate until the goal, typed context, or user choice constrains them. The parser does not infer arbitrary set carriers.
+Bounded element requests preserve the set restriction and local identity. A displayed type is required; a known local carrier can reject a mismatch; universal introduction creates membership as a subgoal; an existential witness carries both membership and its property. Universal introduction and existential extraction remain separate structural readings until the goal, typed context or user choice constrains them. The parser does not infer arbitrary set carriers or local definitions from the same phrase.
 
-A local lemma uses an explicit claim and proof block. The child inherits parent identities, must structurally close against the stated claim, and returns only parent dependencies. Child-local declarations expire. An incomplete claim remains visible as an open dependency but cannot produce a complete Lean export. The browser-to-backend path and Mathlib local-lemma candidate compile on the validated PR #39 head.
+A local lemma uses an explicit claim and proof block. Its child scope inherits parent identities, closes only against the stated claim, and returns parent-visible dependencies. Child-local declarations expire. An incomplete lemma remains an open dependency and cannot produce a complete Lean export.
 
-The representative corpus now includes a compact-image theorem in topology and a subgroup multiplication-closure theorem in abstract algebra. The latter's synchronized Mathlib run must confirm both compilation and dependency extraction before it is counted as validated.
+The reviewed Mathlib seed corpus covers a continuous image of a compact set and subgroup multiplication closure. The corresponding generated Lean terms compile against pinned Mathlib 4.19, and dependency extraction checks data, propositions and relevant typeclass instances. These are small acceptance examples, not broad mathematical-language coverage.
 
 ## Verification boundary
 
-Parsing, candidate construction, structural compatibility, open proof obligations, Lean elaboration, kernel checking, and author-intent fidelity are separate states. A structurally exportable draft is not by itself a Lean proof or a semantic-fidelity guarantee. Formula comparison is conservative structural comparison, not general definitional equality. Local scope IDs and incremental cache behavior still require improvement for source-line shifts.
+Parsing, candidate construction, structural compatibility, open proof obligations, Lean elaboration, kernel checking and author-intent fidelity are distinct states. A structurally exportable draft is not by itself a Lean proof or a semantic-fidelity guarantee. Formula comparison is conservative structural comparison, not general definitional equality. Current source identities are reconciled conservatively across edits; repeated identical rows may remain intentionally unmatched when correspondence is ambiguous.
+
+The new benchmark measures synthetic editor cases only. It must report the observed medians and P95 values, including cases with little reuse or slower cached evaluation; no user-facing latency claim has been established yet.
+
+## Incremental benchmark observations
+
+Run `46082417456` used Ubuntu 24.04.5 and Node 22.23.5, with 24 warmups and 160 timed samples per case. Every cached result was compared structurally with a cold public `compileNaturalDraft` result. Times are milliseconds; reuse is mean reused rows. These synthetic figures are not browser keystroke latency and do not generalize to user documents.
+
+| Case | Median | P95 | Reuse |
+|---|---:|---:|---:|
+| Cold full evaluation (16 proof rows, 62 locals) | 1.442 | 2.249 | 0 |
+| Exact replay (16 proof rows, 62 locals) | 1.112 | 1.785 | 16 |
+| Final-premise character edit (15-row prefix) | 1.081 | 1.561 | 15 |
+| Local proof-dependency edit (7-row prefix) | 1.069 | 1.393 | 7 |
+| Eight-level nested cases, cold (41 lines) | 6.283 | 8.981 | 0 |
+| Eight-level nested cases, exact replay | 1.160 | 1.405 | 25 |
+| Nested case conclusion edit | 6.951 | 7.958 | 16 |
+| Interleaved sequence, cold (two case blocks) | 2.012 | 2.801 | 0 |
+| Interleaved replay plus terminal edit | 2.524 | 3.228 | 4 |
+| Conjunction child goals, cold | 0.097 | 0.211 | 0 |
+| Second conjunction goal edit | 0.268 | 0.340 | 1 |
+| Element candidates, cold (50 locals) | 0.976 | 1.389 | 0 |
+| Element candidates, exact replay | 0.450 | 0.758 | 1 |
+| Element candidate property edit | 1.013 | 1.337 | 0 |
+| New existential premise | 0.988 | 1.296 | 0 |
+| Local lemma, cold (51 locals) | 1.412 | 1.831 | 0 |
+| Local lemma, exact replay | 0.313 | 0.338 | 3 |
+| Local lemma one-premise edit | 1.667 | 2.150 | 1 |
+| Local lemma source-line shift | 1.686 | 2.182 | 0 |
+
+Exact replay is faster in these fixtures. Reuse does not guarantee a speedup: nested conclusion edits, interleaved terminal edits and local-lemma edits can be slower than their cold baselines despite some reused rows. The benchmark is synthetic and does not establish general editor latency.
 
 ## Next dependency-ready work
 
-1. Finish checking the main #39 push Tests, Mathlib integration, and Pages deployment runs.
-2. Validate and merge synchronized PR #40, including its pinned subgroup Lean case and dependency view.
-3. Synchronize PR #42; record cold, replay, edit and nested-scope medians/P95 and report cases where incremental work is slower.
-4. Continue issue #4 with stable proof-node IDs and edit migration for insertions, deletions, repeated steps, and ambiguous two-sided edits.
-5. Add a reviewed analysis or linear-algebra case with natural prose, expected semantic structure, Lean compilation, and a local-edit regression.
+1. Confirm the main push Tests run `46083385839` for PR #45 and close issue #4 once its two-sided conflict and repeated-row acceptance tests are verified on main.
+2. Complete full Tests and pinned Mathlib validation for synchronized PR #42, then merge only the exact green head.
+3. Finish PR #46's linear-map declaration and dependency-closure validation, sync it to the new main tree, and rerun both workflows.
+4. Prototype issue #1's small InfoTree adapter: tactic source ranges, goals before/after, local context and referenced declarations, with explicit opaque-tactic range mapping and a pinned Lean regression.
 
-The original eight-stage implementation order remains authoritative. The current work advances tree scopes, structural operation ambiguity, declaration dependency checks, local bidirectional editing, incremental evaluation, and real-math acceptance cases; it does not complete any full stage.
+The original eight-stage implementation order remains authoritative. Current work advances tree scopes, bounded structural ambiguity, declaration dependencies, local editing, incremental evaluation and real-math acceptance cases; it does not complete any full stage.
