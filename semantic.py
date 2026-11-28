@@ -88,15 +88,16 @@ def trace(source, project=None):
     byte_delta = len(prefix.encode("utf-8")) - len(prelude.encode("utf-8"))
     line_delta = prefix.count("\n") - prelude.count("\n")
     for tactic in result.get("tactics", []):
-        source_range = tactic.get("sourceRange")
-        if source_range is None:
-            continue
-        source_range["startByte"] -= byte_delta
-        source_range["endByte"] -= byte_delta
-        source_range["start"]["line"] -= line_delta
-        source_range["end"]["line"] -= line_delta
-        if source_range["startByte"] < 0 or source_range["endByte"] > len(source.encode("utf-8")):
-            raise ValueError("InfoTree source range lies outside the supplied declaration.")
+        for range_key in ("sourceRange", "opaqueRange"):
+            source_range = tactic.get(range_key)
+            if source_range is None:
+                continue
+            source_range["startByte"] -= byte_delta
+            source_range["endByte"] -= byte_delta
+            source_range["start"]["line"] -= line_delta
+            source_range["end"]["line"] -= line_delta
+            if source_range["startByte"] < 0 or source_range["endByte"] > len(source.encode("utf-8")):
+                raise ValueError("InfoTree source range lies outside the supplied declaration.")
     result["declaration"] = name
     result["sourceEncoding"] = "UTF-8"
     result["rangeConvention"] = "half-open UTF-8 byte offsets; 1-based lines; 0-based Unicode-scalar columns"
