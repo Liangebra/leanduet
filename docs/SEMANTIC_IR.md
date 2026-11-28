@@ -166,3 +166,17 @@ Regression fixtures include a genuinely local let built in MetaM, distinct assum
 After a standalone lemma has been certified, a new structural operation replaces the selected occurrence by an application of that lemma. Arguments are actual local identities from the dependency closure; let declarations are not passed as parameters. The lemma body must match the exact abstraction, not just its proposition. The resulting theorem type is checked, then both declarations are compiled independently, and the elaborated result is compared to the expected single-occurrence replacement. The rest of the proof is therefore preserved modulo the existing shape equivalence (alpha names, metadata and let flags). The two-theorem document is a preview only: the current single-theorem editor cannot yet adopt it as an editable project. Universe-polymorphic factoring and arbitrary preludes remain unsupported.
 
 The export printer now requests explicit binder types, universe levels, coercions, proof arguments and non-notation syntax for both extracted terms and statements; the independent shape check is unchanged. On a mismatch the expected and actual canonical expressions are reported.
+
+## Proof-refactoring counterexample
+
+`tests/mathlib/ProofRefactorCounterexamples.lean` gives two compiling Mathlib
+proofs of the same compact-image proposition. Both contexts contain distinct
+`h1 h2 : IsCompact s`, while the selected subterm is
+`IsCompact.image h2 hf`. The dependency view must retain `h2` and exclude
+`h1`, even though their types coincide. A second proof binds that subterm to
+a local `imageProof`; its elaborated occurrence tree contains a let node.
+The Mathlib integration check compiles both declarations, compares their
+statement types, and checks the two dependency closures. This is a concrete
+counterexample to selecting proof dependencies by proposition type or
+treating source-level factoring as proof-shape preservation. It does not
+establish a general source-to-proof alignment or minimality theorem.
