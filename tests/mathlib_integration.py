@@ -349,6 +349,7 @@ print("Mathlib refactoring counterexample: submodule addition preserves h2 ident
 # has the same proposition but a different elaborated term shape.
 analysis_path=Path(__file__).resolve().parent/"mathlib"/"ProofRefactorCounterexamples.lean"
 analysis_file=analysis_path.read_text(encoding="utf-8")
+subprocess.run(["lake","env","lean",str(analysis_path)],cwd=project,check=True)
 analysis_direct_marker="\ntheorem deriv_add_refactor_direct"
 analysis_let_marker="\ntheorem deriv_add_refactor_local_let"
 assert analysis_direct_marker in analysis_file and analysis_let_marker in analysis_file
