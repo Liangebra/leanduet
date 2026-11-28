@@ -701,7 +701,14 @@ $R$ | gr localQ"""
             induction_page.locator("#compileChain").click()
             expect(induction_page.locator("#patchTerm")).to_have_value(__import__("re").compile(r"induction n with[\s\S]*exact hstep n_step ih"))
             induction_page.locator("#checkPatch").click()
-            expect(induction_page.locator("#applyPatch")).to_be_enabled(timeout=120000)
+            try:
+                expect(induction_page.locator("#applyPatch")).to_be_enabled(timeout=120000)
+            except AssertionError:
+                print("Nat induction patch target:",induction_page.locator("#patchTarget").inner_text())
+                print("Nat induction patch term:",repr(induction_page.locator("#patchTerm").input_value()))
+                print("Nat induction patch status:",induction_page.locator("#patchStatus").inner_text())
+                print("Nat induction scope:",induction_page.locator("#patchScope").inner_text())
+                raise
             induction_page.once("dialog",lambda d:d.accept())
             induction_page.locator("#applyPatch").click()
             induction_page.locator("#check").click()
