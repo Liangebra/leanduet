@@ -304,7 +304,9 @@ elab "#duet_compare " n:ident m:ident path:str replacement:str : command => do
         | .error err => throwError "{err}"
       let (expected, _, _) ← replaceAt x.value ((path.getString.splitOn "/").drop 1) stx
       unless sameShape expected y.value do
-        throwError "Re-elaborated export does not preserve the requested proof structure"
+        let expectedShape ← ppExpr (shape expected)
+        let exportedShape ← ppExpr (shape y.value)
+        throwError m!"Re-elaborated export does not preserve the requested proof structure.\\nExpected: {expectedShape}\\nExported: {exportedShape}"
       logInfo "LEANDUET_TYPE_AND_SHAPE_MATCH"
     | _, _ => throwError "Expected two theorems"
 
