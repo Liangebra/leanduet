@@ -25,9 +25,12 @@ print("Actual elaborated proof term extracted:",len(nodes),"nodes")
 alpha_x=extract("theorem alpha_type_x : ∀ x : Nat, x = x := by\n  intro x\n  rfl\n")
 alpha_y=extract("theorem alpha_type_y : ∀ y : Nat, y = y := by\n  intro y\n  rfl\n")
 other_shape=extract("theorem different_type_shape : ∀ x : Nat, True := by\n  intro x\n  trivial\n")
+bound_occurrence=extract("theorem bound_occurrence : ∀ y x : Nat, (x = x) → (x = x) := by\n  intro y\n  intro x\n  intro h\n  exact h\n")
+outer_occurrence=extract("theorem outer_occurrence : ∀ y x : Nat, (x = y) → (x = y) := by\n  intro y\n  intro x\n  intro h\n  exact h\n")
 assert alpha_x["tree"]["type"]!=alpha_y["tree"]["type"],(alpha_x,alpha_y)
 assert alpha_x["tree"]["typeShape"]==alpha_y["tree"]["typeShape"],(alpha_x,alpha_y)
 assert alpha_x["tree"]["typeShape"]!=other_shape["tree"]["typeShape"],(alpha_x,other_shape)
+assert bound_occurrence["tree"]["typeShape"]!=outer_occurrence["tree"]["typeShape"],(bound_occurrence,outer_occurrence)
 print("Lean type shapes distinguish formula structure while ignoring binder display names")
 
 
