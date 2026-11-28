@@ -38,3 +38,47 @@ export function validateJudgment(ir){
  if(r!==undefined&&(!r||r.mode!=='same-environment-fresh-context'||!['checked','shapePreserved','encodingPreserved','typeDefEq','freshContextChecked'].every(k=>r[k]===true)))fail();
  return ir;
 }
+
+function contextProjectionFailure(code,detail){
+ const error=new Error('Lean context cannot be projected into the Nat object fragment: '+detail+'.');
+ error.name='SemanticIRContextError';error.code=code;throw error;
+}
+
+function leanNameDisplay(name){
+ if(!Array.isArray(name)||name.length===0)return '';
+ const [parent,kind,value]=name;
+ const prefix=leanNameDisplay(parent);
+ const component=kind==='str'?value:kind==='num'?value:null;
+ if(typeof component!=='string')return '';
+ return prefix?prefix+'.'+component:component;
+}
+
+const isNatConstant=expression=>expression?.[0]==='const'&&expression.length===3&&
+ Array.isArray(expression[2])&&expression[2].length===0&&
+ Array.isArray(expression[1])&&expression[1].length===3&&
+ Array.isArray(expression[1][0])&&expression[1][0].length===0&&
+ expression[1][1]==='str'&&expression[1][2]==='Nat';
+
+/**
+ * Read only an already round-tripped Lean judgment whose entire local context
+ * consists of ordinary Nat parameters. The generated ids identify slots in
+ * this judgment snapshot; they are not persistent identities across edits.
+ */
+export function natObjectContextFromJudgment(ir){
+ validateJudgment(ir);
+ const roundTrip=ir.judgment.roundTrip;
+ if(!roundTrip||roundTrip.mode!=='same-environment-fresh-context'||
+   !['checked','shapePreserved','encodingPreserved','typeDefEq','freshContextChecked'].every(key=>roundTrip[key]===true))
+  contextProjectionFailure('unchecked-judgment','a checked fresh-context Lean round trip is required');
+ return ir.judgment.context.map(declaration=>{
+  if(declaration.value!==null)
+   contextProjectionFailure('local-definition','let-bound objects need value-aware substitution');
+  if(declaration.internal)
+   contextProjectionFailure('internal-local','implementation-detail locals have no user-facing name');
+  if(!isNatConstant(declaration.type))
+   contextProjectionFailure('unsupported-local-type','every local declaration must have exact type Nat');
+  if(typeof declaration.display!=='string'||!/^[\p{L}][\p{L}\p{N}_']*$/u.test(declaration.display))
+   contextProjectionFailure('unsupported-local-name','the Lean display name is not a supported identifier');
+  return {id:leanNameDisplay(ir.declaration)+':'+ir.path+':slot:'+declaration.slot,name:declaration.display,type:'Nat'};
+ });
+}

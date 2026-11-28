@@ -26,6 +26,39 @@ test('a typed False premise offers constructive ex-falso but not double-negation
  assert.equal(implicitCandidates('P',['hnn'],doubleNegationFacts).candidates.length,0);
 });
 
+test('negation elimination constructs a contradiction intuitionistically from matching local objects',()=>{
+ const facts=new Map([['hnot','¬ P'],['hp','P']]);
+ const contradiction=contextCandidates('False',['hnot','hp'],facts);
+ assert.deepEqual(contradiction.map(candidate=>candidate.term),['hnot hp']);
+ assert.deepEqual(contradiction[0].premises,['hnot','hp']);
+ assert.equal(contradiction[0].schema,'negation elimination');
+ const exFalso=contextCandidates('Q',['hnot','hp'],facts);
+ assert.deepEqual(exFalso.map(candidate=>candidate.term),['False.elim (hnot hp)']);
+ assert.deepEqual(exFalso[0].premises,['hnot','hp']);
+ const draft=draftProof('From hnot and hp, we obtain $Q$',['hnot','hp'],facts,{goal:'Q'});
+ assert.equal(draft.complete,true,JSON.stringify(draft.rows,null,2));
+ assert.match(draft.term,/exact False\.elim \(hnot hp\)/);
+
+ const explicitImplication=new Map([['hnot','P → False'],['hp','P']]);
+ assert.deepEqual(contextCandidates('Q',['hnot','hp'],explicitImplication).map(candidate=>candidate.term),
+  ['False.elim (hnot hp)']);
+ const doubleNegation=new Map([['hnn','¬¬ P'],['hp','P']]);
+ assert.deepEqual(contextCandidates('Q',['hnn','hp'],doubleNegation),[],
+  'double-negation elimination requires classical reasoning and is not inferred');
+
+ const ambiguousFacts=new Map([['hnot','¬ P'],['hp1','P'],['hp2','P']]);
+ const alternatives=implicitCandidates('Q',['hnot','hp1','hp2'],ambiguousFacts).candidates;
+ assert.deepEqual(alternatives.map(candidate=>candidate.term),[
+  'False.elim (hnot hp1)','False.elim (hnot hp2)'
+ ]);
+ assert.deepEqual(alternatives.map(candidate=>candidate.premises),[['hnot','hp1'],['hnot','hp2']]);
+ const unresolved=draftProof('Therefore $Q$',['hnot','hp1','hp2'],ambiguousFacts,{goal:'Q'});
+ assert.equal(unresolved.rows[0].proofStatus,'open','equal types do not merge distinct contradiction proofs');
+ assert.equal(unresolved.rows[0].resolutionStatus,'needs-choice');
+ assert.equal(unresolved.rows[0].step.application,'?');
+ assert.deepEqual(unresolved.rows[0].candidates.map(candidate=>candidate.term),alternatives.map(candidate=>candidate.term));
+});
+
 test('a known Lean sort is ignored while other unknown local types stay unresolved',()=>{
  const facts=new Map([['P','Prop'],['hFalse','False']]);
  const candidates=contextCandidates('Q',['P','hFalse'],facts);

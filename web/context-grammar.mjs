@@ -4,6 +4,12 @@ import {compileFormula} from './math-formula.mjs';
 const simple=/^[A-Za-z_][A-Za-z0-9_']{0,63}$/;
 const binary=(a,op)=>a?.kind==='binary'&&a.op===op;
 const equal=(a,b)=>!!a&&!!b&&JSON.stringify(a)===JSON.stringify(b);
+const falseFormula={kind:'free',name:'False'};
+const contradictionAntecedent=type=>{
+ if(type?.kind==='unary'&&type.op==='¬')return type.body;
+ if(binary(type,'→')&&equal(type.right,falseFormula))return type.left;
+ return null;
+};
 const parsedTypes=new Map();
 const parse=s=>{
  if(typeof s!=='string'||s.length>3000)return null;
@@ -69,6 +75,11 @@ export function contextCandidates(goal,names,facts){
  if(entries.length===2){
   for(const [a,b] of [entries,[entries[1],entries[0]]]){
    if(binary(a.type,'→')&&equal(a.type.left,b.type)&&equal(a.type.right,target))add('implication elimination',a.name,[b.name]);
+   const negated=contradictionAntecedent(a.type);
+   if(negated&&equal(negated,b.type)){
+    if(equal(target,falseFormula))add('negation elimination',a.name,[b.name]);
+    else add('negation elimination followed by ex falso','False.elim',['('+a.name+' '+b.name+')']);
+   }
    if(target.kind==='binder'&&target.op==='∃'&&equal(target.domain,a.type)&&equal(specialize(target.body,a.name),b.type))add('existential introduction','Exists.intro',[a.name,b.name]);
    if(a.type.kind==='binder'&&a.type.op==='∀'&&equal(a.type.domain,b.type)&&equal(specialize(a.type.body,b.name),target))add('universal specialization',a.name,[b.name]);
    if(binary(a.type,'↔')){
@@ -196,6 +207,8 @@ export function implicitCandidates(goal,scope,facts,{rule='',limit=8}={}){
   const t=e.t;
   let partners=[];
   if(binary(t,'→')&&equal(t.right,target))partners.push(...lookup(t.left));
+  const contradictionType=contradictionAntecedent(t);
+  if(contradictionType)partners.push(...lookup(contradictionType));
   if(t.kind==='binder'&&t.op==='∀'&&t.domain)partners.push(...lookup(t.domain));
   if(target.kind==='binder'&&target.op==='∃'&&equal(target.domain,t))partners.push(...lookup(specialize(target.body,e.name)));
   if(binary(t,'↔')){

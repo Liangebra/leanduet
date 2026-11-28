@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {compileFormula,sameScopedFormula,toScopedSemantics,toScopedSemanticsInContext} from '../web/math-formula.mjs';
+import {compileFormula,sameScopedFormula,toScopedSemantics,toScopedSemanticsInContext,toScopedSemanticsFromJudgment} from '../web/math-formula.mjs';
 test('math expression grammar preserves precedence and binder structure',()=>{
  assert.equal(compileFormula(String.raw`$b = a$`).lean,'(b = a)');
  assert.equal(compileFormula(String.raw`P \land Q \to R`).lean,'((P ∧ Q) → R)');
@@ -210,4 +210,28 @@ test('typed local context rejects missing identities and unsupported declaration
  assert.throws(()=>toScopedSemanticsInContext('x = x',{context:[
   {id:'nat-object',name:'Nat',type:'Nat'}
  ]}),error=>error?.code==='reserved-context-name');
+});
+
+const n=s=>[[],'str',s];
+const checkedJudgment={schema:1,format:'leanduet.kernel-judgment',declaration:n('context_bridge'),path:'root/body/body',universes:[],judgment:{
+ kind:'expression',
+ context:[
+  {slot:0,name:n('x'),display:'x',binder:'explicit',internal:false,type:['const',n('Nat'),[]],value:null},
+  {slot:1,name:n('y'),display:'y',binder:'explicit',internal:false,type:['const',n('Nat'),[]],value:null}
+ ],
+ term:['local',1],type:['const',n('Nat'),[]],formula:null,
+ roundTrip:{checked:true,shapePreserved:true,encodingPreserved:true,typeDefEq:true,freshContextChecked:true,mode:'same-environment-fresh-context'}
+}};
+test('a checked Lean judgment supplies the exact Nat context for browser projection',()=>{
+ const projection=toScopedSemanticsFromJudgment('x + y = y + x',{leanIR:checkedJudgment});
+ assert.equal(projection.schema,'leanduet.scoped-semantics.formula-context');
+ assert.deepEqual(projection.context,[
+  {id:'context_bridge:root/body/body:slot:0',name:'x',type:'Nat'},
+  {id:'context_bridge:root/body/body:slot:1',name:'y',type:'Nat'}
+ ]);
+ assert.deepEqual(projection.formula,toScopedSemanticsInContext('x + y = y + x',{context:[
+  {id:'x',name:'x',type:'Nat'},{id:'y',name:'y',type:'Nat'}
+ ]}).formula);
+ assert.equal(projection.formula.left.left.index,1);
+ assert.equal(projection.formula.left.right.index,0);
 });
