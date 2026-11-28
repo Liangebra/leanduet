@@ -145,3 +145,20 @@ test('alpha-renamed nested goal scopes reconcile against their shared parent obj
  assert.equal(renamed.ids.get('context:0'),original.ids.get('context:0'));
  assert.equal(renamed.ids.get('root/subgoal:1:first'),original.ids.get('root/subgoal:1:first'));
 });
+
+test('subgoal-local assumption identities survive unrelated source-line shifts',()=>{
+ const scope=['h'],facts=new Map([['h','¬ ¬ P']]);
+ const source='classical reductio hnot\n  contradiction\n    $False$ | h hnot';
+ const original=compileNaturalDraft(source,scope,facts,{goal:'P'});
+ assert.equal(original.complete,true,JSON.stringify(original.rows,null,2));
+ const old=reconcileDraftIdentity(null,original.graph);
+ const oldBinding=original.rows[0].subgoals[0].graph.nodes.find(node=>node.kind==='context'&&node.name==='hnot');
+ assert.ok(oldBinding);
+ const shifted=compileNaturalDraft('\n'+source,scope,facts,{goal:'P'});
+ const current=reconcileDraftIdentity(old,shifted.graph);
+ const newBinding=shifted.rows[0].subgoals[0].graph.nodes.find(node=>node.kind==='context'&&node.name==='hnot');
+ assert.ok(newBinding);
+ assert.notEqual(newBinding.id,oldBinding.id,'the source path shifts with the block');
+ assert.equal(current.ids.get(newBinding.id),old.ids.get(oldBinding.id),
+  'the same scoped assumption retains identity after a harmless line insertion');
+});
