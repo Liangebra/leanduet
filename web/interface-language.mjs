@@ -43,6 +43,22 @@ const rows = [
 ["Apply to Lean","应用到 Lean","Lean に適用"],
 ["Discard changes","放弃更改","変更を破棄"],
 ["Sync to Lean →","同步到 Lean →","Lean に同期 →"],
+["Tactic trace · Lean InfoTree","tactic 执行轨迹 · Lean InfoTree","tactic 実行トレース · Lean InfoTree"],
+["Capture tactic trace","捕获 tactic 轨迹","tactic トレースを取得"],
+["Capture on demand with local Lean. Recorded goal states are not a reconstruction of authorial reasoning.","按需调用本地 Lean。记录的目标状态不代表对作者推理过程的重建。","必要なときにローカル Lean を実行します。記録された目標状態は著者の推論過程を再構成したものではありません。"],
+["Run an explicit capture to inspect this revision.","显式捕获此版本的 tactic 轨迹。","この版を調べるにはトレースを明示的に取得してください。"],
+["Tactic tracing requires the local Lean backend.","tactic 追踪需要本地 Lean 后端。","tactic トレースにはローカル Lean バックエンドが必要です。"],
+["Captured tactic trace from Lean's elaboration.","已捕获 Lean elaboration 记录的 tactic 轨迹。","Lean の elaboration から tactic トレースを取得しました。"],
+["Lean returned no tactic information for this proof.","Lean 未为该证明返回 tactic 信息。","Lean はこの証明の tactic 情報を返しませんでした。"],
+["Source range","源码范围","ソース範囲"],
+["Goals before","执行前的目标","実行前の目標"],
+["Goals after","执行后的目标","実行後の目標"],
+["Local context","局部上下文","局所文脈"],
+["Recorded references","记录到的引用","記録された参照"],
+["No goals remain.","没有剩余目标。","未解決の目標はありません。"],
+["No child TermInfo expression was recorded; this tactic maps to its whole source range.","未记录子级 TermInfo 表达式；此 tactic 映射到其完整源码范围。","子の TermInfo 式は記録されていません。この tactic はソース範囲全体に対応します。"],
+["TermInfo was recorded; this is not necessarily a complete dependency list.","已记录 TermInfo；这不一定是完整的依赖列表。","TermInfo は記録されましたが、依存関係の完全な一覧とは限りません。"],
+["No tactic entries were recorded for this proof.","此证明没有记录到 tactic 条目。","この証明では tactic 項目が記録されていません。"],
 ["ELABORATED PROOF TERM","经 elaboration 得到的证明项","精緻化された証明項"],
 ["Extract typed proof","提取类型化证明","型付き証明を抽出"],
 ["Read with Informath","使用 Informath 阅读","Informath で読む"],
@@ -190,7 +206,7 @@ export function mountInterface(onChange){
     const n=walker.currentNode;
     if(dictionaries.has(n.data.trim())&&!n.parentElement.closest('script,style,textarea, #interfaceLanguage, #typedLanguage'))bindings.push([n,n.data]);
   }
-  const dynamicIds=['theme','focusMode','toggleLayout','saveState','leanDirty','proseDirty','verifyState','notice','envState','output','typedStatus','narrativeStatus','inspectName'];
+  const dynamicIds=['theme','focusMode','toggleLayout','saveState','leanDirty','proseDirty','verifyState','notice','envState','output','typedStatus','traceStatus','narrativeStatus','inspectName'];
   const dynamic=new Map();
   const reverse=new Map(rows.flatMap(([en,zh,ja])=>[[en,en],[zh,en],[ja,en]]));
   for(const id of dynamicIds){
