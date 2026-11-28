@@ -296,7 +296,8 @@ submodule_start=counterexample_source.index(submodule_direct_marker)
 submodule_let_start=counterexample_source.index(submodule_let_marker)
 submodule_prefix=counterexample_source[:direct_start]
 submodule_direct_source=submodule_prefix+counterexample_source[submodule_start:submodule_let_start]
-submodule_local_let_source=submodule_prefix+counterexample_source[submodule_let_start:]
+submodule_end=counterexample_source.index("\ntheorem deriv_add_refactor_direct")
+submodule_local_let_source=submodule_prefix+counterexample_source[submodule_let_start:submodule_end]
 submodule_direct_tree=extract(submodule_direct_source,project)["tree"]
 submodule_local_tree=extract(submodule_local_let_source,project)["tree"]
 assert submodule_direct_tree["type"]==submodule_local_tree["type"],(
@@ -341,3 +342,52 @@ submodule_let_scope={declaration["name"]:declaration for declaration in submodul
 assert submodule_let_scope["h1"]["type"]==submodule_let_scope["h2"]["type"],submodule_let_scope
 assert submodule_let_scope["h2"]["neededForContext"] and not submodule_let_scope["h1"]["neededForContext"],submodule_let_scope
 print("Mathlib refactoring counterexample: submodule addition preserves h2 identity and records the universe-polymorphic export limit")
+
+
+# Issue #9: a real-analysis refactoring case. The direct subterm is
+# `h2.add hg`; same-typed h1 is intentionally unused. The local-let version
+# has the same proposition but a different elaborated term shape.
+analysis_path=Path(__file__).resolve().parent/"mathlib"/"ProofRefactorCounterexamples.lean"
+analysis_file=analysis_path.read_text(encoding="utf-8")
+analysis_direct_marker="\ntheorem deriv_add_refactor_direct"
+analysis_let_marker="\ntheorem deriv_add_refactor_local_let"
+assert analysis_direct_marker in analysis_file and analysis_let_marker in analysis_file
+analysis_direct_start=analysis_file.index(analysis_direct_marker)
+analysis_let_start=analysis_file.index(analysis_let_marker)
+compact_marker="\ntheorem compact_image_refactor_direct"
+analysis_prefix=analysis_file[:analysis_file.index(compact_marker)]
+analysis_direct_source=analysis_prefix+analysis_file[analysis_direct_start:analysis_let_start]
+analysis_local_let_source=analysis_prefix+analysis_file[analysis_let_start:]
+analysis_direct_tree=extract(analysis_direct_source,project)["tree"]
+analysis_local_let_tree=extract(analysis_local_let_source,project)["tree"]
+assert analysis_direct_tree["typeShape"]==analysis_local_let_tree["typeShape"],(
+    analysis_direct_tree["type"],analysis_local_let_tree["type"])
+assert analysis_direct_tree["type"]!=analysis_local_let_tree["type"],(
+    "The fixture should exercise different display names for alpha-equivalent binders.")
+assert "HasDerivAt" in analysis_direct_tree["type"],analysis_direct_tree["type"]
+
+def is_derivative_add(node):
+    return node.get("reference","").endswith("HasDerivAt.add")
+
+analysis_add=next((node for node in walk(analysis_direct_tree) if is_derivative_add(node)),None)
+assert analysis_add,analysis_direct_tree
+analysis_scope={declaration["name"]:declaration for declaration in analysis_add["scope"]}
+assert analysis_scope["h1"]["type"]==analysis_scope["h2"]["type"],analysis_scope
+assert analysis_scope["h2"]["neededForContext"] and not analysis_scope["h1"]["neededForContext"],analysis_scope
+analysis_needed={name for name,declaration in analysis_scope.items()
+                 if declaration["neededForContext"]}
+assert {"𝕜","f","g","f'","g'","x","h2","hg"}.issubset(analysis_needed),analysis_scope
+assert any("NontriviallyNormedField" in declaration["type"]
+           for declaration in analysis_scope.values()),analysis_scope
+
+analysis_let=next((node for node in walk(analysis_local_let_tree)
+                   if node["kind"]=="let" and node.get("binder")=="derivativeSum"),None)
+assert analysis_let,analysis_local_let_tree
+analysis_let_add=next((node for node in walk(analysis_let["children"][0])
+                       if is_derivative_add(node)),None)
+assert analysis_let_add,analysis_let
+analysis_let_scope={declaration["name"]:declaration for declaration in analysis_let_add["scope"]}
+assert analysis_let_scope["h2"]["neededForContext"] and not analysis_let_scope["h1"]["neededForContext"],analysis_let_scope
+assert not any(node["kind"]=="let" and node.get("binder")=="derivativeSum"
+               for node in walk(analysis_direct_tree)),analysis_direct_tree
+print("Mathlib analysis: derivative-sum proof preserves cited hypothesis identity and local-let term shape")
