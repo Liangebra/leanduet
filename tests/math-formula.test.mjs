@@ -1,12 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {compileFormula,sameScopedFormula,toScopedSemantics} from '../web/math-formula.mjs';
+import {compileFormula,sameScopedFormula,toScopedSemantics,toScopedSemanticsInContext} from '../web/math-formula.mjs';
 test('math expression grammar preserves precedence and binder structure',()=>{
  assert.equal(compileFormula(String.raw`$b = a$`).lean,'(b = a)');
  assert.equal(compileFormula(String.raw`P \land Q \to R`).lean,'((P ∧ Q) → R)');
  assert.equal(compileFormula(String.raw`\forall n : \mathbb{N}, P(n)`).lean,'(∀ n : Nat, (P n))');
  assert.equal(compileFormula(String.raw`\frac{a+b}{c} = d`).lean,'(((a + b) / c) = d)');
  assert.equal(compileFormula('f(g(x), y) = z').lean,'((f (g x) y) = z)');
+});
+test('Lean syntax accepts namespace-qualified references while presentation syntax stays narrow',()=>{
+ assert.equal(compileFormula('P (Nat.succ n)',{syntax:'lean'}).lean,'(P (Nat.succ n))');
+ assert.throws(()=>compileFormula('P (Nat.succ n)'));
 });
 test('unsupported, ambiguous and malformed formulas fail rather than guess',()=>{
  for(const t of ['2x','a < b < c',String.raw`\unknown{x}`,'a = (b','by exact h','a; b','x_{i}'])assert.throws(()=>compileFormula(t),undefined,t);
@@ -122,16 +126,88 @@ test('bounded scoped semantic projection retains typed constructors and bound id
  const fresh=toScopedSemantics('∀ outer : Nat, ∀ inner : Nat, inner = inner');
  assert.deepEqual(shadow,fresh);
  assert.notDeepEqual(shadow,projected);
+ const existential=toScopedSemantics('∃ n : Nat, n + 0 = n');
+ assert.deepEqual(existential.formula,{
+  kind:'exists',body:{kind:'equal',
+   left:{kind:'add',left:{kind:'var',index:0},right:{kind:'zero'}},
+   right:{kind:'var',index:0}}
+ });
+ const mixed=toScopedSemantics('∀ n : Nat, ∃ n : Nat, n = n');
+ assert.deepEqual(mixed.formula,{kind:'all',body:{kind:'exists',body:{kind:'equal',
+  left:{kind:'var',index:0},right:{kind:'var',index:0}}}});
 });
 
 test('scoped semantic projection reports unsupported mathematics instead of guessing',()=>{
  const cases=[
-  ['∃ n : Nat, n = 0','unsupported-quantifier'],
   ['∀ n : Nat, P(n)','unsupported-predicate'],
   ['∀ n, n = n','missing-domain-annotation'],
+  ['∃ n, n = n','missing-domain-annotation'],
   ['∀ n : Nat, n = 1','unsupported-literal'],
-  ['∀ n : Int, n = n','unsupported-binder-domain']
+  ['∀ n : Int, n = n','unsupported-binder-domain'],
+  ['∃ n : Int, n = n','unsupported-binder-domain']
  ];
  for(const [formula,code] of cases)
   assert.throws(()=>toScopedSemantics(formula),error=>error?.name==='ScopedSemanticsError'&&error.code===code,formula);
+});
+
+
+test('typed local contexts preserve object identity and use context-relative indices',()=>{
+ const context=[
+  {id:'object-x',name:'x',type:'Nat'},
+  {id:'object-y',name:'y',type:'Nat'}
+ ];
+ const projected=toScopedSemanticsInContext('x + y = y + x',{context});
+ assert.equal(projected.schema,'leanduet.scoped-semantics.formula-context');
+ assert.equal(projected.version,1);
+ assert.equal(projected.contextSize,2);
+ assert.deepEqual(projected.context,context);
+ assert.deepEqual(projected.formula,{
+  kind:'equal',
+  left:{kind:'add',left:{kind:'var',index:1},right:{kind:'var',index:0}},
+  right:{kind:'add',left:{kind:'var',index:0},right:{kind:'var',index:1}}
+ });
+ const underBinder=toScopedSemanticsInContext('∀ x : Nat, x + y = y + x',{context});
+ assert.deepEqual(underBinder.formula,{
+  kind:'all',
+  body:{
+   kind:'equal',
+   left:{kind:'add',left:{kind:'var',index:0},right:{kind:'var',index:1}},
+   right:{kind:'add',left:{kind:'var',index:1},right:{kind:'var',index:0}}
+  }
+ });
+});
+
+test('typed local context separates stable ids from display names',()=>{
+ const before=toScopedSemanticsInContext('x = x',{
+  context:[{id:'same-object',name:'x',type:'Nat'}]
+ });
+ const after=toScopedSemanticsInContext('renamed = renamed',{
+  context:[{id:'same-object',name:'renamed',type:'Nat'}]
+ });
+ assert.equal(before.context[0].id,after.context[0].id);
+ assert.notEqual(before.context[0].name,after.context[0].name);
+ assert.deepEqual(before.formula,after.formula);
+ assert.throws(()=>toScopedSemanticsInContext('x = x',{context:[
+  {id:'first-x',name:'x',type:'Nat'},
+  {id:'second-x',name:'x',type:'Nat'}
+ ]}),error=>error?.code==='ambiguous-context-name');
+});
+
+test('typed local context rejects missing identities and unsupported declarations',()=>{
+ assert.throws(()=>toScopedSemanticsInContext('x = x',{context:[
+  {id:'x',name:'x',type:'Int'}
+ ]}),error=>error?.code==='unsupported-context-type');
+ assert.throws(()=>toScopedSemanticsInContext('x = x',{context:[
+  {id:'',name:'x',type:'Nat'}
+ ]}),error=>error?.code==='invalid-context-entry');
+ assert.throws(()=>toScopedSemanticsInContext('x = x',{context:[
+  {id:'x',name:'x',type:'Nat'},
+  {id:'x',name:'y',type:'Nat'}
+ ]}),error=>error?.code==='duplicate-context-id');
+ assert.throws(()=>toScopedSemanticsInContext('z = z',{context:[
+  {id:'x',name:'x',type:'Nat'}
+ ]}),error=>error?.code==='unresolved-free-name');
+ assert.throws(()=>toScopedSemanticsInContext('x = x',{context:[
+  {id:'nat-object',name:'Nat',type:'Nat'}
+ ]}),error=>error?.code==='reserved-context-name');
 });

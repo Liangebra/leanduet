@@ -114,11 +114,26 @@ from this speculative graph.
 `lean/Scoped.lean` first proves substitution laws for an untyped scope-indexed
 operator tree, then adds a separate, intrinsically typed fragment with
 natural-number expressions and first-order propositions. Its Lean denotation
-is preserved by capture-avoiding substitution, including under universal
-binders; an erasure map into the generic tree also preserves substitution.
+is preserved by capture-avoiding substitution, including under universal and
+existential binders; an erasure map into the generic tree also preserves
+substitution. The browser projection includes explicitly typed Nat existential
+binders and checks witness-scope preservation under local-object replacement.
 This is an initial semantic correspondence, not a conversion from the browser
 AST to Lean `Expr`, and it excludes dependent object types, predicates beyond
 equality, arbitrary constants, and incomplete terms.
+
+## Explicit Nat context projection
+
+A separate browser projection accepts a finite, oldest-to-newest context of
+records containing stable id, display name, and the supported type `Nat`.
+The emitted `Formula n` uses Fin indices: the newest context object is index
+zero, shifted outward under each universal binder. Free names resolve only
+when exactly one context entry has that name; binder shadowing is handled by
+the parser's de Bruijn scope. Lean integration checks the emitted indices and
+denotation against an explicit finite environment, including a binder that
+shadows a context display name. This bridge does not yet accept proposition
+assumptions or dependent context entries, infer persistent identity across
+edits, or map the serialized schema to arbitrary Lean `Expr`.
 
 ## Explicit candidate resolution
 
@@ -470,3 +485,16 @@ Intuitionistic negation introduction remains a separate operation proving
 `False` from an assumption `P`; ex falso remains elimination from an
 existing `False` proof. The temporary negation has child-scope identity and
 is discharged when the child closes.
+
+## Explicit natural-number induction
+
+The structured proof editor also accepts `induction n` (or `对 n 归纳`) only
+when the current goal is an explicitly typed `∀ n : Nat, P n`. It opens a
+zero/base child goal and a successor child goal. The successor context contains
+a fresh Nat step object and `ih : P n`; both are local to that child, and the
+induction recursor discharges them when the parent proof is closed. The
+successor target is displayed as `P (n + 1)`, which is definitionally equal to
+Lean's `P (Nat.succ n)` target. Other inductive types, non-universal targets,
+generalized induction hypotheses, and automatic induction discovery remain
+unsupported. Candidate status still does not mean Lean-verified until the
+separate checker accepts the generated term.

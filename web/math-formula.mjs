@@ -32,7 +32,9 @@ function tokenize(s,{syntax='math'}={}){
    if(!Object.hasOwn(commands,cmd))throw Error('Unsupported macro \\'+cmd);
    const v=commands[cmd];push(bin[v]||'¬∀∃'.includes(v)?'op':'id',v,pos);continue;
   }
-  const name=/^[\p{L}][\p{L}\p{N}_']*/u.exec(s.slice(i));
+  const name=(syntax==='lean'
+   ?/^[\p{L}][\p{L}\p{N}_']*(?:\.[\p{L}][\p{L}\p{N}_']*)*/u
+   :/^[\p{L}][\p{L}\p{N}_']*/u).exec(s.slice(i));
   if(name){
    // Lean's elaborated targets often contain predicate-valued binders such
    // as `(P : Nat → Prop)`. Prop (and universe sort Type) is a sort in that
@@ -217,11 +219,12 @@ function scopedProp(node,contextSize) {
   scopedSemanticsFailure('unresolved-free-name','free identifier '+node.name+' has no proposition identity');
  }
  if(node?.kind==='binder'){
-  if(node.op!=='∀')scopedSemanticsFailure('unsupported-quantifier','only universal quantification over Nat is supported');
+  const constructor=node.op==='∀'?'all':node.op==='∃'?'exists':null;
+  if(!constructor)scopedSemanticsFailure('unsupported-quantifier','only universal and existential quantification over Nat are supported');
   if(!node.domain)scopedSemanticsFailure('missing-domain-annotation','a Nat binder must have an explicit domain');
   if(node.domain.kind!=='free'||node.domain.name!=='Nat')
    scopedSemanticsFailure('unsupported-binder-domain','only an explicit Nat binder is supported');
-  return {kind:'all',body:scopedProp(node.body,contextSize+1)};
+  return {kind:constructor,body:scopedProp(node.body,contextSize+1)};
  }
  if(node?.kind==='binary'){
   if(node.op==='=')
@@ -249,5 +252,103 @@ export function toScopedSemantics(text,{syntax='math'}={}) {
   version:1,
   contextSize:0,
   formula:scopedProp(compiled.scoped,0)
+ };
+}
+
+
+// Project into the same Nat/Prop syntax while resolving explicitly supplied
+// local Nat objects. Context order is oldest-to-newest; Fin index 0 is the
+// newest context object, shifted outward by the number of enclosing binders.
+function validateNatObjectContext(context) {
+ if(!Array.isArray(context))
+  scopedSemanticsFailure('invalid-context','the local context must be an array of typed object records');
+ const ids=new Set(), names=new Map();
+ const objects=context.map((entry,index)=>{
+  if(!entry||typeof entry!=='object'||Array.isArray(entry)
+     ||typeof entry.id!=='string'||entry.id.length===0
+     ||typeof entry.name!=='string'||entry.name.length===0)
+   scopedSemanticsFailure('invalid-context-entry','each local object needs a non-empty stable id and display name');
+  if(ids.has(entry.id))
+   scopedSemanticsFailure('duplicate-context-id','local object ids must be unique');
+  ids.add(entry.id);
+  if(entry.type!=='Nat')
+   scopedSemanticsFailure('unsupported-context-type','only explicitly typed Nat objects are supported');
+  if(entry.name==='Nat'||entry.name==='True'||entry.name==='False')
+   scopedSemanticsFailure('reserved-context-name','the display name '+entry.name+' is reserved by this fragment');
+  const object={id:entry.id,name:entry.name,type:'Nat'};
+  const positions=names.get(object.name)||[];
+  positions.push(index);
+  names.set(object.name,positions);
+  return object;
+ });
+ return {objects,names};
+}
+function contextualNatExpr(node,context,depth) {
+ if(node?.kind==='bound'){
+  if(!Number.isSafeInteger(node.index)||node.index<0||node.index>=depth)
+   scopedSemanticsFailure('invalid-bound-index','a bound Nat variable is outside its lexical binder scope');
+  return {kind:'var',index:node.index};
+ }
+ if(node?.kind==='free'){
+  const positions=context.names.get(node.name)||[];
+  if(positions.length===0)
+   scopedSemanticsFailure('unresolved-free-name','free identifier '+node.name+' has no supplied object identity');
+  if(positions.length>1)
+   scopedSemanticsFailure('ambiguous-context-name','display name '+node.name+' identifies more than one local object');
+  const index=depth+context.objects.length-1-positions[0];
+  return {kind:'var',index};
+ }
+ if(node?.kind==='number'){
+  if(node.value==='0')return {kind:'zero'};
+  scopedSemanticsFailure('unsupported-literal','only the zero literal has a constructor in this fragment');
+ }
+ if(node?.kind==='binary'&&node.op==='+')
+  return {kind:'add',left:contextualNatExpr(node.left,context,depth),right:contextualNatExpr(node.right,context,depth)};
+ scopedSemanticsFailure('unsupported-term','the term node or operation has no constructor in this fragment');
+}
+function contextualProp(node,context,depth) {
+ if(node?.kind==='free'){
+  if(node.name==='True')return {kind:'truth'};
+  if(node.name==='False')return {kind:'falsity'};
+  scopedSemanticsFailure('unresolved-proposition-name','free name '+node.name+' has no proposition declaration in this fragment');
+ }
+ if(node?.kind==='binder'){
+  const constructor=node.op==='∀'?'all':node.op==='∃'?'exists':null;
+  if(!constructor)scopedSemanticsFailure('unsupported-quantifier','only universal and existential quantification over Nat are supported');
+  if(!node.domain)scopedSemanticsFailure('missing-domain-annotation','a Nat binder must have an explicit domain');
+  if(node.domain.kind!=='free'||node.domain.name!=='Nat')
+   scopedSemanticsFailure('unsupported-binder-domain','only an explicit Nat binder is supported');
+  return {kind:constructor,body:contextualProp(node.body,context,depth+1)};
+ }
+ if(node?.kind==='binary'){
+  if(node.op==='=')
+   return {kind:'equal',left:contextualNatExpr(node.left,context,depth),right:contextualNatExpr(node.right,context,depth)};
+  if(node.op==='∧')
+   return {kind:'and',left:contextualProp(node.left,context,depth),right:contextualProp(node.right,context,depth)};
+  if(node.op==='→')
+   return {kind:'imp',left:contextualProp(node.left,context,depth),right:contextualProp(node.right,context,depth)};
+  scopedSemanticsFailure('unsupported-proposition-operator','the proposition operator '+node.op+' is not in this fragment');
+ }
+ if(node?.kind==='call')
+  scopedSemanticsFailure('unsupported-predicate','predicate application needs a typed proposition declaration identity');
+ scopedSemanticsFailure('unsupported-proposition','the formula node has no constructor in this fragment');
+}
+
+/**
+ * Project a formula with an explicit finite local Nat context. Context records
+ * carry stable object ids separately from display names. Names resolve only
+ * when unique; shadowing by a formula binder is already represented by the
+ * browser's de Bruijn scoped AST. The context is oldest-to-newest, so under d
+ * binders its newest object has Fin index d.
+ */
+export function toScopedSemanticsInContext(text,{syntax='math',context=[]}={}) {
+ const compiled=compileFormula(text,{syntax});
+ const typedContext=validateNatObjectContext(context);
+ return {
+  schema:'leanduet.scoped-semantics.formula-context',
+  version:1,
+  contextSize:typedContext.objects.length,
+  context:typedContext.objects,
+  formula:contextualProp(compiled.scoped,typedContext,0)
  };
 }
