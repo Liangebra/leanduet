@@ -457,3 +457,15 @@ Ranges refer back to the user's original UTF-8 source after the adapter
 preamble is removed. Opaque means that no child TermInfo expression was
 recorded; assigned proof terms can still provide references. No dependency is
 inferred from indentation. See [the schema and limits](INFOTREE_TRACE.md).
+
+## Explicit classical reductio
+
+The structured proof editor accepts `classical reductio hnot` (or
+`经典反证 hnot`) followed by a `contradiction` (or `矛盾`) subgoal. For
+a target `P`, the planner creates a child obligation `False` under a fresh
+local binding `hnot : ¬ P` and renders the closure with
+`Classical.byContradiction`. This operation is explicitly classical.
+Intuitionistic negation introduction remains a separate operation proving
+`False` from an assumption `P`; ex falso remains elimination from an
+existing `False` proof. The temporary negation has child-scope identity and
+is discharged when the child closes.
