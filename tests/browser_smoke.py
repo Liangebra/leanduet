@@ -747,7 +747,7 @@ $R$ | gr localQ"""
             induction_page.locator("#chainFormat").select_option("natural")
             induction_page.locator("#chainText").fill("induction n\n  zero case\n    $0 = 0$ | rfl\n  successor case\n    $n_step + 1 = n_step + 1$ | rfl")
             expect(induction_page.locator("#draftTranslation")).to_contain_text("base · (0 = 0) · complete")
-            expect(induction_page.locator("#draftTranslation")).to_contain_text("successor · (n_step + 1 = n_step + 1) · complete")
+            expect(induction_page.locator("#draftTranslation")).to_contain_text("successor · ((n_step + 1) = (n_step + 1)) · complete")
             induction_page.locator("#compileChain").click()
             expect(induction_page.locator("#patchTerm")).to_have_value(__import__("re").compile(r"induction n with[\s\S]*exact rfl[\s\S]*exact rfl"))
             induction_page.locator("#checkPatch").click()
