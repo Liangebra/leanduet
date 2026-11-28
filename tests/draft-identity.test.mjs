@@ -211,18 +211,21 @@ test('a selected proof candidate follows uniquely matched local objects through 
  const scope=['hall','hall2'];
  const facts=new Map([['hall','∀ x : Nat, P x'],['hall2','∀ x : Nat, P x']]);
  const make=(name,choices=new Map())=>compileNaturalDraft(
-  'take '+name+' : $Nat$\n$P('+name+')$',scope,facts,
+  'take '+name+' : $Nat$\\n$P('+name+')$',scope,facts,
   {goal:'∀ '+name+' : Nat, P '+name,choices});
  const selected=new Map([[2,'hall n']]);
  const original=make('n',selected),renamed=make('k');
  assert.equal(original.complete,true,JSON.stringify(original.rows,null,2));
- assert.ok(original.rows[1].alternatives.some(candidate=>(candidate.choice??candidate.term)==='hall n'));
- assert.ok(renamed.rows[1].alternatives.some(candidate=>(candidate.choice??candidate.term)==='hall k'));
+ const oldRow=original.graph.nodes.find(node=>node.id==='line:2');
+ const newRow=renamed.graph.nodes.find(node=>node.id==='line:2');
+ assert.ok(oldRow?.alternatives.some(candidate=>(candidate.choice??candidate.term)==='hall n'));
+ assert.ok(newRow?.alternatives.some(candidate=>(candidate.choice??candidate.term)==='hall k'));
  const before=reconcileDraftIdentity(null,original.graph);
  const after=reconcileDraftIdentity(before,renamed.graph);
  assert.equal(after.ids.get('line:2'),before.ids.get('line:2'));
  assert.deepEqual([...migrateDraftChoices(before,after,selected)],[[2,'hall k']]);
 });
+
 test('alpha-renaming preserves a later use only when its cited premise identity is unchanged',()=>{
  const scope=['hall','hall2'],facts=new Map([['hall','∀ x : Nat, P x'],['hall2','∀ x : Nat, P x']]);
  const make=(name,premise='hall')=>compileNaturalDraft(`take ${name} : $Nat$\n$P(${name})$ | ${premise} ${name}`,scope,facts,
