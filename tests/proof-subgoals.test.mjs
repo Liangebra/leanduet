@@ -142,6 +142,29 @@ test('nested Nat induction remains compositional and an open branch preserves it
  assert.equal(open.rows[0].subgoals.length,2,'an open base obligation must not erase the usable successor structure');
 });
 
+test('Nat induction closes independently inside both disjunction branches',()=>{
+ const text=`case split h, establish hN : $∀ n : Nat, n = n$
+  left case hp
+    induction n
+      zero case
+        $0 = 0$ | rfl
+      successor case
+        $n_step + 1 = n_step + 1$ | rfl
+  right case hq
+    induction n
+      zero case
+        $0 = 0$ | rfl
+      successor case
+        $n_step + 1 = n_step + 1$ | rfl`;
+ const result=compileNaturalDraft(text,['h'],new Map([['h','P ∨ Q']]),{goal:'∀ n : Nat, n = n'});
+ assert.equal(result.complete,true,JSON.stringify(result.rows,null,2));
+ assert.deepEqual(result.rows[0].branches.map(branch=>branch.status),['complete','complete']);
+ assert.equal((result.term.match(/induction n with/g)||[]).length,2);
+ assert.ok(result.rows[0].dependencies.includes('context:0'));
+ assert.deepEqual(result.rows[0].branches.map(branch=>branch.dependencies),[[],[]],
+  'branch-local case assumptions are discharged when each induction closes');
+});
+
 test('classical reductio is explicit and its temporary negation stays local',()=>{
  const operation=planGoalOperation('P',{kind:'classical-reductio',name:'hnot'});
  assert.equal(operation.logic,'classical');
