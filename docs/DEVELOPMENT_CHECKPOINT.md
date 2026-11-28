@@ -21,7 +21,9 @@ A local lemma uses an explicit claim and proof block. Its child scope inherits p
 
 The checked Mathlib examples include compact image under a continuous map, subgroup multiplication closure, linear-map additivity, continuous composition, same-type compactness premises with a factored local let, and a dependent existential witness in Fin (n + 1). The last two distinguish h1 and h2 by proof identity even though their types coincide. The Fin example checks that the local let stores x and has a type depending on n. These are small extractor and elaboration acceptance cases, not broad natural-language coverage or a general dependency-minimality result.
 
-Issue #10 now has a browser-to-native-IR regression for nested natural-number quantifiers, addition, equality, alpha-renaming, and same-name shadowing. It checks de Bruijn indices, elaborates the generated theorem in Lean, and uses Lean's native judgment round trip. This remains a narrow executable check: it does not prove the browser parser implements ScopedSemantics or establish correspondence for arbitrary browser ASTs and Lean expressions.
+Issue #10 already has a separate formal core in lean/Scoped.lean: Nat-indexed expressions and first-order formulas, a shallow Lean denotation into Nat and Prop, a checked theorem that simultaneous capture-avoiding substitution commutes with denotation, and a theorem that erasure into the generic Scoped.Term commutes with substitution. This fragment supports zero, successor, addition, equality, truth, falsity, conjunction, implication, and universal quantification over Nat. It excludes dependent object domains, general predicates, arbitrary constants, partial syntax, and the full Lean type system.
+
+PR #55 adds a distinct browser-to-native-IR regression for nested natural-number quantifiers, addition, equality, alpha-renaming, and same-name shadowing. It checks de Bruijn indices, elaborates the generated theorem in Lean, and uses Lean's native judgment round trip. The browser parser is not yet structurally connected to ScopedSemantics.Formula; these two checks do not establish correspondence for arbitrary browser ASTs or Lean expressions.
 
 ## Verification boundary
 
@@ -63,7 +65,7 @@ Exact replay is faster in these fixtures. Reuse does not guarantee a speedup: ne
 
 1. Finish and record the combined main Full Tests, Mathlib, and Pages results for 0264ee19fe54adcb703e2aa7a820e9f169709406.
 2. Extend the Issue #9 corpus with a reviewed subspace or analysis proof and its explicit expected dependency closure. Keep the issue open until examples cover the requested range; the compact-image and Fin cases address only part of the request.
-3. Continue Issue #10 from the bounded browser regression toward a typed syntax with contexts, interpretation, and a capture-avoiding substitution theorem. Preserve the distinctions between syntax, definitional equality, and proof irrelevance.
+3. Connect the browser formula AST to the overlapping fragment of ScopedSemantics.Formula with a checked translation or serialization test. Then investigate a typed bridge from that fragment to native Lean Expr, preserving explicit bounds and the distinctions between syntax, definitional equality, and proof irrelevance.
 4. Extend local source-region correspondence from Lean tactic observations and scoped identities, preserving conflicts when prose alignment is not supported.
 5. Add real editor-path measurements and branch-local edit comparisons against full recomputation before making responsiveness claims.
 6. Expand the reviewed mathematics corpus across analysis, linear algebra, topology, and algebra. Separate statement parsing, proof transformation, Lean compilation, semantic fidelity, and author-route preservation in every report.
