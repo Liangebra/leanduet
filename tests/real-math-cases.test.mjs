@@ -31,7 +31,8 @@ test('compact image preserves an explicitly named Mathlib rule and premises',()=
 });
 
 test('Mathlib corpus seed matches the existing structural candidate',()=>{
- assert.equal(mathlibCases.length,2);
+ for(const id of ['compact-image-continuous','subgroup-multiplication-closure','linear-map-additivity'])
+  assert.ok(mathlibCases.some(example=>example.id===id),`missing Mathlib fixture: ${id}`);
  for(const example of mathlibCases){
   const result=compileNaturalDraft(example.naturalDraft,example.scope,new Map(Object.entries(example.context)),{goal:example.goal});
   assert.equal(result.complete,true,example.id);

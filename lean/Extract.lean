@@ -159,7 +159,7 @@ elab "#duet_extract " n:ident : command => do
     let ci ← getConstInfo n.getId
     match ci with
     | .thmInfo v =>
-      let result ← inspect v.value 10
+      let result ← inspect v.value 16
       let j := Json.mkObj [("schema", toJson (1 : Nat)), ("declaration", toJson n.getId.toString),
         ("tree", result)]
       logInfo m!"LEANDUET_JSON:{j.compress}"
@@ -169,7 +169,7 @@ elab "#duet_extract " n:ident : command => do
 elab "#duet_extract_fast " n:ident : command => do
   liftTermElabM do
     let .thmInfo v ← getConstInfo n.getId | throwError "Expected a theorem"
-    let result ← inspect v.value 10 "root" false
+    let result ← inspect v.value 16 "root" false
     let j := Json.mkObj [("schema", toJson (1 : Nat)), ("declaration", toJson n.getId.toString),
       ("profile", toJson "reading"), ("tree", result)]
     logInfo m!"LEANDUET_JSON:{j.compress}"
