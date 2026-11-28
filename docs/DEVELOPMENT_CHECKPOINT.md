@@ -8,8 +8,8 @@ Updated 2026-11-28 (UTC).
 - Recent merged work: #47 (resolved Lean InfoTree observations; merge dd0584450a603eb6f40f87b3614bbaa8e3cd4cc0), #50 (explicit classical reductio; 406f55773fc22f305a498ea7415dc1955a729721), #52 (function composition and continuous-composition fixture; 62dc2f65b3deb51992065e9093043480796dacd5), #54 (same-type proof dependency/local-let counterexample; ee3c75af4cdf29102bfcaea74545b65102903d73), #55 (browser formula binder/native IR regression; b1507a090e160239528ff58d201d380bca296c23), and #56 (dependent Fin witness refactoring case; 0264ee19fe54adcb703e2aa7a820e9f169709406).
 - PR #44, the Urdu mathematical language pack, was merged independently as 64d35f05c82366a8756547780bc9cb260465551c. Its PR-head Actions did not provide runnable jobs; do not treat that as pre-merge CI validation. Post-merge main Full Tests 46104191470 and Pages deployment 46104191494 passed.
 - PR #55 exact-head Full Tests 46105078884 passed on c4ee613c65dc77d569c78b0d241768c60b566fa7. PR #56 exact-head Full Tests 46105080974, pinned Mathlib 4.19 integration 46105080903, and push Full Tests 46105076511 passed. Those validate their respective exact heads.
-- On main 0264ee19fe54adcb703e2aa7a820e9f169709406, pinned Mathlib integration 46106764092 and Pages deployment 46106764104 passed. Full Tests 46106764130 was still running at the time of this checkpoint; record its final result after completion.
-- No PRs are open at the last repository scan. Research issues #9 and #10 remain open; their recent tests are useful bounded contributions, not full closure of either issue.
+- On main 0264ee19fe54adcb703e2aa7a820e9f169709406, Full Tests 46106764130, pinned Mathlib integration 46106764092, and Pages deployment 46106764104 all passed.
+- The repository scan before opening this checkpoint PR found no other open PRs. Research issues #9 and #10 remain open; their recent tests are useful bounded contributions, not full closure of either issue.
 
 ## Mathematical and engineering state
 
@@ -63,11 +63,10 @@ Exact replay is faster in these fixtures. Reuse does not guarantee a speedup: ne
 
 ## Next dependency-ready work
 
-1. Finish and record the combined main Full Tests, Mathlib, and Pages results for 0264ee19fe54adcb703e2aa7a820e9f169709406.
-2. Extend the Issue #9 corpus with a reviewed subspace or analysis proof and its explicit expected dependency closure. Keep the issue open until examples cover the requested range; the compact-image and Fin cases address only part of the request.
-3. Connect the browser formula AST to the overlapping fragment of ScopedSemantics.Formula with a checked translation or serialization test. Then investigate a typed bridge from that fragment to native Lean Expr, preserving explicit bounds and the distinctions between syntax, definitional equality, and proof irrelevance.
-4. Extend local source-region correspondence from Lean tactic observations and scoped identities, preserving conflicts when prose alignment is not supported.
-5. Add real editor-path measurements and branch-local edit comparisons against full recomputation before making responsiveness claims.
-6. Expand the reviewed mathematics corpus across analysis, linear algebra, topology, and algebra. Separate statement parsing, proof transformation, Lean compilation, semantic fidelity, and author-route preservation in every report.
+1. Extend the Issue #9 corpus with a reviewed subspace or analysis proof and its explicit expected dependency closure. Keep the issue open until examples cover the requested range; the compact-image and Fin cases address only part of the request.
+2. Connect the browser formula AST to the overlapping fragment of ScopedSemantics.Formula with a checked translation or serialization test. Then investigate a typed bridge from that fragment to native Lean Expr, preserving explicit bounds and the distinctions between syntax, definitional equality, and proof irrelevance.
+3. Extend local source-region correspondence from Lean tactic observations and scoped identities, preserving conflicts when prose alignment is not supported.
+4. Add real editor-path measurements and branch-local edit comparisons against full recomputation before making responsiveness claims.
+5. Expand the reviewed mathematics corpus across analysis, linear algebra, topology, and algebra. Separate statement parsing, proof transformation, Lean compilation, semantic fidelity, and author-route preservation in every report.
 
 The original eight-stage dependency order remains in force: semantic representation, scope/context, ambiguity constraints, declaration/concept dependencies, proof fidelity, bidirectional editing, incremental computation, then broad corpus evaluation. Work on the later stages may expose regressions in earlier ones, but does not replace that order.
