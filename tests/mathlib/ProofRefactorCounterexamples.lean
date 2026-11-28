@@ -1,4 +1,5 @@
 import Mathlib.Topology.Compactness.Compact
+import Mathlib.Algebra.Module.Submodule.Basic
 
 /-!
 # Proof-refactoring counterexample: same-type premises and local lets
@@ -55,3 +56,27 @@ theorem fin_witness_refactor_local_let
     ∃ y : Fin (n + 1), p y := by
   let finWitness : Fin (n + 1) := x
   exact ⟨finWitness, h2⟩
+
+
+/-!
+# Subspace addition and proof identity
+
+The sum of two members of a submodule is again a member. The selected
+subterm uses h2 and hy. The same-typed h1 is deliberately unused. The local-let
+variant keeps the same conclusion but changes the elaborated proof shape.
+-/
+
+theorem submodule_add_refactor_direct
+    {R M : Type*} [Semiring R] [AddCommMonoid M] [Module R M]
+    (S : Submodule R M) (x y : M)
+    (h1 h2 : x ∈ S) (hy : y ∈ S) :
+    x + y ∈ S := by
+  exact S.add_mem h2 hy
+
+theorem submodule_add_refactor_local_let
+    {R M : Type*} [Semiring R] [AddCommMonoid M] [Module R M]
+    (S : Submodule R M) (x y : M)
+    (h1 h2 : x ∈ S) (hy : y ∈ S) :
+    x + y ∈ S := by
+  let sumProof : x + y ∈ S := S.add_mem h2 hy
+  exact sumProof

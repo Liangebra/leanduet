@@ -284,3 +284,56 @@ assert {"n","p","x","h2"}.issubset(
     {name for name,declaration in fin_local_scope.items() if declaration["neededForContext"]}
 ),fin_local_scope
 print("Mathlib refactoring counterexample: dependent Fin witness and same-type premise identities checked")
+
+
+# Issue #9: a submodule-closure counterexample with same-typed premises.
+submodule_direct_marker="\ntheorem submodule_add_refactor_direct"
+submodule_let_marker="\ntheorem submodule_add_refactor_local_let"
+assert submodule_direct_marker in counterexample_source and submodule_let_marker in counterexample_source
+submodule_start=counterexample_source.index(submodule_direct_marker)
+submodule_let_start=counterexample_source.index(submodule_let_marker)
+submodule_prefix=counterexample_source[:direct_start]
+submodule_direct_source=submodule_prefix+counterexample_source[submodule_start:submodule_let_start]
+submodule_local_let_source=submodule_prefix+counterexample_source[submodule_let_start:]
+submodule_direct_tree=extract(submodule_direct_source,project)["tree"]
+submodule_local_tree=extract(submodule_local_let_source,project)["tree"]
+assert submodule_direct_tree["type"]==submodule_local_tree["type"],(
+    submodule_direct_tree["type"],submodule_local_tree["type"])
+assert "Submodule" in submodule_direct_tree["type"],submodule_direct_tree["type"]
+
+def is_add_mem_application(node):
+    return node.get("reference","").split(".")[-1]=="add_mem"
+
+submodule_add=next((node for node in walk(submodule_direct_tree)
+                    if is_add_mem_application(node)),None)
+assert submodule_add,submodule_direct_tree
+submodule_scope={declaration["name"]:declaration for declaration in submodule_add["scope"]}
+assert submodule_scope["h1"]["type"]==submodule_scope["h2"]["type"],submodule_scope
+assert submodule_scope["h2"]["neededForContext"],submodule_scope
+assert not submodule_scope["h1"]["neededForContext"],submodule_scope
+submodule_needed={name for name,declaration in submodule_scope.items()
+                  if declaration["neededForContext"]}
+assert {"R","M","S","x","y","h2","hy"}.issubset(submodule_needed),submodule_scope
+for required in ("Semiring R","AddCommMonoid M","Module R M"):
+    assert any(required in declaration["type"] for declaration in submodule_scope.values()),(
+        required,submodule_scope)
+
+submodule_abstraction=abstract_preview(
+    submodule_direct_source,submodule_add["path"],project)
+assert submodule_abstraction["closedChecked"],submodule_abstraction
+assert submodule_abstraction["standaloneChecked"],submodule_abstraction
+assert submodule_abstraction["exportShapePreserved"],submodule_abstraction
+parameter_names={parameter["name"] for parameter in submodule_abstraction["parameters"]}
+assert {"S","x","y","h2","hy"}.issubset(parameter_names),submodule_abstraction
+assert "h1" not in parameter_names,submodule_abstraction
+
+submodule_let_node=next((node for node in walk(submodule_local_tree)
+                         if node["kind"]=="let" and node.get("binder")=="sumProof"),None)
+assert submodule_let_node,submodule_local_tree
+submodule_let_add=next((node for node in walk(submodule_let_node["children"][0])
+                        if is_add_mem_application(node)),None)
+assert submodule_let_add,submodule_let_node
+submodule_let_scope={declaration["name"]:declaration for declaration in submodule_let_add["scope"]}
+assert submodule_let_scope["h1"]["type"]==submodule_let_scope["h2"]["type"],submodule_let_scope
+assert submodule_let_scope["h2"]["neededForContext"] and not submodule_let_scope["h1"]["neededForContext"],submodule_let_scope
+print("Mathlib refactoring counterexample: submodule addition retains h2 by identity and preserves its local-let shape")
