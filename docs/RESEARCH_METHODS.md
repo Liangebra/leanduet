@@ -65,10 +65,11 @@ and only dependencies already in the parent context can cross the boundary.
 An open child remains available for later structural work but makes its
 continuation provisional. Existential construction consumes a selected typed
 local object and leaves its predicate as an obligation; equivalence
-construction proves both directions without classical axioms. Full Tests cover the local-lemma browser and backend paths, and the pinned
-Mathlib 4.19 integration compiles an aligned local-lemma case. The proof
-workflow also supports an explicit named classical reductio. General inductive
-elimination remains unsupported.
+construction proves both directions without classical axioms. Full Tests
+cover the local-lemma browser and backend paths, and the pinned Mathlib 4.19
+integration compiles an aligned local-lemma case. The proof workflow also
+supports an explicit named classical reductio. General inductive elimination
+remains unsupported.
 
 The first stage-3 operation family now pairs arbitrary-variable introduction
 with existential witness extraction for one small English/Chinese request
