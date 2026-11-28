@@ -500,12 +500,26 @@ const nested=compileNaturalDraft(`induction n
         $0 = 0$ | rfl
       successor case
         $m_step + 1 = m_step + 1$ | rfl`,[],new Map(),{goal:'∀ n : Nat, ∀ m : Nat, m = m'});
+const splitInduction=compileNaturalDraft(`case split h, establish hN : $∀ n : Nat, n = n$
+  left case hp
+    induction n
+      zero case
+        $0 = 0$ | rfl
+      successor case
+        $n_step + 1 = n_step + 1$ | rfl
+  right case hq
+    induction n
+      zero case
+        $0 = 0$ | rfl
+      successor case
+        $n_step + 1 = n_step + 1$ | rfl`,['h'],new Map([['h','P ∨ Q']]),{goal:'∀ n : Nat, n = n'});
 for(const result of [constant,dependent,step,nested])if(!result.complete||result.steps.at(-1)?.kind!=='nat-induction')throw new Error(JSON.stringify(result));
+if(!splitInduction.complete||splitInduction.rows[0]?.kind!=='cases')throw new Error(JSON.stringify(splitInduction));
 if(!constant.rows[0].dependencies.includes('context:1'))throw new Error(JSON.stringify(constant.rows[0]));
 if(constant.rows[0].dependencies.some(id=>id.includes('/binding:')))throw new Error('Step-local objects escaped the induction operation');
-console.log(JSON.stringify([constant.term,dependent.term,step.term,nested.term]));
+console.log(JSON.stringify([constant.term,dependent.term,step.term,nested.term,splitInduction.term]));
 """
-induction_constant,induction_dependent,induction_step,induction_nested=json.loads(subprocess.run(
+induction_constant,induction_dependent,induction_step,induction_nested,induction_split=json.loads(subprocess.run(
     ["node","--input-type=module"],input=nat_induction_script,text=True,cwd=root,
     check=True,capture_output=True).stdout)
 with TemporaryDirectory() as tmp:
@@ -515,7 +529,8 @@ with TemporaryDirectory() as tmp:
         +induction_dependent+"\ntheorem nat_induction_step (P : Nat → Prop) (hbase : P 0) "
         +"(hstep : ∀ k : Nat, P k → P (k + 1)) : ∀ n : Nat, P n := "
         +induction_step+"\ntheorem nat_induction_nested : ∀ n : Nat, ∀ m : Nat, m = m := "
-        +induction_nested+"\n",encoding="utf-8")
+        +induction_nested+"\ntheorem nat_induction_after_split (P Q : Prop) (h : P ∨ Q) : "
+        +"∀ n : Nat, n = n := "+induction_split+"\n",encoding="utf-8")
     subprocess.run(["lean",str(target)],cwd=root,check=True)
 print("Explicit Nat induction opens isolated base/successor goals and compiles in Lean")
 
