@@ -294,7 +294,7 @@ function renderTacticTrace(result){
 $('traceProof').onclick=async()=>{
   if(!local){$('traceStatus').textContent=ui.t('Tactic tracing requires the local Lean backend.');return;}
   const snapshotRev=rev,source=lean.value,button=$('traceProof');
-  button.disabled=true;$('traceStatus').textContent='Tracing this revision in Lean…';
+  button.disabled=true;$('traceStatus').textContent=ui.t('Tracing this revision in Lean…');
   try{
     const result=await api('trace',{source});
     if(snapshotRev!==rev)return;
