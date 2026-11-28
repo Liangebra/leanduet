@@ -107,3 +107,20 @@ test('candidate choices inside child goals follow a unique unchanged subgoal aft
  assert.equal(shifted.ids.get('root/subgoal:1:first/line:4'),old.ids.get('root/subgoal:1:first/line:3'));
  assert.deepEqual([...migrateDraftChoices(old,shifted,choices)],[[4,'p1']]);
 });
+
+
+const goalGraph=goal=>({schema:1,identity:'revision-local',goal,nodes:[
+ {id:'context:0',kind:'context',name:'h',type:'Nat',ambiguousName:false}
+]});
+test('alpha-renaming a bound goal variable preserves the surrounding object identity',()=>{
+ const original=reconcileDraftIdentity(null,goalGraph('∀ n : Nat, n = n'));
+ const renamed=reconcileDraftIdentity(original,goalGraph('∀ k : Nat, k = k'));
+ assert.equal(renamed.ids.get('context:0'),original.ids.get('context:0'));
+ assert.equal(renamed.matches.get('context:0'),'context:0');
+});
+test('changing a bound goal proposition retires identities even when its binder is renamed',()=>{
+ const original=reconcileDraftIdentity(null,goalGraph('∀ n : Nat, n = n'));
+ const changed=reconcileDraftIdentity(original,goalGraph('∀ k : Nat, k + 1 = k'));
+ assert.notEqual(changed.ids.get('context:0'),original.ids.get('context:0'));
+ assert.equal(changed.matches.has('context:0'),false);
+});
