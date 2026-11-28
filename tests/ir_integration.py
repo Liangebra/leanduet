@@ -509,4 +509,36 @@ with TemporaryDirectory() as tmp:
         encoding="utf-8",
     )
     subprocess.run(["lean",str(target)],cwd=root,check=True,capture_output=True,text=True)
-print("Versioned browser context projections commute with two checked Nat substitutions, including a binder shift")
+
+# A second capture regression shifts the same outer context object beneath
+# two binders. The source index for x is therefore 2, while the binder
+# variables remain at indices 1 and 0; substituting x must preserve both.
+nested_capture_source=compile_context_scoped_formula(
+    "∀ z : Nat, ∀ w : Nat, x + z = w + x",
+    [{"id":"object-x","name":"x","type":"Nat"}])
+nested_capture_target=compile_context_scoped_formula(
+    "∀ z : Nat, ∀ w : Nat, 0 + z = w + 0",[])
+nested_source_core=lean_formula(nested_capture_source["formula"],1)
+nested_target_core=lean_formula(nested_capture_target["formula"],0)
+substitution_lean_checks.extend([
+    "example : LeanDuet.ScopedSemantics.substFormula "+x_to_zero+" ("
+    +nested_source_core+" : LeanDuet.ScopedSemantics.Formula 1) = ("
+    +nested_target_core+" : LeanDuet.ScopedSemantics.Formula 0) := by rfl",
+    "example (ρ : LeanDuet.ScopedSemantics.Env 0) : "
+    "LeanDuet.ScopedSemantics.denote "
+    "(LeanDuet.ScopedSemantics.substFormula "+x_to_zero+" ("
+    +nested_source_core+" : LeanDuet.ScopedSemantics.Formula 1)) ρ = "
+    "LeanDuet.ScopedSemantics.denote ("+nested_source_core
+    +" : LeanDuet.ScopedSemantics.Formula 1) "
+    "(fun i => LeanDuet.ScopedSemantics.denoteNat ("+x_to_zero
+    +" i) ρ) := by exact LeanDuet.ScopedSemantics.denote_subst _ _ _",
+])
+with TemporaryDirectory() as tmp:
+    target=Path(tmp)/"BrowserScopedNestedContextSubstitution.lean"
+    target.write_text(
+        scoped_source+"\n\n"+"\n".join(substitution_lean_checks)+"\n",
+        encoding="utf-8",
+    )
+    subprocess.run(["lean",str(target)],cwd=root,check=True,capture_output=True,text=True)
+print("Versioned browser context projections commute with substitutions under one and two binders")
+
