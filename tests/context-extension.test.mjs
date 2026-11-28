@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {draftProof,createDraftSession,compileNaturalDraft} from '../web/natural-draft.mjs';
 import {extendGoal,planGoalOperation} from '../web/context-extension.mjs';
 import {dependentNodes} from '../web/draft-graph.mjs';
-import {forkProofScope,proofScopeFacts,proofScopeNames,resolveProofName,rootProofScope} from '../web/proof-scope.mjs';
+import {forkGoalScope,forkProofScope,proofScopeFacts,proofScopeNames,resolveProofName,rootProofScope} from '../web/proof-scope.mjs';
 const scope=['P'],facts=new Map();
 const input='任取 x : $Nat$\n假设 hp : $P(x)$\n$P(x)$ | hp';
 const goal='∀ z : Nat, P z → P z';
@@ -207,6 +207,17 @@ test('a branch-local name shadows only inside its child scope',()=>{
  assert.ok(right.graph.nodes.some(n=>n.id===right.binding.id&&n.type==='Q'));
  assert.ok(result.graph.nodes.find(n=>n.kind==='conclude').dependencies.includes('context:4'),
   'the parent continuation resolves the original hp after both branches close');
+});
+
+test('a child goal explicitly shadows the nearest parent spelling without changing the parent',()=>{
+ const root=rootProofScope(['h'],new Map([['h','Nat']]));
+ const binding={id:'operation:h',name:'h',type:'P'};
+ assert.throws(()=>forkGoalScope(root,{id:'child-denied',goal:'P',bindings:[binding]}),/fresh in its parent/);
+ const child=forkGoalScope(root,{id:'child-shadow',goal:'P',bindings:[binding],allowShadow:true});
+ assert.equal(resolveProofName(root,'h').binding.id,'context:0');
+ assert.equal(resolveProofName(child,'h').binding.id,'operation:h');
+ assert.deepEqual(proofScopeNames(child),['h']);
+ assert.equal(proofScopeFacts(child).get('h'),'P');
 });
 
 test('root duplicates remain ambiguous but a child may shadow their spelling',()=>{

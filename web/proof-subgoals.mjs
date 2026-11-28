@@ -86,6 +86,16 @@ function parseBlock(input,lineOffset){
  return {...operation,head,subgoals};
 }
 
+function formulaHasFreeName(formula,name){
+ const tree=compileFormula(formula,{syntax:'lean'}).scoped;
+ function visit(node){
+  if(!node||typeof node!=='object')return false;
+  if(node.kind==='free'&&node.name===name)return true;
+  return Object.values(node).some(value=>Array.isArray(value)?value.some(visit):visit(value));
+ }
+ return visit(tree);
+}
+
 function contextDependencyClosure(frame,dependencies,line){
  if(!dependencies.length)return [];
  const names=dependencies.map(id=>frame.bindings.find(binding=>binding.id===id)?.name).filter(Boolean);
@@ -130,6 +140,19 @@ export function compileGoalOperationProgram(input,frame,{goal=null,choices=new M
  }
  const operation=planGoalOperation(target,{kind:parsed.kind,name:parsed.name,witness:parsed.witness,
   witnessType:witnessBinding?.binding.type,witnessId:witnessBinding?.binding.id,stepName,inductionHypothesisName});
+ // A child binder can shadow a parent label only when that spelling is absent
+ // from its own type and residual goal. Those references belong to the parent
+ // context and cannot safely be rebound by the surface-name fragment.
+ for(const subgoal of operation.subgoals){
+  const introduced=new Set();
+  for(const binding of subgoal.contextDelta||[]){
+   if(introduced.has(binding.name))throw Error('A child scope cannot introduce the same display name twice.');
+   if(resolveProofName(frame,binding.name).status!=='missing'&&
+      (formulaHasFreeName(subgoal.goal,binding.name)||formulaHasFreeName(binding.type,binding.name)))
+    throw Error('A child binding would capture a parent reference; use a fresh spelling.');
+   introduced.add(binding.name);
+  }
+ }
  const reserved=parsed.subgoals.map(subgoal=>{
   const names=new Set();
   for(const raw of subgoal.sourceLines){
@@ -142,7 +165,7 @@ export function compileGoalOperationProgram(input,frame,{goal=null,choices=new M
  for(let index=0;index<parsed.subgoals.length;index++){
   const subgoal=parsed.subgoals[index],plan=operation.subgoals[index],childId=frame.id+'/subgoal:'+parsed.head.line+':'+subgoal.id;
   const bindings=(plan.contextDelta||[]).map((binding,bindingIndex)=>({...binding,id:childId+'/binding:'+bindingIndex}));
-  const child=forkGoalScope(frame,{id:childId,goal:plan.goal,bindings});
+  const child=forkGoalScope(frame,{id:childId,goal:plan.goal,bindings,allowShadow:true});
   const siblingNames=reserved.flatMap((names,siblingIndex)=>siblingIndex===index?[]:[...names]);
   const result=compileSegment(subgoal.sourceLines.join('\n'),child,{goal:plan.goal,choices,lineOffset:subgoal.bodyLineOffset,
    closedNames:[...new Set([...closedNames,...siblingNames])],openBindings,cache});
