@@ -14,6 +14,8 @@ jobs:
         with:
           python-version: '3.12'
       - run: node --test tests/*.test.mjs
+      - name: Measure incremental draft latency and compare full results
+        run: node tests/draft-benchmark.mjs
       - run: python -m unittest discover -s tests
       - name: Install Lean via elan
         run: |

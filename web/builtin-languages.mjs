@@ -85,6 +85,9 @@ export const BUILTIN_PACKS = [
       ],
       "Subgroup.mul_mem": [
         "subgroup multiplication closure"
+      ],
+      "map_add": [
+        "additivity of a linear map"
       ]
     }
   },
@@ -176,6 +179,9 @@ export const BUILTIN_PACKS = [
       ],
       "Subgroup.mul_mem": [
         "子群乘法封闭性"
+      ],
+      "map_add": [
+        "线性映射加法性"
       ]
     }
   },
@@ -263,6 +269,9 @@ export const BUILTIN_PACKS = [
       ],
       "Subgroup.mul_mem": [
         "部分群の積に関する閉性"
+      ],
+      "map_add": [
+        "線形写像の加法性"
       ]
     }
   }

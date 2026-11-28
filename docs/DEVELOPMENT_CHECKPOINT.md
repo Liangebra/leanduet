@@ -6,7 +6,8 @@ Updated 2026-11-28 (UTC).
 
 - Main is `f1cd98152c1b92d3cf3911204ccc291689d3aafe` and includes PR #22, #37/#38, #39, #40, #42, #45 and #46. PR #22's branch-scope, source-position and residual-goal fixes are already in the baseline.
 - Main's latest Full Tests run `46087674165`, Mathlib integration `46087674089`, and Pages deployment `46087674048` succeeded.
-- PR #47 adds the pinned Lean 4.19 InfoTree trace adapter, an explicit local `/api/trace` path, and an on-demand browser view. The code-bearing head passed adapter compilation, semantic integration, Mathlib integration, and the full browser workflow. Its actual fixture revealed repeated InfoTree wrappers for identical tactic ranges and goals; PR #47 now coalesces only exact duplicate observations and preserves their multiplicity for review. The revised schema and sample require a fresh full run.
+- PR #47 adds the pinned Lean 4.19 InfoTree trace adapter, an explicit local `/api/trace` path, and an on-demand browser view. Its current head `68823b96b81e542de76b42d48d75d727b4d0d3cc` is being synchronized with the latest main: the branch ancestor predates the linear-map Mathlib seed and the corrected benchmark baseline. The trace schema coalesces only exact duplicate observations and retains raw multiplicity. The current head's tests are not treated as merge-ready until the synchronized tree passes Full Tests, pinned Mathlib integration, and browser checks.
+- PR #48 adds an explicit `classical reductio hnot` operation, distinct from intuitionistic negation introduction and ex-falso. Its current head `9c7e4cab49505c4d88fa2fec9eea5505f96b33a9` has passed Node, Python, benchmark and core Lean steps; generated-term integration and browser CI are still running.
 - PR #44 (Urdu language pack) remains open from a fork with workflow `action_required`; it is not treated as validated.
 - The real-math fixture has three small checked seeds: compact image in topology, subgroup multiplication closure, and linear-map additivity. These are acceptance anchors, not broad mathematical-language coverage.
 
@@ -56,8 +57,8 @@ Exact replay is faster in these fixtures. Reuse does not guarantee a speedup: ne
 
 ## Next dependency-ready work
 
-1. Finish the schema documentation and exact-head Full Tests, Mathlib, and browser checks for PR #47; merge only after the current documented head is green.
-2. Extend the shared proof-operation planner with an explicitly classical reductio block. Keep it distinct from intuitionistic negation introduction and ex-falso, and compile the generated candidate with pinned Lean.
+1. Finish synchronizing PR #47 with main and run exact-head Full Tests, Mathlib, and browser checks; merge only after the synchronized head is green.
+2. Complete exact-head validation and integrate PR #48's explicit classical reductio after synchronizing it with the merged main; keep it distinct from intuitionistic negation introduction and ex-falso.
 3. Improve Lean-to-language and language-to-Lean region correspondence using actual source ranges and scoped identities, with conflict reporting and untouched-text preservation.
 4. Expand operation-level candidates only where the wording or typed context distinguishes universal introduction, witness extraction, local definition and subtype introduction; keep unresolved readings explicit.
 5. Add reviewed analysis and topology proof fixtures while preserving the existing algebra and linear-map seeds.

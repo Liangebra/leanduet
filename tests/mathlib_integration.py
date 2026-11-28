@@ -128,3 +128,54 @@ needed_names={d["name"] for d in subgroup_needed}
 assert {"G","H","x","y","hx","hy"}.issubset(needed_names),subgroup_needed
 assert any("Group G" in d["type"] for d in subgroup_needed),subgroup_needed
 print("Mathlib algebra: proof dependency view retains group structure, subgroup, objects, and membership facts")
+
+# This linear-algebra case exercises a user-facing concept alias, a checked
+# Mathlib declaration, the transitive module-instance context, and an edit
+# whose new surface proposition is compared against a full cold compilation.
+linear_case=next(case for case in mathlib_cases if case["id"]=="linear-map-additivity")
+linear_script=r"""
+import assert from 'node:assert/strict';
+import {compileNaturalDraft,createDraftSession} from './web/natural-draft.mjs';
+const example="""+json.dumps(linear_case,ensure_ascii=False)+r""";
+const scope=example.scope;
+const context=new Map(Object.entries(example.context));
+const session=createDraftSession();
+const first=session.evaluate(example.naturalDraft,scope,context,{goal:example.goal});
+if(!first.complete||first.steps.at(-1)?.application!==example.expectedStructure[0].application)throw new Error(JSON.stringify(first));
+const edited=session.evaluate(example.editedNaturalDraft,scope,context,{goal:example.editedGoal});
+const cold=compileNaturalDraft(example.editedNaturalDraft,scope,context,{goal:example.editedGoal});
+const stripReuse=({reusedRows,...result})=>result;
+assert.deepEqual(stripReuse(edited),stripReuse(cold));
+if(!edited.complete||edited.steps.at(-1)?.application!==example.editedExpectedStructure[0].application)throw new Error(JSON.stringify(edited));
+console.log(JSON.stringify({term:first.term,editedTerm:edited.term}));
+"""
+linear_process=subprocess.run(["node","--input-type=module"],input=linear_script,text=True,cwd=root,check=False,capture_output=True)
+if linear_process.returncode:
+    print(linear_process.stdout)
+    print(linear_process.stderr,file=sys.stderr)
+    raise SystemExit(linear_process.returncode)
+linear_terms=json.loads(linear_process.stdout)
+linear_source=linear_case["leanImport"]+"\n\n"+linear_case["leanTheoremHeader"].replace(
+    "linear_map_add_example","linear_map_add_from_natural")+" := "+linear_terms["term"]+"\n"
+edited_header=linear_case["leanTheoremHeader"].replace("linear_map_add_example","linear_map_add_edited").replace(
+    linear_case["goal"],linear_case["editedGoal"])
+edited_source=linear_case["leanImport"]+"\n\n"+edited_header+" := "+linear_terms["editedTerm"]+"\n"
+with TemporaryDirectory() as tmp:
+    target=Path(tmp)/"LinearMapAddFromNatural.lean"
+    target.write_text(linear_source,encoding="utf-8")
+    subprocess.run(["lake","env","lean",str(target)],cwd=project,check=True)
+    edited_target=Path(tmp)/"LinearMapAddEdited.lean"
+    edited_target.write_text(edited_source,encoding="utf-8")
+    subprocess.run(["lake","env","lean",str(edited_target)],cwd=project,check=True)
+print("Mathlib linear algebra: original and variable-order edit candidates compile")
+
+linear_tree=extract(linear_source,project)["tree"]
+linear_node=next((n for n in walk(linear_tree) if n.get("reference","").split(".")[-1]=="map_add"),None)
+assert linear_node,linear_tree
+linear_needed=[d for d in linear_node["scope"] if d["neededForContext"]]
+needed_names={d["name"] for d in linear_needed}
+assert set(linear_case["expectedContextClosure"]).issubset(needed_names),linear_needed
+for instance in linear_case["requiredTypeclassClosure"]:
+    assert any(instance in d["type"] for d in linear_needed),(instance,linear_needed)
+print("Mathlib linear algebra: proof dependency view retains map, variables, and module structure")
+

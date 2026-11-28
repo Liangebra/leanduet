@@ -421,10 +421,14 @@ console.log(JSON.stringify(result.term));
     else:
         # Lean elaborates the source-level And.intro as constructor notation.
         # Keep that distinction visible instead of demanding textual node identity.
-        pair=next(node for node in walk(case_tree) if node.get("kind")=="opaque"
-                  and "hB" in node.get("term","") and "hA" in node.get("term","")
-                  and "∧" in node.get("type", ""))
-        assert "hB" in pair["term"] and "hA" in pair["term"],pair
+        pair=next((node for node in walk(case_tree)
+                   if "hB" in node.get("term","") and "hA" in node.get("term","")
+                   and "∧" in node.get("type", "")),None)
+        assert pair,case_tree
+        # Prefer the explicit constructor when the bounded inspection reaches it;
+        # allow opaque only when the expression is actually budget-truncated.
+        assert (pair.get("kind")=="apply" and pair.get("reference")=="And.intro") or \
+               (pair.get("kind")=="opaque" and pair.get("truncated") is True),pair
     print("Lean-compiled aligned set case:",real_math_case["id"])
 
 with TemporaryDirectory() as tmp:
@@ -531,8 +535,11 @@ console.log(JSON.stringify(result.term));
     else:
         # Lean elaborates the source-level And.intro as constructor notation.
         # Keep that distinction visible instead of demanding textual node identity.
-        pair=next(node for node in walk(case_tree) if node.get("kind")=="opaque"
-                  and "hB" in node.get("term","") and "hA" in node.get("term","")
-                  and "∧" in node.get("type", ""))
-        assert "hB" in pair["term"] and "hA" in pair["term"],pair
+        pair=next((node for node in walk(case_tree)
+                   if "hB" in node.get("term","") and "hA" in node.get("term","")
+                   and "∧" in node.get("type", "")),None)
+        assert pair,case_tree
+        # The elaborator may expose And.intro or a genuinely fuel-truncated node.
+        assert (pair.get("kind")=="apply" and pair.get("reference")=="And.intro") or \
+               (pair.get("kind")=="opaque" and pair.get("truncated") is True),pair
     print("Lean-compiled aligned set case:",real_math_case["id"])
