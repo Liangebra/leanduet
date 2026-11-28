@@ -108,14 +108,47 @@ export function reconcileDraftIdentity(previous,graph){
    reconcileScope(prior?.graph,branch.graph,compatible);
   }
  }
+ function subgoalPlan(node,record){
+  return node?.goalOperation?.subgoals?.find(item=>item.id===record.key||item.scopeId===record.id)||null;
+ }
+ function matchSubgoalBindings(oldNode,newNode,oldSubgoal,newSubgoal){
+  const oldDelta=subgoalPlan(oldNode,oldSubgoal)?.contextDelta||[];
+  const newDelta=subgoalPlan(newNode,newSubgoal)?.contextDelta||[];
+  if(oldDelta.length!==newDelta.length)return false;
+  if(!oldDelta.length)return true;
+  const oldContexts=new Map(allNodes(oldSubgoal.graph).filter(node=>node.kind==='context').map(node=>[node.id,node]));
+  const newContexts=new Map(allNodes(newSubgoal.graph).filter(node=>node.kind==='context').map(node=>[node.id,node]));
+  const trialIds=new Map(ids),pairs=[];
+  for(let index=0;index<oldDelta.length;index++){
+   const prior=oldDelta[index],current=newDelta[index];
+   if(prior.kind!==current.kind||prior.name!==current.name||!prior.id||!current.id)return false;
+   const priorIdentity=previous?.ids.get(prior.id);
+   if(priorIdentity===undefined)return false;
+   const oldContext=oldContexts.get(prior.id),newContext=newContexts.get(current.id);
+   if(!oldContext||!newContext||oldContext.ambiguousName||newContext.ambiguousName)return false;
+   let sameType=false;
+   try{
+    sameType=same(stableTree(oldContext.formula?.tree,previous.ids),
+     stableTree(newContext.formula?.tree,trialIds));
+   }catch{}
+   if(!sameType)return false;
+   if(trialIds.has(current.id)&&trialIds.get(current.id)!==priorIdentity)return false;
+   trialIds.set(current.id,priorIdentity);
+   pairs.push([current.id,prior.id]);
+  }
+  for(const [currentId,priorId] of pairs)if(!mapToPrior(currentId,priorId))return false;
+  return true;
+ }
  function pairSubgoals(oldNode,newNode,eligible){
   const oldSubgoals=oldNode?.subgoals||[];
   for(const subgoal of newNode.subgoals||[]){
    const matchesByKey=oldSubgoals.filter(candidate=>candidate.key&&candidate.key===subgoal.key);
    const prior=matchesByKey.length===1?matchesByKey[0]:null;
    let compatible=!!(eligible&&prior&&sameGoal(prior.goal,subgoal.goal)&&prior.graph&&subgoal.graph);
-   if(compatible){mapToPrior(subgoal.id,prior.id);}
-   else if(subgoal.id&&!ids.has(subgoal.id))ids.set(subgoal.id,fresh());
+   if(compatible){
+    mapToPrior(subgoal.id,prior.id);
+    compatible=matchSubgoalBindings(oldNode,newNode,prior,subgoal);
+   }else if(subgoal.id&&!ids.has(subgoal.id))ids.set(subgoal.id,fresh());
    reconcileScope(prior?.graph,subgoal.graph,compatible);
   }
  }
