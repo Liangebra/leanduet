@@ -131,7 +131,7 @@ def erase_native_binder_names(expr):
                 erase_native_binder_names(expr[4])]
     return [erase_native_binder_names(child) for child in expr]
 
-formula_text = r"\forall n : \mathbb{N}, \forall m : \mathbb{N}, n = m"
+formula_text = r"\forall n : \mathbb{N}, \forall m : \mathbb{N}, n + m = n + m"
 browser_formula = compile_browser_formula(formula_text)
 scoped = browser_formula["scoped"]
 assert scoped["kind"] == "binder" and scoped["op"] == "∀", scoped
@@ -139,22 +139,24 @@ outer_body = scoped["body"]
 assert outer_body["kind"] == "binder" and outer_body["op"] == "∀", scoped
 equality = outer_body["body"]
 assert equality["kind"] == "binary" and equality["op"] == "=", scoped
-assert equality["left"] == {"kind": "bound", "index": 1}, scoped
-assert equality["right"] == {"kind": "bound", "index": 0}, scoped
+assert equality["left"]["kind"] == "binary" and equality["left"]["op"] == "+", scoped
+assert equality["left"] == equality["right"], scoped
+assert equality["left"]["left"] == {"kind": "bound", "index": 1}, scoped
+assert equality["left"]["right"] == {"kind": "bound", "index": 0}, scoped
 
 # Renaming binders changes their presentation but not either scoped syntax
 # or the native Lean expression after binder display names are erased.
 renamed_formula = compile_browser_formula(
-    r"\forall i : \mathbb{N}, \forall j : \mathbb{N}, i = j"
+    r"\forall i : \mathbb{N}, \forall j : \mathbb{N}, i + j = i + j"
 )
 assert renamed_formula["scoped"] == scoped
 assert renamed_formula["lean"] != browser_formula["lean"]
 
 def check_browser_formula(candidate, theorem_name):
     source = (
-        f"theorem {theorem_name} : {candidate['lean']} := by\\n"
-        "  intro _ _\\n"
-        "  rfl\\n"
+        f"theorem {theorem_name} : {candidate['lean']} := by\n"
+        "  intro _ _\n"
+        "  rfl\n"
     )
     # Extracting and inspecting this declaration uses Lean's real elaborator.
     extract(source)
@@ -172,7 +174,7 @@ def check_browser_formula(candidate, theorem_name):
     body = inner[4]
     indices = [node[1] for node in expression_nodes(body)
                if len(node) == 2 and node[0] == "bound"]
-    assert sorted(indices) == [0, 1], native_type
+    assert sorted(indices) == [0, 0, 1, 1], native_type
     assert "Eq" in json.dumps(body), native_type
     return native_type
 
