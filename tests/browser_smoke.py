@@ -688,7 +688,7 @@ $R$ | gr localQ"""
             induction_page.locator("#chainEditor summary").click()
             induction_page.locator("#chainFormat").select_option("natural")
             induction_page.locator("#chainText").fill("induction n\n  zero case\n    $P(0)$ | hbase\n  successor case\n    $P(n_step + 1)$ | hstep n_step ih")
-            expect(induction_page.locator("#draftTranslation")).to_contain_text("zero · (P 0) · complete")
+            expect(induction_page.locator("#draftTranslation")).to_contain_text("base · (P 0) · complete")
             expect(induction_page.locator("#draftTranslation")).to_contain_text("successor · (P (n_step + 1)) · complete")
             induction_page.locator("#compileChain").click()
             expect(induction_page.locator("#patchTerm")).to_have_value(__import__("re").compile(r"induction n with[\s\S]*exact hstep n_step ih"))
