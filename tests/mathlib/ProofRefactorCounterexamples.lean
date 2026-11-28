@@ -1,5 +1,6 @@
 import Mathlib.Topology.Compactness.Compact
 import Mathlib.Algebra.Module.Submodule.Basic
+import Mathlib.Analysis.Calculus.Deriv.Add
 
 /-!
 # Proof-refactoring counterexample: same-type premises and local lets
@@ -82,3 +83,31 @@ theorem submodule_add_refactor_local_let
     x + y ∈ S := by
   let sumProof : x + y ∈ S := S.add_mem h2 hy
   exact sumProof
+
+
+/-!
+# Derivative addition and proof identity
+
+The derivative of a sum is the sum of the derivatives. The selected
+subterm is `h2.add hg`. The hypotheses `h1` and `h2` have the same type,
+but only `h2` occurs in the proof. Its expected dependency closure includes
+both functions, the point, both derivative values, `h2`, `hg`, and the
+normed-field structure. The local-let version names the derivative proof
+before returning it, so its elaborated term has a let node absent from the
+direct proof.
+-/
+
+theorem deriv_add_refactor_direct
+    {𝕜 : Type*} [NontriviallyNormedField 𝕜]
+    (f g : 𝕜 → 𝕜) (f' g' x : 𝕜)
+    (h1 h2 : HasDerivAt f f' x) (hg : HasDerivAt g g' x) :
+    HasDerivAt (fun y : 𝕜 => f y + g y) (f' + g') x := by
+  exact h2.add hg
+
+theorem deriv_add_refactor_local_let
+    {𝕜 : Type*} [NontriviallyNormedField 𝕜]
+    (f g : 𝕜 → 𝕜) (f' g' x : 𝕜)
+    (h1 h2 : HasDerivAt f f' x) (hg : HasDerivAt g g' x) :
+    HasDerivAt (fun y : 𝕜 => f y + g y) (f' + g') x := by
+  let derivativeSum : HasDerivAt (fun y : 𝕜 => f y + g y) (f' + g') x := h2.add hg
+  exact derivativeSum
