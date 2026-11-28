@@ -77,7 +77,7 @@ export function natObjectContextFromJudgment(ir){
    contextProjectionFailure('internal-local','implementation-detail locals have no user-facing name');
   if(!isNatConstant(declaration.type))
    contextProjectionFailure('unsupported-local-type','every local declaration must have exact type Nat');
-  if(typeof declaration.display!=='string'||!/^[\\p{L}][\\p{L}\\p{N}_']*$/u.test(declaration.display))
+  if(typeof declaration.display!=='string'||!/^[\p{L}][\p{L}\p{N}_']*$/u.test(declaration.display))
    contextProjectionFailure('unsupported-local-name','the Lean display name is not a supported identifier');
   return {id:leanNameDisplay(ir.declaration)+':'+ir.path+':slot:'+declaration.slot,name:declaration.display,type:'Nat'};
  });
