@@ -1,3 +1,4 @@
+import {compileFormula} from './math-formula.mjs';
 // Conservative correspondence between revisions of one natural draft.
 // This tracks introduction occurrences, not Lean kernel equality.
 function groups(nodes,key){
@@ -29,6 +30,11 @@ function stableTree(t,ids){
  return t;
 }
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+function sameGoal(a,b){
+ if(a===b)return true;
+ try{return same(compileFormula(a,{syntax:'lean'}).scoped,compileFormula(b,{syntax:'lean'}).scoped);}
+ catch{return false;}
+}
 const contextSignature=nodes=>nodes.filter(n=>n.kind==='context').map(n=>[n.name,n.type,n.ambiguousName]);
 const lineKey=n=>JSON.stringify([n.origin||n.kind,n.raw]);
 function candidateKey(c,ids){
@@ -54,7 +60,7 @@ export function reconcileDraftIdentity(previous,graph){
  const ids=new Map(),matches=new Map();let next=previous?.next??1;
  const fresh=()=> 'object:'+next++;
  const oldRoot=previous?.graph?.nodes||[],nowRoot=graph.nodes;
- const sameRootContext=!!previous&&previous.graph.goal===graph.goal&&same(contextSignature(oldRoot),contextSignature(nowRoot));
+ const sameRootContext=!!previous&&sameGoal(previous.graph.goal,graph.goal)&&same(contextSignature(oldRoot),contextSignature(nowRoot));
  const oldById=new Map(allNodes(previous?.graph).map(n=>[n.id,n]));
  const mapToPrior=(currentId,priorId)=>{
   if(priorId&&previous?.ids.has(priorId)){
@@ -71,7 +77,7 @@ export function reconcileDraftIdentity(previous,graph){
   }
  }
  function scopeMatches(oldGraph,newGraph){
-  if(!oldGraph||!newGraph||oldGraph.goal!==newGraph.goal)return false;
+  if(!oldGraph||!newGraph||!sameGoal(oldGraph.goal,newGraph.goal))return false;
   const a=(oldGraph.nodes||[]).filter(n=>n.kind==='context'),b=(newGraph.nodes||[]).filter(n=>n.kind==='context');
   if(a.length!==b.length)return false;
   return a.every((node,index)=>{
@@ -107,7 +113,7 @@ export function reconcileDraftIdentity(previous,graph){
   for(const subgoal of newNode.subgoals||[]){
    const matchesByKey=oldSubgoals.filter(candidate=>candidate.key&&candidate.key===subgoal.key);
    const prior=matchesByKey.length===1?matchesByKey[0]:null;
-   let compatible=!!(eligible&&prior&&prior.goal===subgoal.goal&&prior.graph&&subgoal.graph);
+   let compatible=!!(eligible&&prior&&sameGoal(prior.goal,subgoal.goal)&&prior.graph&&subgoal.graph);
    if(compatible){mapToPrior(subgoal.id,prior.id);}
    else if(subgoal.id&&!ids.has(subgoal.id))ids.set(subgoal.id,fresh());
    reconcileScope(prior?.graph,subgoal.graph,compatible);
