@@ -138,14 +138,23 @@ print("Reading profile preserves occurrence tree and skips eager search")
 # The trace adapter reads Lean's actual TacticInfo nodes. Goal transitions and
 # source ranges are taken from the elaborator, never reconstructed from indentation.
 from semantic import trace
-trace_source = """theorem trace_pair (P Q : Prop) (hp : P) (hq : Q) : P ∧ Q := by
+trace_source = """import Lean
+
+theorem trace_pair (P Q : Prop) (hp : P) (hq : Q) : P ∧ Q := by
+  -- λ: source bytes must map through the imported prelude.
   constructor
   · exact hp
   · exact hq
 """
 trace_result = trace(trace_source)
 assert trace_result["schema"] == 1 and trace_result["declaration"] == "trace_pair", trace_result
-trace_nodes = trace_result["tactics"]
+
+def walk_trace(nodes):
+    for node in nodes:
+        yield node
+        yield from walk_trace(node.get("children", []))
+
+trace_nodes = list(walk_trace(trace_result["tactics"]))
 assert trace_nodes, trace_result
 for node in trace_nodes:
     span = node["sourceRange"]
@@ -153,19 +162,29 @@ for node in trace_nodes:
     assert 1 <= span["start"]["line"] <= span["end"]["line"], node
 constructor = next(node for node in trace_nodes if node["syntax"].strip().startswith("constructor"))
 assert len(constructor["goalsBefore"]) == 1, constructor
-assert len(constructor["goalsAfter"]) == 2, constructor
+# This InfoTree node covers the full constructor block, including both nested
+# bullets; its post-state is therefore the completed parent goal.
+assert constructor["goalsAfter"] == [], constructor
 assert "∧" in constructor["goalsBefore"][0]["target"], constructor
 assert {d["name"] for d in constructor["goalsBefore"][0]["localContext"]} >= {"hp", "hq"}, constructor
 exact_hp = next(node for node in trace_nodes if node["syntax"].strip() == "exact hp")
 assert len(exact_hp["goalsBefore"]) == 1 and exact_hp["goalsAfter"] == [], exact_hp
+assert exact_hp["goalsBefore"][0]["target"] == "P", exact_hp
 assert "hp" in {d["name"] for d in exact_hp["referencedLocals"]}, exact_hp
-assert exact_hp["sourceRange"]["start"]["line"] == 3, exact_hp
+assert exact_hp["sourceRange"]["start"]["line"] == 6, exact_hp
+mapped_source = trace_source.encode("utf-8")[exact_hp["sourceRange"]["startByte"]:exact_hp["sourceRange"]["endByte"]].decode("utf-8")
+assert mapped_source.strip() == "exact hp", (mapped_source, exact_hp)
+exact_hq = next(node for node in trace_nodes if node["syntax"].strip() == "exact hq")
+assert exact_hq["goalsBefore"][0]["target"] == "Q", exact_hq
+assert "hq" in {d["name"] for d in exact_hq["referencedLocals"]}, exact_hq
+assert trace(trace_source) == trace_result, "Same source must produce a deterministic trace."
 
 opaque_source = """theorem opaque_trace (P : Prop) (h : P) : P := by
   assumption
 """
 opaque_result = trace(opaque_source)
-opaque_tactic = next(node for node in opaque_result["tactics"] if node["syntax"].strip() == "assumption")
+opaque_tactic = next(node for node in walk_trace(opaque_result["tactics"]) if node["syntax"].strip() == "assumption")
 assert opaque_tactic["opaque"] is True, opaque_tactic
 assert opaque_tactic["opaqueRange"] == opaque_tactic["sourceRange"], opaque_tactic
-print("Pinned Lean InfoTree trace captured nested goals, local context, references and opaque source ranges")
+print("TRACE_SCHEMA_SAMPLE=" + json.dumps(trace_result, ensure_ascii=False, sort_keys=True))
+print("Pinned Lean InfoTree trace captured imported-source byte ranges, nested goals, local context, deterministic output and opaque mappings")
