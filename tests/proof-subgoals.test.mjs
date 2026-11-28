@@ -204,6 +204,9 @@ test('classical reductio is explicit and its temporary negation stays local',()=
  assert.notEqual(outerHnot.id,innerHnot.id,'the local negation is a new object, not the parent hnot');
  assert.ok(shadowedOperation.dependencies.includes('context:0'),'the child returns its use of h');
  assert.ok(!shadowedOperation.dependencies.includes(outerHnot.id),'the shadowed parent hnot is not a proof dependency');
+ const captureFacts=new Map([['P','Nat → Prop'],['hnot','Nat'],['hp','P hnot']]);
+ assert.throws(()=>compileNaturalDraft(input,['P','hnot','hp'],captureFacts,{goal:'P hnot'}),/capture a parent reference/,
+  'a shadowed name used in the negated goal must remain tied to the parent object or be rejected');
 });
 
 test('classical reductio composes in isolated disjunction branches',()=>{
