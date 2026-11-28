@@ -67,11 +67,8 @@ function operationLineKey(node){
    bindings.map((binding,index)=>[binding.kind,formulaShape(binding.type,bindings.slice(0,index))])];
  });
  const closure=operation.closure||{};
- const closureBinding=subgoals.flatMap(([id,,bindings])=>bindings.map((binding,index)=>[id,index,binding]))
-  .find(([, ,binding])=>binding.name===closure.name);
- const closureName=closureBinding?['introduced-local',closureBinding[0],closureBinding[1]]:closure.name||null;
  return JSON.stringify([node.origin||node.kind,node.kind,operation.kind,operation.logic||null,
-  formulaShape(operation.parentGoal),subgoals,closure.kind||null,closureName,operation.witness||null]);
+  formulaShape(operation.parentGoal),subgoals,closure.kind||null,closure.name||null,operation.witness||null]);
 }
 const lineKey=n=>n.origin==='element-request'?JSON.stringify([n.origin,n.raw]):operationLineKey(n)||JSON.stringify([n.origin||n.kind,n.raw]);
 function candidateKey(c,ids){

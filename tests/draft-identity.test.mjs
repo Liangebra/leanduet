@@ -173,22 +173,6 @@ test('renaming an operation-local assumption preserves its scoped object identit
  assert.equal(after.ids.get(newOperation.id),before.ids.get(oldOperation.id));
  assert.equal(after.ids.get(newBinding.id),before.ids.get(oldBinding.id));
 });
-test('renaming an introduced universal variable preserves its operation and local object identities',()=>{
- const scope=['hall'],facts=new Map([['hall','∀ n : Nat, P n']]),goal='∀ n : Nat, P n';
- const compile=name=>compileNaturalDraft(`take ${name}\n$P(${name})$ | hall ${name}`,scope,facts,{goal});
- const original=compile('n'),renamed=compile('k');
- assert.equal(original.complete,true,JSON.stringify(original.rows,null,2));
- assert.equal(renamed.complete,true,JSON.stringify(renamed.rows,null,2));
- const before=reconcileDraftIdentity(null,original.graph);
- const after=reconcileDraftIdentity(before,renamed.graph);
- const oldOperation=original.graph.nodes.find(node=>node.goalOperation?.kind==='universal-introduction');
- const newOperation=renamed.graph.nodes.find(node=>node.goalOperation?.kind==='universal-introduction');
- const oldBinding=oldOperation.subgoals[0].graph.nodes.find(node=>node.kind==='context'&&node.name==='n');
- const newBinding=newOperation.subgoals[0].graph.nodes.find(node=>node.kind==='context'&&node.name==='k');
- assert.ok(oldBinding&&newBinding);
- assert.equal(after.ids.get(newOperation.id),before.ids.get(oldOperation.id));
- assert.equal(after.ids.get(newBinding.id),before.ids.get(oldBinding.id));
-});
 test('subgoal-local assumption identities survive unrelated source-line shifts',()=>{
  const scope=['h'],facts=new Map([['h','¬ ¬ P']]);
  const source='classical reductio hnot\n  contradiction\n    $False$ | h hnot';
