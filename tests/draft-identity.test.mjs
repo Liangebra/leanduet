@@ -109,14 +109,23 @@ test('candidate choices inside child goals follow a unique unchanged subgoal aft
 });
 
 
-const goalGraph=goal=>({schema:1,identity:'revision-local',goal,nodes:[
- {id:'context:0',kind:'context',name:'h',type:'Nat',ambiguousName:false}
+const goalGraph=(goal,type='Nat')=>({schema:1,identity:'revision-local',goal,nodes:[
+ {id:'context:0',kind:'context',name:'h',type,ambiguousName:false}
 ]});
 test('alpha-renaming a bound goal variable preserves the surrounding object identity',()=>{
  const original=reconcileDraftIdentity(null,goalGraph('∀ n : Nat, n = n'));
  const renamed=reconcileDraftIdentity(original,goalGraph('∀ k : Nat, k = k'));
  assert.equal(renamed.ids.get('context:0'),original.ids.get('context:0'));
  assert.equal(renamed.matches.get('context:0'),'context:0');
+});
+test('alpha-renaming a binder inside a context type preserves identity but a structural type change retires it',()=>{
+ const original=reconcileDraftIdentity(null,goalGraph('R','∀ n : Nat, n = n'));
+ const renamed=reconcileDraftIdentity(original,goalGraph('R','∀ k : Nat, k = k'));
+ assert.equal(renamed.ids.get('context:0'),original.ids.get('context:0'));
+ assert.equal(renamed.matches.get('context:0'),'context:0');
+ const changed=reconcileDraftIdentity(original,goalGraph('R','∀ k : Nat, k + 1 = k'));
+ assert.notEqual(changed.ids.get('context:0'),original.ids.get('context:0'));
+ assert.equal(changed.matches.has('context:0'),false);
 });
 test('changing a bound goal proposition retires identities even when its binder is renamed',()=>{
  const original=reconcileDraftIdentity(null,goalGraph('∀ n : Nat, n = n'));
