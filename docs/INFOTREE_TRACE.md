@@ -28,7 +28,8 @@ parent tactic such as `constructor` can cover an entire nested block.
 | `declaration` | string | Name of the traced Lean declaration. |
 | `infoTreeEnabled` | boolean | Whether Lean InfoTree collection was enabled. |
 | `infoTreeCount` | integer | Number of resolved top-level InfoTrees. |
-| `tacticInfoCount` | integer | Raw number of TacticInfo nodes found in those trees before coalescing. |\n| `tacticObservationCount` | integer | Number of source/goal observations exposed in `tactics` after exact duplicate wrappers are coalesced. |
+| `tacticInfoCount` | integer | Raw number of TacticInfo nodes found in those trees before coalescing. |
+| `tacticObservationCount` | integer | Number of source/goal observations exposed in `tactics` after exact duplicate wrappers are coalesced. |
 | `tactics` | array | Tactic records in depth-first InfoTree traversal order. |
 | `sourceEncoding` | string | Currently `UTF-8`. |
 | `rangeConvention` | string | Range and position convention, repeated in the response for clients. |
@@ -44,7 +45,8 @@ are source-line counts.
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `syntax` | string | Lean's reprinted syntax for the tactic node. It may include surrounding whitespace. |\n| `infoNodeCount` | integer | Number of raw TacticInfo wrappers coalesced into this identical source/syntax/context/goal observation. |
+| `syntax` | string | Lean's reprinted syntax for the tactic node. It may include surrounding whitespace. |
+| `infoNodeCount` | integer | Number of raw TacticInfo wrappers coalesced into this identical source/syntax/context/goal observation. |
 | `sourceRange` | range or null | Mapped half-open range in the original submitted source. |
 | `contextAvailable` | boolean | Whether a Lean context was attached to the node. |
 | `goalsBefore`, `goalsAfter` | arrays | Lean metavariable goals before and after this node. |
@@ -79,7 +81,7 @@ the tactic, so the byte range verifies the adapter-preamble remapping.
 
 ```json
 {
-  "syntax": "exact hp\\n  ",
+  "syntax": "exact hp\n  ",
   "sourceRange": {
     "startByte": 159,
     "endByte": 167,
