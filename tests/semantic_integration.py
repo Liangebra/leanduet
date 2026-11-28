@@ -1,3 +1,4 @@
+import json
 """Actual Lean extraction smoke test; requires the pinned Lean toolchain."""
 from pathlib import Path
 import sys
