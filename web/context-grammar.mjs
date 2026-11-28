@@ -196,6 +196,8 @@ export function implicitCandidates(goal,scope,facts,{rule='',limit=8}={}){
   const t=e.t;
   let partners=[];
   if(binary(t,'→')&&equal(t.right,target))partners.push(...lookup(t.left));
+  const contradictionType=contradictionAntecedent(t);
+  if(contradictionType)partners.push(...lookup(contradictionType));
   if(t.kind==='binder'&&t.op==='∀'&&t.domain)partners.push(...lookup(t.domain));
   if(target.kind==='binder'&&target.op==='∃'&&equal(target.domain,t))partners.push(...lookup(specialize(target.body,e.name)));
   if(binary(t,'↔')){
