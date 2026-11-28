@@ -76,13 +76,12 @@ function operationLineKey(node){
   formulaShape(operation.parentGoal),subgoals,closure.kind||null,closureKey,operation.witness||null]);
 }
 const lineKey=n=>n.origin==='element-request'?JSON.stringify([n.origin,n.raw]):operationLineKey(n)||JSON.stringify([n.origin||n.kind,n.raw]);
-function candidateKey(c,ids,nodesById){
+function candidateKey(c,ids,nodesById,renamedNames){
  if(c.dependencies.some(id=>!ids.has(id)))return null;
  if(c.type&&!c.formula?.tree)return null;
- // A candidate term can change spelling when a uniquely matched local object
- // is alpha-renamed. Normalize only names that resolve to context objects
- // explicitly listed among this candidate's dependencies; ambiguous shadowed
- // names stay textual, so proof routes are not merged by spelling alone.
+ // Normalize only a dependency whose display name changed between these
+ // revisions and whose identity is unique on both sides. This preserves
+ // proof routes while allowing a selected term to follow a local alpha-rename.
  const dependencyNames=new Map(),ambiguousNames=new Set();
  for(const id of c.dependencies){
   const node=nodesById.get(id),identity=ids.get(id);
@@ -90,9 +89,38 @@ function candidateKey(c,ids,nodesById){
   if(dependencyNames.has(node.name)&&dependencyNames.get(node.name)!==identity)ambiguousNames.add(node.name);
   else dependencyNames.set(node.name,identity);
  }
- const normalizedTerm=String(c.term).replace(/[\p{L}_][\p{L}\p{N}_']*/gu,name=>
-  dependencyNames.has(name)&&!ambiguousNames.has(name)?String.fromCharCode(0)+'local:'+dependencyNames.get(name)+String.fromCharCode(0):name);
+ const normalizedTerm=String(c.term).replace(/[\p{L}_][\p{L}\p{N}_']*/gu,name=>{
+  const identity=dependencyNames.get(name);
+  return identity!==undefined&&!ambiguousNames.has(name)&&renamedNames.get(name)===identity
+   ?String.fromCharCode(0)+'local:'+identity+String.fromCharCode(0):name;
+ });
  return JSON.stringify([c.schema,normalizedTerm,c.type?stableTree(c.formula.tree,ids):null,c.dependencies.map(id=>ids.get(id)).sort()]);
+}
+function renamedContextNames(previous,current){
+ const byIdentity=(revision)=>{
+  const groups=new Map();
+  for(const node of allNodes(revision.graph)){
+   if(node.kind!=='context'||typeof node.name!=='string')continue;
+   const identity=revision.ids.get(node.id);if(identity===undefined)continue;
+   if(!groups.has(identity))groups.set(identity,[]);
+   groups.get(identity).push(node.name);
+  }
+  return groups;
+ };
+ const oldGroups=byIdentity(previous),newGroups=byIdentity(current);
+ const oldNames=new Map(),newNames=new Map(),oldConflicts=new Set(),newConflicts=new Set();
+ const add=(map,conflicts,name,identity)=>{
+  if(map.has(name)&&map.get(name)!==identity)conflicts.add(name);else map.set(name,identity);
+ };
+ for(const [identity,oldSpellings] of oldGroups){
+  const newSpellings=newGroups.get(identity);
+  if(oldSpellings.length!==1||newSpellings?.length!==1||oldSpellings[0]===newSpellings[0])continue;
+  add(oldNames,oldConflicts,oldSpellings[0],identity);
+  add(newNames,newConflicts,newSpellings[0],identity);
+ }
+ for(const name of oldConflicts)oldNames.delete(name);
+ for(const name of newConflicts)newNames.delete(name);
+ return {old:oldNames,current:newNames};
 }
 function matchingContent(a,b,oldIds,newIds){
  const oldScope=(a.scopeRefs||[]).map(x=>oldIds.get(x));
@@ -336,6 +364,7 @@ export function migrateDraftChoices(previous,current,choices){
  if(!previous)return result;
  const oldById=new Map(allNodes(previous.graph).map(n=>[n.id,n]));
  const currentById=new Map(allNodes(current.graph).map(n=>[n.id,n]));
+ const renamedNames=renamedContextNames(previous,current);
  for(const n of currentById.values()){
   const oldId=current.matches.get(n.id);
   const oldLine=/\/line:(\d+)$|^line:(\d+)$/.exec(oldId||'');
@@ -345,8 +374,8 @@ export function migrateDraftChoices(previous,current,choices){
   const p=oldById.get(oldId);
   const oldCandidates=p?.alternatives.filter(c=>(c.choice??c.term)===selected)||[];
   if(oldCandidates.length!==1)continue;
-  const key=candidateKey(oldCandidates[0],previous.ids,oldById);if(!key)continue;
-  const compatible=n.alternatives.filter(c=>candidateKey(c,current.ids,currentById)===key);
+  const key=candidateKey(oldCandidates[0],previous.ids,oldById,renamedNames.old);if(!key)continue;
+  const compatible=n.alternatives.filter(c=>candidateKey(c,current.ids,currentById,renamedNames.current)===key);
   if(compatible.length===1)result.set(Number(newLine[1]||newLine[2]),compatible[0].choice??compatible[0].term);
  }
  return result;
