@@ -6,8 +6,10 @@ Updated 2026-11-28 (UTC).
 
 - Main is `f1cd98152c1b92d3cf3911204ccc291689d3aafe` and includes PR #22, #37/#38, #39, #40, #42, #45 and #46. PR #22's branch-scope, source-position and residual-goal fixes are already in the baseline.
 - Main's latest Full Tests run `46087674165`, Mathlib integration `46087674089`, and Pages deployment `46087674048` succeeded.
-- PR #47 adds the pinned Lean 4.19 InfoTree trace adapter, an explicit local `/api/trace` path, and an on-demand browser view. Its current head `68823b96b81e542de76b42d48d75d727b4d0d3cc` is being synchronized with the latest main: the branch ancestor predates the linear-map Mathlib seed and the corrected benchmark baseline. The trace schema coalesces only exact duplicate observations and retains raw multiplicity. The current head's tests are not treated as merge-ready until the synchronized tree passes Full Tests, pinned Mathlib integration, and browser checks.
+- PR #47 adds the pinned Lean 4.19 InfoTree trace adapter, a local `/api/trace` endpoint, and an on-demand browser view. Its synchronized head is `bc8de53416e69a22a9994fe45eb10eef08762be7`; exact-head Mathlib integration passed (`46095692867`). The Full Tests run (`46095692897`) is checking the browser path. The schema coalesces only exact duplicate observations and retains raw multiplicity; it does not infer author-intent alignment.
 - PR #48 adds an explicit `classical reductio hnot` operation, distinct from intuitionistic negation introduction and ex-falso. Its current head `9c7e4cab49505c4d88fa2fec9eea5505f96b33a9` has passed Node, Python, benchmark and core Lean steps; generated-term integration and browser CI are still running.
+- PR #48 adds an explicit classical reductio operation. Its current head `9c7e4cab49505c4d88fa2fec9eea5505f96b33a9` passed Full Tests (`46094812885`) on the previous base; it still needs synchronization with #47 before merge.
+- PR #49 adds Lean-compatible function composition syntax and a continuous-composition Mathlib case. Exact-head Mathlib integration passed (`46096101548`); Full Tests (`46096101544`), including browser checks, are running.
 - PR #44 (Urdu language pack) remains open from a fork with workflow `action_required`; it is not treated as validated.
 - The real-math fixture has three small checked seeds: compact image in topology, subgroup multiplication closure, and linear-map additivity. These are acceptance anchors, not broad mathematical-language coverage.
 
@@ -57,11 +59,9 @@ Exact replay is faster in these fixtures. Reuse does not guarantee a speedup: ne
 
 ## Next dependency-ready work
 
-1. Finish synchronizing PR #47 with main and run exact-head Full Tests, Mathlib, and browser checks; merge only after the synchronized head is green.
-2. Complete exact-head validation and integrate PR #48's explicit classical reductio after synchronizing it with the merged main; keep it distinct from intuitionistic negation introduction and ex-falso.
-3. Improve Lean-to-language and language-to-Lean region correspondence using actual source ranges and scoped identities, with conflict reporting and untouched-text preservation.
-4. Expand operation-level candidates only where the wording or typed context distinguishes universal introduction, witness extraction, local definition and subtype introduction; keep unresolved readings explicit.
-5. Add reviewed analysis and topology proof fixtures while preserving the existing algebra and linear-map seeds.
-6. Continue extracting reusable declaration and instance dependencies from the active Lean environment; do not build a duplicate theorem database.
-
-The original eight-stage implementation order remains authoritative. Current work advances proof scopes, bounded operation ambiguity, actual Lean observations and checked math seeds; it does not complete any full stage.
+1. Finish Full Tests and browser validation for synchronized PR #47; after its checkpoint is current and the exact head is green, merge and verify main Full Tests, Mathlib, and Pages.
+2. Synchronize PR #48 with the updated main, rerun the full workflow on the resulting tree, then merge only if the branch-composed browser and Lean checks pass.
+3. Synchronize PR #49 with the resulting main, rerun Full Tests and pinned Mathlib, then merge only after checking its formula and topology corpus behavior on the exact head.
+4. Extend local source-region correspondence from Lean tactic observations and scoped identities, preserving conflicts when prose alignment is not supported.
+5. Add the reviewed same-type-premise proof-refactoring counterexample requested by issue #9.
+6. Continue the bounded bridge from the Scoped model to the serialized semantic IR in issue #10; do not claim correspondence with arbitrary browser ASTs or Lean expressions.
