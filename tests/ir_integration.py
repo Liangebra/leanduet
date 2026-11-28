@@ -448,6 +448,32 @@ with TemporaryDirectory() as tmp:
     target=Path(tmp)/"BrowserScopedContextBridge.lean"
     target.write_text(scoped_source+"\n\n"+"\n".join(context_lean_checks)+"\n",encoding="utf-8")
     subprocess.run(["lean",str(target)],cwd=root,check=True,capture_output=True,text=True)
+
+
+
+# The browser can derive its bounded object context from the exact serialized
+# local slots of a Lean judgment, while remaining explicit about snapshot ids.
+lean_context_source="""theorem context_bridge (x y : Nat) : x + y = y + x := by
+  omega
+"""
+lean_context_ir=inspect_ir(lean_context_source,"root/body/body","x + y = y + x")
+validate(lean_context_ir)
+assert lean_context_ir["judgment"]["formula"]["matchesGoal"] is True,lean_context_ir
+lean_context_script="""import fs from 'node:fs';
+import {toScopedSemanticsFromJudgment} from './web/math-formula.mjs';
+const payload=JSON.parse(fs.readFileSync(0,'utf8'));
+console.log(JSON.stringify(toScopedSemanticsFromJudgment(payload.text,{leanIR:payload.ir})));
+"""
+lean_context_projection=json.loads(subprocess.run(
+    ["node","--input-type=module","-e",lean_context_script],
+    input=json.dumps({"text":"x + y = y + x","ir":lean_context_ir}),
+    text=True,check=True,capture_output=True,cwd=Path(__file__).resolve().parents[1]).stdout)
+assert lean_context_projection["context"]==[
+    {"id":"context_bridge:root/body/body:slot:0","name":"x","type":"Nat"},
+    {"id":"context_bridge:root/body/body:slot:1","name":"y","type":"Nat"},
+],lean_context_projection
+assert lean_context_projection["formula"]==context_projection["formula"],lean_context_projection
+print("Browser Nat projection consumes the exact, round-tripped Lean local-context slots")
 print("Explicit Nat context identities project to the expected Fin slots and preserve Lean denotation")
 
 

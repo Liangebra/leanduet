@@ -59,7 +59,26 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
                     {id:'object-y',name:'y',type:'Nat'}
                 ]});
             }""")
-            existential_projection=page.evaluate("""async () => {
+            judgment_projection=page.evaluate("""async () => {
+                const {toScopedSemanticsFromJudgment}=await import('/math-formula.mjs');
+                const name=s=>[[],'str',s];
+                const nat=['const',name('Nat'),[]];
+                const judgment={
+                    schema:1,format:'leanduet.kernel-judgment',declaration:name('context_bridge'),
+                    path:'root/body/body',universes:[],judgment:{
+                        kind:'expression',
+                        context:[
+                            {slot:0,name:name('x'),display:'x',binder:'explicit',internal:false,type:nat,value:null},
+                            {slot:1,name:name('y'),display:'y',binder:'explicit',internal:false,type:nat,value:null}
+                        ],
+                        term:['local',1],type:nat,formula:null,
+                        roundTrip:{checked:true,shapePreserved:true,encodingPreserved:true,typeDefEq:true,
+                            freshContextChecked:true,mode:'same-environment-fresh-context'}
+                    }
+                };
+                return toScopedSemanticsFromJudgment('x + y = y + x',{leanIR:judgment});
+            }""")
+            existential_projection=page.evaluate("""async () => {            existential_projection=page.evaluate("""async () => {
                 const {toScopedSemantics}=await import('/math-formula.mjs');
                 return toScopedSemantics('∀ y : Nat, ∃ z : Nat, y + z = z + y');
             }""")
