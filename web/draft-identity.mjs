@@ -35,7 +35,15 @@ function sameGoal(a,b){
  try{return same(compileFormula(a,{syntax:'lean'}).scoped,compileFormula(b,{syntax:'lean'}).scoped);}
  catch{return false;}
 }
-const contextSignature=nodes=>nodes.filter(n=>n.kind==='context').map(n=>[n.name,n.type,n.ambiguousName]);
+function sameTypeText(a,b){
+ if(a===b)return true;
+ return typeof a==='string'&&typeof b==='string'&&sameGoal(a,b);
+}
+function sameContextSignature(a,b){
+ const left=a.filter(node=>node.kind==='context'),right=b.filter(node=>node.kind==='context');
+ return left.length===right.length&&left.every((node,index)=>
+  node.name===right[index].name&&node.ambiguousName===right[index].ambiguousName&&sameTypeText(node.type,right[index].type));
+}
 const lineKey=n=>JSON.stringify([n.origin||n.kind,n.raw]);
 function candidateKey(c,ids){
  if(c.dependencies.some(id=>!ids.has(id)))return null;
@@ -60,7 +68,7 @@ export function reconcileDraftIdentity(previous,graph){
  const ids=new Map(),matches=new Map();let next=previous?.next??1;
  const fresh=()=> 'object:'+next++;
  const oldRoot=previous?.graph?.nodes||[],nowRoot=graph.nodes;
- const sameRootContext=!!previous&&sameGoal(previous.graph.goal,graph.goal)&&same(contextSignature(oldRoot),contextSignature(nowRoot));
+ const sameRootContext=!!previous&&sameGoal(previous.graph.goal,graph.goal)&&sameContextSignature(oldRoot,nowRoot);
  const oldById=new Map(allNodes(previous?.graph).map(n=>[n.id,n]));
  const mapToPrior=(currentId,priorId)=>{
   if(priorId&&previous?.ids.has(priorId)){
@@ -83,7 +91,7 @@ export function reconcileDraftIdentity(previous,graph){
   return a.every((node,index)=>{
    const oldIdentity=previous?.ids.get(node.id),newIdentity=ids.get(b[index].id);
    return oldIdentity!==undefined&&newIdentity!==undefined&&oldIdentity===newIdentity&&
-    same([node.type,node.ambiguousName],[b[index].type,b[index].ambiguousName]);
+    sameTypeText(node.type,b[index].type)&&node.ambiguousName===b[index].ambiguousName;
   });
  }
  function pairBranches(oldNode,newNode,eligible){
@@ -94,7 +102,7 @@ export function reconcileDraftIdentity(previous,graph){
    const oldBinding=prior?.binding?.id||prior?.bindingId,newBinding=branch.binding?.id||branch.bindingId;
    const oldContext=oldById.get(oldBinding),newContext=allNodes({nodes:branch.graph?.nodes||[]}).find(node=>node.id===newBinding);
    let compatible=!!(eligible&&prior&&oldBinding&&newBinding&&oldContext&&newContext&&
-    same([oldContext.type,oldContext.ambiguousName],[newContext.type,newContext.ambiguousName]));
+    sameTypeText(oldContext.type,newContext.type)&&oldContext.ambiguousName===newContext.ambiguousName);
    if(compatible){
     try{compatible=same(stableTree(oldContext.formula?.tree,previous.ids),stableTree(newContext.formula?.tree,ids));}catch{compatible=false;}
    }
@@ -129,12 +137,12 @@ export function reconcileDraftIdentity(previous,graph){
    const oldContext=oldContexts.get(priorId),newContext=newContexts.get(currentId);
    if(!oldContext||!newContext||oldContext.ambiguousName||newContext.ambiguousName)return false;
    const oldType=oldContext.formula?.tree,newType=newContext.formula?.tree;
-   let sameType=oldContext.type===newContext.type;
+   let compatibleType=sameTypeText(oldContext.type,newContext.type);
    if(oldType&&newType){
-    try{sameType=same(stableTree(oldType,previous.ids),stableTree(newType,trialIds));}
-    catch{sameType=false;}
+    try{compatibleType=same(stableTree(oldType,previous.ids),stableTree(newType,trialIds));}
+    catch{compatibleType=false;}
    }
-   if(!sameType)return false;
+   if(!compatibleType)return false;
    if(trialIds.has(currentId)&&trialIds.get(currentId)!==priorIdentity)return false;
    trialIds.set(currentId,priorIdentity);
    pairs.push([currentId,priorId]);
@@ -163,7 +171,7 @@ export function reconcileDraftIdentity(previous,graph){
   for(const node of newNodes.filter(n=>n.kind==='context')){
    if(ids.has(node.id))continue;
    const prior=compatible?oldContexts.get(node.id):null;
-   if(prior&&same([prior.type,prior.ambiguousName],[node.type,node.ambiguousName]))mapToPrior(node.id,prior.id);
+   if(prior&&sameTypeText(prior.type,node.type)&&prior.ambiguousName===node.ambiguousName)mapToPrior(node.id,prior.id);
    else ids.set(node.id,fresh());
   }
   const oldRows=oldNodes.filter(n=>n.kind!=='context'&&n.kind!=='case-branch');
