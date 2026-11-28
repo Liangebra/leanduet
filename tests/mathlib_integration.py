@@ -272,6 +272,9 @@ assert {"n","p","x","h2"}.issubset(
 
 fin_local_let_node=next(node for node in walk(fin_local_let_tree)
                         if node["kind"]=="let" and node.get("binder")=="finWitness")
+fin_local_value=fin_local_let_node["children"][0]
+assert fin_local_value["kind"]=="hypothesis" and fin_local_value["term"]=="x",fin_local_let_node
+assert "Fin" in fin_local_let_node["binderType"] and "n" in fin_local_let_node["binderType"],fin_local_let_node
 fin_local_exists=next(node for node in walk(fin_local_let_tree) if is_exists_intro(node))
 fin_local_scope={declaration["name"]:declaration for declaration in fin_local_exists["scope"]}
 assert fin_local_scope["finWitness"]["neededForContext"],fin_local_scope
