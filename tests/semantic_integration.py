@@ -172,6 +172,7 @@ exact_hp = next(node for node in trace_nodes if node["syntax"].strip() == "exact
 assert len(exact_hp["goalsBefore"]) == 1 and exact_hp["goalsAfter"] == [], exact_hp
 assert exact_hp["goalsBefore"][0]["target"] == "P", exact_hp
 assert "hp" in {d["name"] for d in exact_hp["referencedLocals"]}, exact_hp
+assert exact_hp["assignedProofTermCount"] == 1 and exact_hp["assignedProofTermsClosed"], exact_hp
 assert exact_hp["sourceRange"]["start"]["line"] == 6, exact_hp
 mapped_source = trace_source.encode("utf-8")[exact_hp["sourceRange"]["startByte"]:exact_hp["sourceRange"]["endByte"]].decode("utf-8")
 assert mapped_source.strip() == "exact hp", (mapped_source, exact_hp)
@@ -187,5 +188,6 @@ opaque_result = trace(opaque_source)
 opaque_tactic = next(node for node in walk_trace(opaque_result["tactics"]) if node["syntax"].strip() == "assumption")
 assert opaque_tactic["opaque"] is True, opaque_tactic
 assert opaque_tactic["opaqueRange"] == opaque_tactic["sourceRange"], opaque_tactic
+assert opaque_tactic["assignedProofTermsClosed"] and "h" in {d["name"] for d in opaque_tactic["referencedLocals"]}, opaque_tactic
 print("TRACE_SCHEMA_SAMPLE=" + json.dumps(trace_result, ensure_ascii=False, sort_keys=True))
 print("Pinned Lean InfoTree trace captured imported-source byte ranges, nested goals, local context, deterministic output and opaque mappings")
