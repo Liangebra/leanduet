@@ -299,7 +299,7 @@ $('traceProof').onclick=async()=>{
     const result=await api('trace',{source});
     if(snapshotRev!==rev)return;
     lastTacticTrace=result;renderTacticTrace(result);
-    $('traceStatus').textContent=ui.t(result.tactics?.length?'Captured tactic trace from Lean\\'s elaboration.':'Lean returned no tactic information for this proof.');
+    $('traceStatus').textContent=ui.t(result.tactics?.length?"Captured tactic trace from Lean's elaboration.":"Lean returned no tactic information for this proof.");
   }catch(error){
     if(snapshotRev===rev){$('tacticTrace').replaceChildren();$('traceStatus').textContent=error.message;}
   }finally{button.disabled=false;}
