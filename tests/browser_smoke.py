@@ -661,6 +661,35 @@ $R$ | gr localQ"""
             expect(classical_page.locator("#verifyState")).to_have_text("Lean passed",timeout=120000)
             classical_page.close()
 
+            negation_page=browser.new_page(viewport={"width":1440,"height":900})
+            negation_page.on("pageerror",lambda error:errors.append(str(error)))
+            negation_page.goto(url)
+            negation_source="""theorem intuitionistic_negation_browser (P Q : Prop) (hp : P) (hnot : ¬ P) : Q := by
+  have hFalse : False := hnot hp
+  exact False.elim hFalse
+"""
+            negation_page.locator("#lean").fill(negation_source)
+            negation_page.once("dialog",lambda d:d.accept())
+            negation_page.locator("#adopt").click()
+            negation_page.locator('[data-view="typed"]').click()
+            negation_page.locator("#extractTerm").click()
+            expect(negation_page.locator("#typedStatus")).to_contain_text("Extracted from Lean elaboration",timeout=60000)
+            select_typed_edit(negation_page,exact_type="Q",term="False.elim hFalse")
+            expect(negation_page.locator("#patchTarget")).to_contain_text("Q")
+            negation_page.locator("#chainEditor summary").click()
+            negation_page.locator("#chainFormat").select_option("natural")
+            negation_page.locator("#chainText").fill("From hnot and hp, we obtain $Q$")
+            expect(negation_page.locator("#draftTranslation")).to_contain_text("False.elim (hnot hp)")
+            negation_page.locator("#compileChain").click()
+            expect(negation_page.locator("#patchTerm")).to_have_value(__import__("re").compile(r"False\.elim \(hnot hp\)"))
+            negation_page.locator("#checkPatch").click()
+            expect(negation_page.locator("#applyPatch")).to_be_enabled(timeout=120000)
+            negation_page.once("dialog",lambda d:d.accept())
+            negation_page.locator("#applyPatch").click()
+            negation_page.locator("#check").click()
+            expect(negation_page.locator("#verifyState")).to_have_text("Lean passed",timeout=120000)
+            negation_page.close()
+
             assert not errors, errors
             browser.close()
         print("Browser smoke test passed")

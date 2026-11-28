@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 7407)
+Total output lines: 491
+
 # Semantic conversion implementation order
 
 This is a dependency plan, not a claim that the stages are complete.
@@ -233,35 +236,7 @@ The goal reader additionally accepts single parenthesized Lean binders and
 untyped universal syntax when the author explicitly supplies a domain
 annotation. Lean, not the browser, decides the inferred domain. The graph
 stores initial goal and scope-introduction dependencies even if a later
-proof does not use the binder. Structured chain validation accepts bounded
-nested named applications emitted by the quantifier translator. Actual
-JavaScript-to-Lean tests cover both kinds of context extension.
-
-## Backward proposition constraints (first finite domain)
-
-The explicit proposition hole `建立 hp : $?$,由 h` derives a finite type
-and proof domain from a typed conjunction h. A subsequent explicit inference
-using hp and currently typed premises constrains that domain. Intersect
-supported matches; preserve the original domain and report contradictory or
-unsupported constraints without inventing a type. A singleton compatible
-candidate can be emitted; otherwise the user must choose or provide more
-information. This is not general type inference: only conjunction projections
-and supported local relation schemas are used. The incremental cache disables
-prefix reuse after any edit in a draft with backward constraints, since a
-later line may change an earlier binding. Lean independently validates the
-resulting proof.
-
-The integration fixture compiles both left- and right-projection solutions
-selected by distinct downstream constraints using the actual browser compiler.
-
-## Context consistency audit
-
-Type holes retain introduction identity independently of their selected type,
-provided the original domain and scope still agree. Candidate migration also
-checks normalized candidate types and premise IDs. The browser iterates
-migration so earlier recovered choices can expose later domains, invalidating
-staged output regardless. Candidate-type references and backward constraint
-references participate in a fixed-point invalidation closure, not the acyclic
+proof does not use the binder. Structured chain…407 tokens truncated…e acyclic
 proof dependency graph. Ordinary proposition annotations reject known
 forward/ambiguous local references and propagate type-level open dependencies.
 These are conservative scope and cache invariants, not Lean type checking.
@@ -483,3 +458,9 @@ Intuitionistic negation introduction remains a separate operation proving
 `False` from an assumption `P`; ex falso remains elimination from an
 existing `False` proof. The temporary negation has child-scope identity and
 is discharged when the child closes.
+
+For ordinary context inference, a visible `hnot : ¬ P` and a distinct
+`hp : P` can now produce the local contradiction `hnot hp : False`. A
+different target may use that term under `False.elim`. This is constructive
+negation elimination; it does not turn `¬ ¬ P` into `P` and does not introduce
+`Classical`.

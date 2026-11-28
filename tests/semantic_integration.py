@@ -20,6 +20,18 @@ assert any(n["kind"]=="apply" and "hqr" in n.get("reference","") for n in nodes)
 assert any(n["kind"]=="apply" and "hpq" in n.get("reference","") for n in nodes),nodes
 print("Actual elaborated proof term extracted:",len(nodes),"nodes")
 
+contradiction_source = """theorem intuitionistic_negation_elimination (P : Prop) (hp : P) (hnot : ¬ P) : False := by
+  exact hnot hp
+"""
+contradiction_result=extract(contradiction_source)
+assert contradiction_result["declaration"]=="intuitionistic_negation_elimination",contradiction_result
+ex_falso_source = """theorem intuitionistic_contradiction_elimination (P Q : Prop) (hp : P) (hnot : ¬ P) : Q := by
+  exact False.elim (hnot hp)
+"""
+ex_falso_result=extract(ex_falso_source)
+assert ex_falso_result["declaration"]=="intuitionistic_contradiction_elimination",ex_falso_result
+print("Lean independently elaborated negation elimination and subsequent intuitionistic ex falso")
+
 
 from semantic import patch
 source2 = """theorem patch_example (P Q R : Prop) (hpq : P → Q) (hqr : Q → R) (hq : Q) : P → R := by

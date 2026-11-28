@@ -2,71 +2,88 @@
 
 Updated 2026-11-28 (UTC).
 
-## Current repository state
+## Repository and review state
 
-- Main is cec64023033d62c264c78d8ade375785dfdb8b9a. PR #22's branch-scope, source-position, residual-goal, and local-object lifetime fixes are in the baseline. PR #57 refreshed the research checkpoint and full-test workflow triggers; exact-head Full Tests 46108326686 passed, and post-merge Pages deployment 46109619212 passed.
-- Recent merged work: #47 (resolved Lean InfoTree observations; merge dd0584450a603eb6f40f87b3614bbaa8e3cd4cc0), #50 (explicit classical reductio; 406f55773fc22f305a498ea7415dc1955a729721), #52 (function composition and continuous-composition fixture; 62dc2f65b3deb51992065e9093043480796dacd5), #54 (same-type proof dependency/local-let counterexample; ee3c75af4cdf29102bfcaea74545b65102903d73), #55 (browser formula binder/native IR regression; b1507a090e160239528ff58d201d380bca296c23), #56 (dependent Fin witness refactoring case; 0264ee19fe54adcb703e2aa7a820e9f169709406), and #57 (checkpoint and CI workflow update; cec64023033d62c264c78d8ade375785dfdb8b9a).
-- PR #44, the Urdu mathematical language pack, was merged independently as 64d35f05c82366a8756547780bc9cb260465551c. Its PR-head Actions did not provide runnable jobs; do not treat that as pre-merge CI validation. Post-merge main Full Tests 46104191470 and Pages deployment 46104191494 passed.
-- PR #55 exact-head Full Tests 46105078884 passed on c4ee613c65dc77d569c78b0d241768c60b566fa7. PR #56 exact-head Full Tests 46105080974, pinned Mathlib 4.19 integration 46105080903, and push Full Tests 46105076511 passed. Those validate their respective exact heads.
-- On main 0264ee19fe54adcb703e2aa7a820e9f169709406, Full Tests 46106764130, pinned Mathlib integration 46106764092, and Pages deployment 46106764104 all passed.
-- The repository scan before opening this checkpoint PR found no other open PRs. Research issues #9 and #10 remain open; their recent tests are useful bounded contributions, not full closure of either issue.
+- `main` is `907404d26c5187f96922a54dd264446f284bce1f`. PR #22 is merged at
+  `0eaf7dd608579e442c5f1c3b835a83c558f75348`; its source-line mapping,
+  residual-goal checks, and branch-local lifetime fixes are in the baseline.
+- PR #61 and #63 are merged. PR #62 was closed as a duplicate of #63. The
+  latest verified main checks after #63 were Full Tests `46120595641`, pinned
+  Mathlib `46120595602`, and Pages deployment `46120595644`.
+- PR #64 (`1643e61`) adds explicit Nat induction. Full Tests
+  `46124889627` is running its browser smoke step; pinned Mathlib
+  `46124889639` passed. The prior full-test run `46122850837` failed in the
+  browser path and does not validate this head.
+- PR #65 (`c363032`) adds Nat existential formulas to the scoped semantics
+  fragment. Pinned Mathlib `46125273505` passed. Full Tests `46125273495` is
+  still running through integration checks; do not treat it as passed yet.
 
 ## Mathematical and engineering state
 
-Proof scopes form a tree. Child goals inherit parent object identities; sibling locals remain isolated; branch closure checks the residual goal; local declarations expire at scope exit; only parent-visible dependencies return. Conjunction, equivalence, existential construction, intuitionistic negation introduction, explicit ex-falso, and named classical reductio are separate supported operations. Classical reductio is available only when explicitly requested; ordinary candidate generation does not insert a classical principle. Arbitrary inductive elimination remains unsupported.
+Proof contexts form a tree. Child goals inherit parent object identities;
+siblings remain isolated; closure checks the child result against its target;
+child-local declarations expire; only parent-visible dependencies return.
+Current bounded operations include universal and implication introduction,
+intuitionistic negation introduction, explicit ex falso, disjunction
+elimination, conjunction and equivalence introduction, explicit existential
+witness construction, local lemmas, and named classical reductio. Classical
+reasoning is never inserted by ordinary candidate generation. Nat induction
+is restricted to an explicitly typed universal Nat goal and remains under
+PR #64 review.
 
-Bounded element requests preserve the set restriction and local identity. A displayed type is required; a known local carrier can reject a mismatch; universal introduction creates membership as a subgoal; an existential witness carries both membership and its property. Universal introduction and existential extraction remain separate structural readings until the goal, typed context, or user choice constrains them. The parser does not infer arbitrary set carriers or local definitions from the same phrase.
+The parser retains supported operation readings as candidates. In particular,
+arbitrary-variable introduction and existential-witness extraction remain
+distinct until a typed goal, premise, or user choice constrains them. Bounded
+element requests preserve the set restriction and require an explicit carrier
+annotation; the browser does not infer arbitrary set types, subtype coercions,
+or local definitions from prose.
 
-A local lemma uses an explicit claim and proof block. Its child scope inherits parent identities, closes only against the stated claim, and returns parent-visible dependencies. Child-local declarations expire. An incomplete lemma remains an open dependency and cannot produce a complete Lean export.
+Issue #10's small formal core in `lean/Scoped.lean` uses Nat expressions and
+first-order propositions with substitution, denotation, and erasure laws. The
+browser projection is deliberately partial. PR #65 adds explicit Nat
+existentials and mixed-binder substitution checks; it does not serialize
+arbitrary browser ASTs or Lean `Expr`, nor does it align proof routes.
 
-The checked Mathlib examples include compact image under a continuous map, subgroup multiplication closure, linear-map additivity, continuous composition, same-type compactness premises with a factored local let, and a dependent existential witness in Fin (n + 1). The last two distinguish h1 and h2 by proof identity even though their types coincide. The Fin example checks that the local let stores x and has a type depending on n. These are small extractor and elaboration acceptance cases, not broad natural-language coverage or a general dependency-minimality result.
+Reviewed Mathlib fixtures cover compact images, subgroup closure, linear-map
+additivity, continuous composition, same-typed local premises, and a dependent
+`Fin (n + 1)` witness. They are acceptance examples, not broad coverage or
+claims of natural-language fidelity.
 
-Issue #10 already has a separate formal core in lean/Scoped.lean: Nat-indexed expressions and first-order formulas, a shallow Lean denotation into Nat and Prop, a checked theorem that simultaneous capture-avoiding substitution commutes with denotation, and a theorem that erasure into the generic Scoped.Term commutes with substitution. This fragment supports zero, successor, addition, equality, truth, falsity, conjunction, implication, and universal quantification over Nat. It excludes dependent object domains, general predicates, arbitrary constants, partial syntax, and the full Lean type system.
+## Current worktree: intuitionistic contradiction elimination
 
-PR #55 adds a distinct browser-to-native-IR regression for nested natural-number quantifiers, addition, equality, alpha-renaming, and same-name shadowing. It checks de Bruijn indices, elaborates the generated theorem in Lean, and uses Lean's native judgment round trip. The browser now also exposes a versioned, closed-fragment projection to ScopedSemantics.Formula; integration tests lower it into Lean and check erasure and denotation against an independent lowering of the browser scoped AST. This remains a one-way test bridge: arbitrary browser syntax, free declarations, dependent domains, and Lean Expr are outside its scope.
+The independent `feat/intuitionistic-negation-elimination` worktree adds a
+deterministic context rule for applying a visible `hnot : ¬ P` (or `P → False`)
+to a matching `hp : P`. It produces `hnot hp : False`, or uses that term under
+`False.elim` for another target. It does not derive `P` from `¬ ¬ P` and does
+not use `Classical`. All 291 Node tests and 21 Python unit tests pass; Python
+syntax and `git diff --check` pass. Exact Lean integration is running locally
+with the available Lean 4.36 toolchain; repository-pinned Lean 4.19 and browser
+CI remain required.
 
 ## Verification boundary
 
-Parsing, candidate construction, structural compatibility, open proof obligations, Lean elaboration, kernel checking, and author-intent fidelity are distinct states. A structurally exportable draft is not by itself a Lean proof or a semantic-fidelity guarantee. Formula comparison is conservative structural comparison, not general definitional equality. Current source identities are reconciled conservatively across edits; repeated identical rows may remain intentionally unmatched when correspondence is ambiguous. Lean InfoTree traces are observations from elaboration: tactic ranges and goals are not author-intent alignments, and references are syntactic occurrences from recorded terms or assigned goals, not a complete logical dependency graph.
-
-The Full Tests workflow covers unit, Python, Lean, integration, and browser paths. Pinned Mathlib integration and Pages deployment are separate workflows. CI now runs Full Tests on PRs and pushes to main; it does not run the same full workflow again for every feature-branch push. A PR still needs an exact-head run, and post-merge checks still need verification on main.
-
-The benchmark measures synthetic editor cases only. It compares cached results structurally with a cold public compileNaturalDraft result and reports medians and P95 values, including cases with little reuse or slower cached evaluation. It is not browser keystroke latency and does not generalize to user documents.
-
-## Incremental benchmark observations
-
-Run 46082417456 used Ubuntu 24.04.5 and Node 22.23.5, with 24 warmups and 160 timed samples per case. Every cached result was compared structurally with a cold public compileNaturalDraft result. Times are milliseconds; reuse is mean reused rows. These synthetic figures are not browser keystroke latency and do not generalize to user documents.
-
-| Case | Median | P95 | Reuse |
-|---|---:|---:|---:|
-| Cold full evaluation (16 proof rows, 62 locals) | 1.442 | 2.249 | 0 |
-| Exact replay (16 proof rows, 62 locals) | 1.112 | 1.785 | 16 |
-| Final-premise character edit (15-row prefix) | 1.081 | 1.561 | 15 |
-| Local proof-dependency edit (7-row prefix) | 1.069 | 1.393 | 7 |
-| Eight-level nested cases, cold (41 lines) | 6.283 | 8.981 | 0 |
-| Eight-level nested cases, exact replay | 1.160 | 1.405 | 25 |
-| Nested case conclusion edit | 6.951 | 7.958 | 16 |
-| Interleaved sequence, cold (two case blocks) | 2.012 | 2.801 | 0 |
-| Interleaved replay plus terminal edit | 2.524 | 3.228 | 4 |
-| Conjunction child goals, cold | 0.097 | 0.211 | 0 |
-| Second conjunction goal edit | 0.268 | 0.340 | 1 |
-| Element candidates, cold (50 locals) | 0.976 | 1.389 | 0 |
-| Element candidates, exact replay | 0.450 | 0.758 | 1 |
-| Element candidate property edit | 1.013 | 1.337 | 0 |
-| New existential premise | 0.988 | 1.296 | 0 |
-| Local lemma, cold (51 locals) | 1.412 | 1.831 | 0 |
-| Local lemma, exact replay | 0.313 | 0.338 | 3 |
-| Local lemma one-premise edit | 1.667 | 2.150 | 1 |
-| Local lemma source-line shift | 1.686 | 2.182 | 0 |
-
-Exact replay is faster in these fixtures. Reuse does not guarantee a speedup: nested conclusion edits, interleaved terminal edits, and local-lemma edits can be slower than their cold baselines despite some reused rows. No general editor-latency claim follows.
+Parsing, candidate generation, structural compatibility, open proof
+obligations, Lean elaboration, kernel checking, and author-intent fidelity are
+separate states. A renderable candidate is not a checked proof or a fidelity
+claim. Surface AST comparison is conservative and is not Lean definitional
+equality. Lean InfoTree ranges and term references are observations from
+elaboration, not author-intent alignments or a complete logical dependency
+graph.
 
 ## Next dependency-ready work
 
-1. Extend the Issue #9 corpus with a reviewed subspace or analysis proof and its explicit expected dependency closure. Keep the issue open until examples cover the requested range; the compact-image and Fin cases address only part of the request.
-2. Extend the browser-to-ScopedSemantics projection to explicitly typed local contexts and object identities, then investigate a typed bridge from that fragment to native Lean Expr while preserving bounds and distinctions between syntax, definitional equality, and proof irrelevance.
-3. Extend local source-region correspondence from Lean tactic observations and scoped identities, preserving conflicts when prose alignment is not supported.
-4. Add real editor-path measurements and branch-local edit comparisons against full recomputation before making responsiveness claims.
-5. Expand the reviewed mathematics corpus across analysis, linear algebra, topology, and algebra. Separate statement parsing, proof transformation, Lean compilation, semantic fidelity, and author-route preservation in every report.
+1. Resolve PR #64's exact browser test, then merge only after exact-head Full
+   Tests and Mathlib pass; verify main and Pages afterward.
+2. Rebase or retest PR #65 on the resulting main, then merge only after its
+   exact-head Full Tests and pinned Mathlib pass.
+3. Finish and submit the current intuitionistic contradiction-elimination
+   rule with Lean-backed integration and focused candidate tests.
+4. Extend Issue #9 with a reviewed real analysis or subspace proof and an
+   explicit expected dependency set.
+5. Continue local region alignment and branch-level incremental reuse; compare
+   each edited scoped result with a cold recomputation.
 
-The original eight-stage dependency order remains in force: semantic representation, scope/context, ambiguity constraints, declaration/concept dependencies, proof fidelity, bidirectional editing, incremental computation, then broad corpus evaluation. Work on the later stages may expose regressions in earlier ones, but does not replace that order.
+The original eight-stage order in `IMPLEMENTATION_ORDER.md` remains
+authoritative: representation, identity, partial graph, candidate forest,
+mathematical inference, incremental evaluation, bidirectional projection, and
+acceptance. Later work does not replace that dependency order.
