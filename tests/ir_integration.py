@@ -471,7 +471,7 @@ substitution_lean_checks=[
     "example (ρ : LeanDuet.ScopedSemantics.Env 1) : "
     "LeanDuet.ScopedSemantics.denote "
     "(LeanDuet.ScopedSemantics.substFormula "+xy_to_z+" ("
-    +substitution_source_core+" : LeanDuet.ScopedSemantics.Formula 2)) ρ ↔ "
+    +substitution_source_core+" : LeanDuet.ScopedSemantics.Formula 2)) ρ = "
     "LeanDuet.ScopedSemantics.denote ("+substitution_source_core
     +" : LeanDuet.ScopedSemantics.Formula 2) "
     "(fun i => LeanDuet.ScopedSemantics.denoteNat ("+xy_to_z
@@ -496,7 +496,7 @@ substitution_lean_checks.extend([
     "example (ρ : LeanDuet.ScopedSemantics.Env 0) : "
     "LeanDuet.ScopedSemantics.denote "
     "(LeanDuet.ScopedSemantics.substFormula "+x_to_zero+" ("
-    +capture_source_core+" : LeanDuet.ScopedSemantics.Formula 1)) ρ ↔ "
+    +capture_source_core+" : LeanDuet.ScopedSemantics.Formula 1)) ρ = "
     "LeanDuet.ScopedSemantics.denote ("+capture_source_core
     +" : LeanDuet.ScopedSemantics.Formula 1) "
     "(fun i => LeanDuet.ScopedSemantics.denoteNat ("+x_to_zero
