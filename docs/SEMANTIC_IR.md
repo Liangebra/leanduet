@@ -78,6 +78,8 @@ that shadows a context name. Browser smoke also loads and calls the module
 through the local HTTP server; it is not yet exposed as an interactive editor
 control.
 
+The Lean integration also applies `substFormula` to formulas emitted by this projection and checks concrete commuting cases: replacing the older of two Nat objects while retaining the newer one, and replacing an outer object under one or two universal binders without capturing the bound variables. In these cases the substituted serialized syntax is definitionally the projection of the corresponding updated formula, and the existing `denote_subst` theorem applies to the emitted terms. These tests exercise specific inputs; they do not prove that the JavaScript projection preserves substitution for all formulas.
+
 ## Integration plan
 
 The browser now exposes two separate, versioned projections into the bounded Nat/Prop fragment: one for closed formulas and one for formulas over an explicit finite context of Nat objects. In the contextual schema, stable object ids remain metadata distinct from de Bruijn references, and free display names resolve only when unique. The Lean integration checks the context indices and denotation against an explicit environment, including one universal binder that shadows a context name.

@@ -442,3 +442,103 @@ with TemporaryDirectory() as tmp:
     target.write_text(scoped_source+"\n\n"+"\n".join(context_lean_checks)+"\n",encoding="utf-8")
     subprocess.run(["lean",str(target)],cwd=root,check=True,capture_output=True,text=True)
 print("Explicit Nat context identities project to the expected Fin slots and preserve Lean denotation")
+
+
+# Test the serialized context projection against actual capture-avoiding
+# substitution, not only against its pointwise interpretation.
+substitution_source_text="x + y = y + x"
+substitution_source_context=[
+    {"id":"object-x","name":"x","type":"Nat"},
+    {"id":"object-y","name":"y","type":"Nat"},
+]
+substitution_source=compile_context_scoped_formula(
+    substitution_source_text,substitution_source_context)
+substitution_target=compile_context_scoped_formula(
+    "0 + z = z + 0",[{"id":"object-z","name":"z","type":"Nat"}])
+substitution_source_core=lean_formula(substitution_source["formula"],2)
+substitution_target_core=lean_formula(substitution_target["formula"],1)
+xy_to_z=(
+    "(fun i : Fin 2 => Fin.cases "
+    "(LeanDuet.ScopedSemantics.NatExpr.var (⟨0, by decide⟩ : Fin 1) "
+    ": LeanDuet.ScopedSemantics.NatExpr 1) "
+    "(fun _ => (LeanDuet.ScopedSemantics.NatExpr.zero "
+    ": LeanDuet.ScopedSemantics.NatExpr 1)) i)"
+)
+substitution_lean_checks=[
+    "example : LeanDuet.ScopedSemantics.substFormula "+xy_to_z+" ("
+    +substitution_source_core+" : LeanDuet.ScopedSemantics.Formula 2) = ("
+    +substitution_target_core+" : LeanDuet.ScopedSemantics.Formula 1) := by rfl",
+    "example (ρ : LeanDuet.ScopedSemantics.Env 1) : "
+    "LeanDuet.ScopedSemantics.denote "
+    "(LeanDuet.ScopedSemantics.substFormula "+xy_to_z+" ("
+    +substitution_source_core+" : LeanDuet.ScopedSemantics.Formula 2)) ρ = "
+    "LeanDuet.ScopedSemantics.denote ("+substitution_source_core
+    +" : LeanDuet.ScopedSemantics.Formula 2) "
+    "(fun i => LeanDuet.ScopedSemantics.denoteNat ("+xy_to_z
+    +" i) ρ) := by exact LeanDuet.ScopedSemantics.denote_subst _ _ _",
+]
+
+capture_source=compile_context_scoped_formula(
+    "∀ z : Nat, x + z = z + x",
+    [{"id":"object-x","name":"x","type":"Nat"}])
+capture_target=compile_context_scoped_formula(
+    "∀ z : Nat, 0 + z = z + 0",[])
+capture_source_core=lean_formula(capture_source["formula"],1)
+capture_target_core=lean_formula(capture_target["formula"],0)
+x_to_zero=(
+    "(fun _ : Fin 1 => (LeanDuet.ScopedSemantics.NatExpr.zero "
+    ": LeanDuet.ScopedSemantics.NatExpr 0))"
+)
+substitution_lean_checks.extend([
+    "example : LeanDuet.ScopedSemantics.substFormula "+x_to_zero+" ("
+    +capture_source_core+" : LeanDuet.ScopedSemantics.Formula 1) = ("
+    +capture_target_core+" : LeanDuet.ScopedSemantics.Formula 0) := by rfl",
+    "example (ρ : LeanDuet.ScopedSemantics.Env 0) : "
+    "LeanDuet.ScopedSemantics.denote "
+    "(LeanDuet.ScopedSemantics.substFormula "+x_to_zero+" ("
+    +capture_source_core+" : LeanDuet.ScopedSemantics.Formula 1)) ρ = "
+    "LeanDuet.ScopedSemantics.denote ("+capture_source_core
+    +" : LeanDuet.ScopedSemantics.Formula 1) "
+    "(fun i => LeanDuet.ScopedSemantics.denoteNat ("+x_to_zero
+    +" i) ρ) := by exact LeanDuet.ScopedSemantics.denote_subst _ _ _",
+])
+with TemporaryDirectory() as tmp:
+    target=Path(tmp)/"BrowserScopedContextSubstitution.lean"
+    target.write_text(
+        scoped_source+"\n\n"+"\n".join(substitution_lean_checks)+"\n",
+        encoding="utf-8",
+    )
+    subprocess.run(["lean",str(target)],cwd=root,check=True,capture_output=True,text=True)
+
+# A second capture regression shifts the same outer context object beneath
+# two binders. The source index for x is therefore 2, while the binder
+# variables remain at indices 1 and 0; substituting x must preserve both.
+nested_capture_source=compile_context_scoped_formula(
+    "∀ z : Nat, ∀ w : Nat, x + z = w + x",
+    [{"id":"object-x","name":"x","type":"Nat"}])
+nested_capture_target=compile_context_scoped_formula(
+    "∀ z : Nat, ∀ w : Nat, 0 + z = w + 0",[])
+nested_source_core=lean_formula(nested_capture_source["formula"],1)
+nested_target_core=lean_formula(nested_capture_target["formula"],0)
+substitution_lean_checks.extend([
+    "example : LeanDuet.ScopedSemantics.substFormula "+x_to_zero+" ("
+    +nested_source_core+" : LeanDuet.ScopedSemantics.Formula 1) = ("
+    +nested_target_core+" : LeanDuet.ScopedSemantics.Formula 0) := by rfl",
+    "example (ρ : LeanDuet.ScopedSemantics.Env 0) : "
+    "LeanDuet.ScopedSemantics.denote "
+    "(LeanDuet.ScopedSemantics.substFormula "+x_to_zero+" ("
+    +nested_source_core+" : LeanDuet.ScopedSemantics.Formula 1)) ρ = "
+    "LeanDuet.ScopedSemantics.denote ("+nested_source_core
+    +" : LeanDuet.ScopedSemantics.Formula 1) "
+    "(fun i => LeanDuet.ScopedSemantics.denoteNat ("+x_to_zero
+    +" i) ρ) := by exact LeanDuet.ScopedSemantics.denote_subst _ _ _",
+])
+with TemporaryDirectory() as tmp:
+    target=Path(tmp)/"BrowserScopedNestedContextSubstitution.lean"
+    target.write_text(
+        scoped_source+"\n\n"+"\n".join(substitution_lean_checks)+"\n",
+        encoding="utf-8",
+    )
+    subprocess.run(["lean",str(target)],cwd=root,check=True,capture_output=True,text=True)
+print("Versioned browser context projections commute with substitutions under one and two binders")
+
