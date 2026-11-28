@@ -322,9 +322,11 @@ for required in ("Semiring R","AddCommMonoid M","Module R M"):
 
 submodule_abstraction=abstract_preview(
     submodule_direct_source,submodule_add["path"],project)
-assert submodule_abstraction["closedChecked"],submodule_abstraction
-assert submodule_abstraction["standaloneChecked"],submodule_abstraction
-assert submodule_abstraction["exportShapePreserved"],submodule_abstraction
+assert submodule_abstraction["closedChecked"] and submodule_abstraction["reopenedShape"],submodule_abstraction
+assert not submodule_abstraction["standaloneChecked"],submodule_abstraction
+assert not submodule_abstraction["exportShapePreserved"],submodule_abstraction
+assert submodule_abstraction["source"] is None,submodule_abstraction
+assert "universe-polymorphic export is not supported yet" in submodule_abstraction["exportNote"],submodule_abstraction
 parameter_names={parameter["name"] for parameter in submodule_abstraction["parameters"]}
 assert {"S","x","y","h2","hy"}.issubset(parameter_names),submodule_abstraction
 assert "h1" not in parameter_names,submodule_abstraction
@@ -338,4 +340,4 @@ assert submodule_let_add,submodule_let_node
 submodule_let_scope={declaration["name"]:declaration for declaration in submodule_let_add["scope"]}
 assert submodule_let_scope["h1"]["type"]==submodule_let_scope["h2"]["type"],submodule_let_scope
 assert submodule_let_scope["h2"]["neededForContext"] and not submodule_let_scope["h1"]["neededForContext"],submodule_let_scope
-print("Mathlib refactoring counterexample: submodule addition retains h2 by identity and preserves its local-let shape")
+print("Mathlib refactoring counterexample: submodule addition preserves h2 identity and records the universe-polymorphic export limit")

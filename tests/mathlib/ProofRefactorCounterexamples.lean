@@ -62,8 +62,10 @@ theorem fin_witness_refactor_local_let
 # Subspace addition and proof identity
 
 The sum of two members of a submodule is again a member. The selected
-subterm uses h2 and hy. The same-typed h1 is deliberately unused. The local-let
-variant keeps the same conclusion but changes the elaborated proof shape.
+subterm is `S.add_mem h2 hy`. Its expected dependency closure contains R, M,
+S, x, y, h2, hy, and the required algebraic structure instances; it excludes
+the same-typed but unused h1. The local-let variant keeps the same conclusion
+but changes the elaborated proof shape.
 -/
 
 theorem submodule_add_refactor_direct
