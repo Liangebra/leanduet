@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 12742)
-Total output lines: 708
-
 """Real browser regression checks. Run after installing playwright + Chromium."""
 import os
 import subprocess
@@ -341,7 +338,53 @@ $P(x)$ | hp""")
             expect(operation_row).to_contain_text("universal-variable introduction")
             expect(operation_row).to_contain_text("Clear choice")
             operation_page.locator("#compileChain").click()
-            expect(operation_page.locator("#patchTerm")).to_have_value(__import__("re").compile(r"intro x[\s\S]*cases h with…742 tokens truncated…
+            expect(operation_page.locator("#patchTerm")).to_have_value(__import__("re").compile(r"intro x[\s\S]*cases h with[\s\S]*exact hall x[\s\S]*exact hp"))
+            operation_page.locator("#checkPatch").click()
+            expect(operation_page.locator("#applyPatch")).to_be_enabled(timeout=120000)
+            operation_page.once("dialog",lambda d:d.accept())
+            operation_page.locator("#applyPatch").click()
+            operation_page.locator("#check").click()
+            expect(operation_page.locator("#verifyState")).to_have_text("Lean passed",timeout=120000)
+            operation_page.close()
+            lemma_page=browser.new_page(viewport={"width":1440,"height":900})
+            lemma_page.on("pageerror",lambda error:errors.append(str(error)))
+            lemma_page.goto(url)
+            lemma_page.locator("#lean").fill("""theorem local_lemma_demo (Q R : Prop) (hq : Q) (gr : Q → R) : R := by
+  have localQ : Q := hq
+  exact gr localQ
+""")
+            lemma_page.once("dialog",lambda d:d.accept())
+            lemma_page.locator("#adopt").click()
+            lemma_page.locator('[data-view="typed"]').click()
+            lemma_page.locator("#extractTerm").click()
+            expect(lemma_page.locator("#typedStatus")).to_contain_text("Extracted from Lean elaboration",timeout=60000)
+            select_typed_edit(lemma_page,exact_type="R",summary="Apply letFun")
+            expect(lemma_page.locator("#patchTarget")).to_contain_text("R")
+            lemma_page.locator("#chainEditor summary").click()
+            lemma_page.locator("#chainFormat").select_option("natural")
+            lemma_text="""local lemma localQ : $Q$
+  proof
+    $Q$ | hq
+$R$ | gr localQ"""
+            lemma_page.locator("#chainText").fill(lemma_text)
+            lemma_row=lemma_page.locator("#draftTranslation .ruleResult").first
+            expect(lemma_row).to_contain_text("local lemma")
+            lemma_page.locator("#inferChain").click()
+            expect(lemma_page.locator("#chainStatus")).to_contain_text("Intermediate propositions inferred by Lean",timeout=120000)
+            expect(lemma_page.locator("#patchTerm")).to_have_value(__import__("re").compile(r"have localQ : Q := by[\s\S]*exact hq[\s\S]*exact gr localQ"))
+            lemma_page.locator("#checkPatch").click()
+            expect(lemma_page.locator("#applyPatch")).to_be_enabled(timeout=120000)
+            lemma_page.once("dialog",lambda d:d.accept())
+            lemma_page.locator("#applyPatch").click()
+            lemma_page.locator("#check").click()
+            expect(lemma_page.locator("#verifyState")).to_have_text("Lean passed",timeout=120000)
+            lemma_page.close()
+            restricted_page=browser.new_page(viewport={"width":1440,"height":900})
+            restricted_page.on("pageerror",lambda error:errors.append(str(error)))
+            restricted_page.goto(url)
+            restricted_page.locator("#lean").fill("""theorem restricted_forall_demo (A : List Nat) (P : Nat → Prop)
+    (hall : ∀ x : Nat, x ∈ A → P x) : ∀ x ∈ A, P x := by
+  exact fun x hx => hall x hx
 """)
             restricted_page.once("dialog",lambda d:d.accept())
             restricted_page.locator("#adopt").click()
@@ -625,38 +668,6 @@ $P(x)$ | hp""")
             classical_page.locator("#check").click()
             expect(classical_page.locator("#verifyState")).to_have_text("Lean passed",timeout=120000)
             classical_page.close()
-
-            induction_page=browser.new_page(viewport={"width":1440,"height":900})
-            induction_page.on("pageerror",lambda error:errors.append(str(error)))
-            induction_page.goto(url)
-            induction_source="""theorem nat_induction_browser (P : Nat → Prop) (hbase : P 0)
-    (hstep : ∀ k : Nat, P k → P (k + 1)) : ∀ n : Nat, P n := by
-  intro n
-  induction n with
-  | zero => exact hbase
-  | succ k ih => exact hstep k ih
-"""
-            induction_page.locator("#lean").fill(induction_source)
-            induction_page.once("dialog",lambda d:d.accept())
-            induction_page.locator("#adopt").click()
-            induction_page.locator('[data-view="typed"]').click()
-            induction_page.locator("#extractTerm").click()
-            expect(induction_page.locator("#typedStatus")).to_contain_text("Extracted from Lean elaboration",timeout=60000)
-            select_typed_edit(induction_page,includes=("P n",))
-            induction_page.locator("#chainEditor summary").click()
-            induction_page.locator("#chainFormat").select_option("natural")
-            induction_page.locator("#chainText").fill("induction n\n  zero case\n    $P(0)$ | hbase\n  successor case\n    $P(n_step + 1)$ | hstep n_step ih")
-            expect(induction_page.locator("#draftTranslation")).to_contain_text("zero · (P 0) · complete")
-            expect(induction_page.locator("#draftTranslation")).to_contain_text("successor · (P (n_step + 1)) · complete")
-            induction_page.locator("#compileChain").click()
-            expect(induction_page.locator("#patchTerm")).to_have_value(__import__("re").compile(r"induction n with[\s\S]*exact hstep n_step ih"))
-            induction_page.locator("#checkPatch").click()
-            expect(induction_page.locator("#applyPatch")).to_be_enabled(timeout=120000)
-            induction_page.once("dialog",lambda d:d.accept())
-            induction_page.locator("#applyPatch").click()
-            induction_page.locator("#check").click()
-            expect(induction_page.locator("#verifyState")).to_have_text("Lean passed",timeout=120000)
-            induction_page.close()
 
             assert not errors, errors
             browser.close()

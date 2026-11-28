@@ -11,11 +11,19 @@ Updated 2026-11-28 (UTC).
   `dc3faf8576e97e532d84d3783f5bbc632c079d46`. PR #63 (real-analysis proof
   refactoring counterexample) is merged at the current `main` head. PR #62 was
   closed as a duplicate of #63.
-- PR #64 adds explicit bounded induction on `∀ n : Nat, P n`. Its first full
-  test run exposed a browser test selecting the nested `P n` leaf rather than
-  the quantified goal. The selector now requires the universal goal. Exact-head
-  Tests run `46122850837` is in progress; pinned Mathlib run `46122850830`
-  passed. The preceding failed run `46121250719` is not validation of the fix.
+- PR #64 adds explicit bounded induction on `∀ n : Nat, P n`. Exact-head Tests
+  run `46122850837` failed in the browser smoke path: the selected target still
+  reached the planner as a non-universal goal. The test now selects the exact
+  elaborated target type; its new exact-head Tests run `46124889627` and pinned
+  Mathlib run `46124889639` are in progress. The previous Mathlib run
+  `46122850830` passed, but does not validate the new head.
+- PR #65 adds an initial explicit-Nat existential fragment for Issue #10. Its
+  first exact-head Full Tests run `46123531543` failed before browser execution
+  because `tests/browser_smoke.py` contained a malformed assertion string; the
+  pinned Mathlib run `46123531595` passed. The corrected browser file retains
+  the existential projection regression and removes an unrelated Nat-induction
+  case that is not supported by PR #65's base branch. CI must rerun on the
+  corrected head before merge.
 - The latest verified main checks after PR #63 were Full Tests
   `46120595641`, pinned Mathlib `46120595602`, and Pages deployment
   `46120595644`; all passed.
