@@ -32,7 +32,9 @@ function tokenize(s,{syntax='math'}={}){
    if(!Object.hasOwn(commands,cmd))throw Error('Unsupported macro \\'+cmd);
    const v=commands[cmd];push(bin[v]||'¬∀∃'.includes(v)?'op':'id',v,pos);continue;
   }
-  const name=/^[\p{L}][\p{L}\p{N}_']*/u.exec(s.slice(i));
+  const name=(syntax==='lean'
+   ?/^[\p{L}][\p{L}\p{N}_']*(?:\.[\p{L}][\p{L}\p{N}_']*)*/u
+   :/^[\p{L}][\p{L}\p{N}_']*/u).exec(s.slice(i));
   if(name){
    // Lean's elaborated targets often contain predicate-valued binders such
    // as `(P : Nat → Prop)`. Prop (and universe sort Type) is a sort in that
