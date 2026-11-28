@@ -114,8 +114,10 @@ from this speculative graph.
 `lean/Scoped.lean` first proves substitution laws for an untyped scope-indexed
 operator tree, then adds a separate, intrinsically typed fragment with
 natural-number expressions and first-order propositions. Its Lean denotation
-is preserved by capture-avoiding substitution, including under universal
-binders; an erasure map into the generic tree also preserves substitution.
+is preserved by capture-avoiding substitution, including under universal and
+existential binders; an erasure map into the generic tree also preserves
+substitution. The browser projection includes explicitly typed Nat existential
+binders and checks witness-scope preservation under local-object replacement.
 This is an initial semantic correspondence, not a conversion from the browser
 AST to Lean `Expr`, and it excludes dependent object types, predicates beyond
 equality, arbitrary constants, and incomplete terms.

@@ -126,15 +126,25 @@ test('bounded scoped semantic projection retains typed constructors and bound id
  const fresh=toScopedSemantics('∀ outer : Nat, ∀ inner : Nat, inner = inner');
  assert.deepEqual(shadow,fresh);
  assert.notDeepEqual(shadow,projected);
+ const existential=toScopedSemantics('∃ n : Nat, n + 0 = n');
+ assert.deepEqual(existential.formula,{
+  kind:'exists',body:{kind:'equal',
+   left:{kind:'add',left:{kind:'var',index:0},right:{kind:'zero'}},
+   right:{kind:'var',index:0}}
+ });
+ const mixed=toScopedSemantics('∀ n : Nat, ∃ n : Nat, n = n');
+ assert.deepEqual(mixed.formula,{kind:'all',body:{kind:'exists',body:{kind:'equal',
+  left:{kind:'var',index:0},right:{kind:'var',index:0}}}});
 });
 
 test('scoped semantic projection reports unsupported mathematics instead of guessing',()=>{
  const cases=[
-  ['∃ n : Nat, n = 0','unsupported-quantifier'],
   ['∀ n : Nat, P(n)','unsupported-predicate'],
   ['∀ n, n = n','missing-domain-annotation'],
+  ['∃ n, n = n','missing-domain-annotation'],
   ['∀ n : Nat, n = 1','unsupported-literal'],
-  ['∀ n : Int, n = n','unsupported-binder-domain']
+  ['∀ n : Int, n = n','unsupported-binder-domain'],
+  ['∃ n : Int, n = n','unsupported-binder-domain']
  ];
  for(const [formula,code] of cases)
   assert.throws(()=>toScopedSemantics(formula),error=>error?.name==='ScopedSemanticsError'&&error.code===code,formula);
