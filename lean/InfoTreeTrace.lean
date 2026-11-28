@@ -109,6 +109,14 @@ private def traceRangeJson (fileMap : FileMap) (stx : Syntax) : Json :=
       ("end", tracePositionJson stop)
     ]
 
+private partial def countTacticNodes : InfoTree → Nat
+  | .hole _ => 0
+  | .context _ child => countTacticNodes child
+  | .node (.ofTacticInfo _) children =>
+      1 + children.foldl (fun count child => count + countTacticNodes child) 0
+  | .node _ children =>
+      children.foldl (fun count child => count + countTacticNodes child) 0
+
 private def traceTacticJson (fileMap : FileMap) (ctx? : Option ContextInfo)
     (info : TacticInfo) (children : PersistentArray InfoTree) : IO Json := do
   let references := children.foldl (fun acc child =>
@@ -160,8 +168,14 @@ elab "#duet_trace " declaration:command : command => do
     for tree in trees do
       tactics := tactics ++ (← collectTacticTrace fileMap tree)
     pure tactics
+  let trees ← getInfoTrees
+  let infoState ← getInfoState
+  let tacticCount := trees.foldl (fun count tree => count + countTacticNodes tree) 0
   let result := Json.mkObj [
     ("schema", toJson (1 : Nat)),
+    ("infoTreeEnabled", toJson infoState.enabled),
+    ("infoTreeCount", toJson trees.size),
+    ("tacticInfoCount", toJson tacticCount),
     ("tactics", Json.arr tactics)
   ]
   logInfo m!"LEANDUET_TRACE_JSON:{result.compress}"
