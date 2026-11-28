@@ -117,10 +117,32 @@ private partial def countTacticNodes : InfoTree → Nat
   | .node _ children =>
       children.foldl (fun count child => count + countTacticNodes child) 0
 
+private def referencesFromAssignedGoals (ctx? : Option ContextInfo) (info : TacticInfo)
+    : IO (TermReferences × Nat × Bool) := do
+  let some ctx := ctx? | return ({}, 0, false)
+  let mut references : TermReferences := {}
+  let mut assignmentCount := 0
+  let mut allAssignmentsClosed := true
+  for goal in info.goalsBefore do
+    if let some rawAssignment := info.mctxAfter.getExprAssignmentCore? goal then
+      assignmentCount := assignmentCount + 1
+      let localContext ← ({ctx with mctx := info.mctxBefore}).runMetaM {} do
+        goal.withContext do getLCtx
+      let assignment ← ({ctx with mctx := info.mctxAfter}).runMetaM {} do
+        instantiateMVars rawAssignment
+      if assignment.hasExprMVar then
+        allAssignmentsClosed := false
+      let termReferences := referencesFromTerm assignment localContext
+      references := mergeTermReferences references {termReferences with termInfoCount := 0}
+  return (references, assignmentCount, allAssignmentsClosed)
+
 private def traceTacticJson (fileMap : FileMap) (ctx? : Option ContextInfo)
     (info : TacticInfo) (children : PersistentArray InfoTree) : IO Json := do
-  let references := children.foldl (fun acc child =>
+  let termReferences := children.foldl (fun acc child =>
     mergeTermReferences acc (collectTermReferences child)) {}
+  let (assignedReferences, assignmentCount, assignmentsClosed) ←
+    referencesFromAssignedGoals ctx? info
+  let references := mergeTermReferences termReferences assignedReferences
   let range := traceRangeJson fileMap info.stx
   let (before, after) ← match ctx? with
     | none => pure (Json.arr #[], Json.arr #[])
@@ -135,12 +157,14 @@ private def traceTacticJson (fileMap : FileMap) (ctx? : Option ContextInfo)
     ("goalsBefore", before),
     ("goalsAfter", after),
     ("termInfoCount", toJson references.termInfoCount),
+    ("assignedProofTermCount", toJson assignmentCount),
+    ("assignedProofTermsClosed", toJson assignmentsClosed),
     ("referencedDeclarations", toJson references.declarations),
     ("referencedLocals", Json.arr references.locals),
     ("opaque", toJson isOpaque),
     ("opaqueRange", if isOpaque then range else Json.null),
     ("opaqueMapping", if isOpaque then
-      toJson "No child TermInfo expression was recorded; opaque tactic text maps to sourceRange."
+      toJson "No child TermInfo expression was recorded; opaque tactic syntax maps to sourceRange. References may still be observed from assigned goals."
       else Json.null)
   ]
 
