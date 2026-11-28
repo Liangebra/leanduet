@@ -43,9 +43,7 @@ test('classical reductio is explicit and its temporary negation stays local',()=
  assert.ok(!result.graph.nodes.some(item=>item.name==='hnot'),'the temporary negation must not escape to the parent graph');
  const unresolved=compileNaturalDraft('$P$ | ?', ['h'],facts,{goal:'P'});
  assert.ok(!unresolved.term?.includes('Classical.byContradiction'),'ordinary candidate generation must not insert classical reasoning');
- const collision=compileNaturalDraft(input,['h','hnot'],new Map([['h','¬ ¬ P'],['hnot','Q']]),{goal:'P'});
- assert.equal(collision.complete,false,'temporary negation names must be fresh');
- assert.equal(collision.term,null);
+ assert.throws(()=>compileNaturalDraft(input,['h','hnot'],new Map([['h','¬ ¬ P'],['hnot','Q']]),{goal:'P'}),/must be fresh/);
 });
 
 test('classical reductio composes in isolated disjunction branches',()=>{
