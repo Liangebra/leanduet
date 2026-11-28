@@ -1,14 +1,17 @@
 # Development checkpoint
 
-Updated 2026-11-27 (UTC).
+Updated 2026-11-28 (UTC).
 
 ## Current repository state
 
-- Main includes PR #22 (source positions, residual-goal checks and branch-local name expiry), PR #37/#38 (bounded element-operation candidates), PR #39 (scoped local lemmas), PR #40 (Mathlib subgroup closure) and PR #45 (conservative repeated-row identity reconciliation).
-- PR #45 was squash-merged as `9cc0c7ea122df39cc3b4026c8f52b6f64592a3e4`. Its exact head `175c35bbe23bc5804e0fc656281b6e4f6f2e3c60` passed full Tests run `46081647742`; the main push Tests run `46083385839` is still being checked, and Pages deployment `46083385823` succeeded.
-- PR #42's benchmark implementation passed full Tests run `46082417456` on exact head `5ecaa856efde5fef2eba34b4b02e7ede1e68129a`. This branch is now synchronized with #45's main commit and the checkpoint records results from the corrected public cold-compiler baseline; rerun the full workflow on the synchronized head before merging.
-- PR #46 adds a linear-map additivity case. Its two generated Lean candidates compiled under pinned Mathlib 4.19. The integration then exposed an overly strict test lookup for the extracted declaration name; the current branch revises that lookup and is being revalidated. Do not count the corpus case as fully verified until its dependency-closure checks pass.
-- Contributor PR #44 (Urdu language pack) remains open from a fork with workflow `action_required`; it is not treated as validated.
+- Main is `f1cd98152c1b92d3cf3911204ccc291689d3aafe` and includes PR #22, #37/#38, #39, #40, #42, #45 and #46. PR #22's branch-scope, source-position and residual-goal fixes are already in the baseline.
+- Main's latest Full Tests run `46087674165`, Mathlib integration `46087674089`, and Pages deployment `46087674048` succeeded.
+- PR #47 adds the pinned Lean 4.19 InfoTree trace adapter, a local `/api/trace` endpoint, and an on-demand browser view. Its synchronized head is `bc8de53416e69a22a9994fe45eb10eef08762be7`; exact-head Mathlib integration passed (`46095692867`). The Full Tests run (`46095692897`) is checking the browser path. The schema coalesces only exact duplicate observations and retains raw multiplicity; it does not infer author-intent alignment.
+- PR #48 adds an explicit `classical reductio hnot` operation, distinct from intuitionistic negation introduction and ex-falso. Its current head `9c7e4cab49505c4d88fa2fec9eea5505f96b33a9` has passed Node, Python, benchmark and core Lean steps; generated-term integration and browser CI are still running.
+- PR #48 adds an explicit classical reductio operation. Its current head `9c7e4cab49505c4d88fa2fec9eea5505f96b33a9` passed Full Tests (`46094812885`) on the previous base; it still needs synchronization with #47 before merge.
+- PR #49 adds Lean-compatible function composition syntax and a continuous-composition Mathlib case. Exact-head Mathlib integration passed (`46096101548`); Full Tests (`46096101544`), including browser checks, are running.
+- PR #44 (Urdu language pack) remains open from a fork with workflow `action_required`; it is not treated as validated.
+- The real-math fixture has three small checked seeds: compact image in topology, subgroup multiplication closure, and linear-map additivity. These are acceptance anchors, not broad mathematical-language coverage.
 
 ## Mathematical and engineering state
 
@@ -18,11 +21,11 @@ Bounded element requests preserve the set restriction and local identity. A disp
 
 A local lemma uses an explicit claim and proof block. Its child scope inherits parent identities, closes only against the stated claim, and returns parent-visible dependencies. Child-local declarations expire. An incomplete lemma remains an open dependency and cannot produce a complete Lean export.
 
-The reviewed Mathlib seed corpus covers a continuous image of a compact set and subgroup multiplication closure. The corresponding generated Lean terms compile against pinned Mathlib 4.19, and dependency extraction checks data, propositions and relevant typeclass instances. These are small acceptance examples, not broad mathematical-language coverage.
+The reviewed Mathlib seed corpus covers a continuous image of a compact set, subgroup multiplication closure, and linear-map additivity. The corresponding Lean terms compile against pinned Mathlib 4.19, with dependency checks on relevant object, proposition and typeclass context. These are small acceptance examples, not broad mathematical-language coverage.
 
 ## Verification boundary
 
-Parsing, candidate construction, structural compatibility, open proof obligations, Lean elaboration, kernel checking and author-intent fidelity are distinct states. A structurally exportable draft is not by itself a Lean proof or a semantic-fidelity guarantee. Formula comparison is conservative structural comparison, not general definitional equality. Current source identities are reconciled conservatively across edits; repeated identical rows may remain intentionally unmatched when correspondence is ambiguous.
+Parsing, candidate construction, structural compatibility, open proof obligations, Lean elaboration, kernel checking and author-intent fidelity are distinct states. A structurally exportable draft is not by itself a Lean proof or a semantic-fidelity guarantee. Formula comparison is conservative structural comparison, not general definitional equality. Current source identities are reconciled conservatively across edits; repeated identical rows may remain intentionally unmatched when correspondence is ambiguous. Lean InfoTree traces are observations from elaboration: tactic ranges and goals are not author-intent alignments, and references are syntactic occurrences from recorded terms or assigned goals, not a complete logical dependency graph.
 
 The new benchmark measures synthetic editor cases only. It must report the observed medians and P95 values, including cases with little reuse or slower cached evaluation; no user-facing latency claim has been established yet.
 
@@ -56,9 +59,9 @@ Exact replay is faster in these fixtures. Reuse does not guarantee a speedup: ne
 
 ## Next dependency-ready work
 
-1. Confirm the main push Tests run `46083385839` for PR #45 and close issue #4 once its two-sided conflict and repeated-row acceptance tests are verified on main.
-2. Complete full Tests and pinned Mathlib validation for synchronized PR #42, then merge only the exact green head.
-3. Finish PR #46's linear-map declaration and dependency-closure validation, sync it to the new main tree, and rerun both workflows.
-4. Prototype issue #1's small InfoTree adapter: tactic source ranges, goals before/after, local context and referenced declarations, with explicit opaque-tactic range mapping and a pinned Lean regression.
-
-The original eight-stage implementation order remains authoritative. Current work advances tree scopes, bounded structural ambiguity, declaration dependencies, local editing, incremental evaluation and real-math acceptance cases; it does not complete any full stage.
+1. Finish Full Tests and browser validation for synchronized PR #47; after its checkpoint is current and the exact head is green, merge and verify main Full Tests, Mathlib, and Pages.
+2. Synchronize PR #48 with the updated main, rerun the full workflow on the resulting tree, then merge only if the branch-composed browser and Lean checks pass.
+3. Synchronize PR #49 with the resulting main, rerun Full Tests and pinned Mathlib, then merge only after checking its formula and topology corpus behavior on the exact head.
+4. Extend local source-region correspondence from Lean tactic observations and scoped identities, preserving conflicts when prose alignment is not supported.
+5. Add the reviewed same-type-premise proof-refactoring counterexample requested by issue #9.
+6. Continue the bounded bridge from the Scoped model to the serialized semantic IR in issue #10; do not claim correspondence with arbitrary browser ASTs or Lean expressions.

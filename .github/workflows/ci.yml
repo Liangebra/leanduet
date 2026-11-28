@@ -28,7 +28,7 @@ jobs:
       - name: Compile semantic adapter
         run: |
           printf 'import Lean\n' > "$RUNNER_TEMP/LeanDuetAdapter.lean"
-          cat lean/Extract.lean tests/ir_decoder_cases.lean >> "$RUNNER_TEMP/LeanDuetAdapter.lean"
+          cat lean/Extract.lean lean/InfoTreeTrace.lean tests/ir_decoder_cases.lean >> "$RUNNER_TEMP/LeanDuetAdapter.lean"
           lean "$RUNNER_TEMP/LeanDuetAdapter.lean"
       - run: python tests/semantic_integration.py
       - run: python tests/search_integration.py

@@ -32,6 +32,7 @@ python server.py --project /path/to/project
 
 - 并排阅读数学证明和 Lean 源码，或切换为 Notebook 布局。
 - 查看 elaboration 后的证明项、局部假设及其类型。
+- 按需通过本地 Lean 捕获 tactic 的源码范围、前后目标和记录到的引用；这是 elaboration 观察，不代表作者的完整推理路线，见 [trace schema](docs/INFOTREE_TRACE.md)。
 - 选中推理步骤，检索可用引理，审查并应用经过验证的局部修改。
 - 使用受控数学语言组合推理，由 Lean 推断中间命题。
 - 同时编辑存在命题的见证和依赖证明。

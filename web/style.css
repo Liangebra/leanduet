@@ -102,3 +102,9 @@ html[data-theme=dark] .tok-keyword{color:#569cd6}html[data-theme=dark] .tok-comm
 .narrative-language{display:flex;align-items:center;gap:5px;flex-wrap:wrap;font-size:12px}
 .narrative-language select{max-width:120px}
 @media(max-width:800px){#interfaceLanguage{font-size:11px;padding:4px 5px}.narrative-language{font-size:11px}}
+
+.tacticTrace{list-style:decimal;padding-left:24px;display:grid;gap:10px;margin:12px 0}
+.traceStep{border:1px solid var(--line);border-radius:8px;background:var(--code);padding:10px;min-width:0}
+.traceRange,.traceReferences{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+.traceSyntax,.traceGoals{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--paper);border:1px solid var(--line);border-radius:5px;padding:8px;margin:6px 0;color:var(--ink);font:12px/1.55 var(--mono)}
+.traceStep h4{font-size:12px;margin:9px 0 4px;color:var(--muted)}

@@ -15,6 +15,7 @@ import lean_lsp
 
 ROOT = Path(__file__).resolve().parent
 MAX_BODY = 128 * 1024
+MAX_TRACE_SOURCE = 12 * 1024
 
 def check_source(source, project=None):
     if re.search(r'\b(?:sorry|admit|sorryAx)\b', source):
@@ -98,6 +99,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if self.path=='/api/completion': return self.send_json(200,lean_lsp.complete(source,data.get('line'),data.get('character'),self.project))
             if self.path=='/api/check': return self.send_json(200,check_source(source,self.project))
             if self.path=='/api/structure': return self.send_json(200,semantic.extract(source,self.project,reading_only=data.get('profile')=='reading'))
+            if self.path=='/api/trace':
+                if len(source.encode('utf-8'))>MAX_TRACE_SOURCE: raise ValueError('Trace source exceeds 12 KiB.')
+                return self.send_json(200,semantic.trace(source,self.project))
             if self.path=='/api/chain': return self.send_json(200,semantic.infer_chain(source,data.get('path'),data.get('steps'),self.project))
             if self.path=='/api/factor': return self.send_json(200,semantic.factor_preview(source,data.get('path'),self.project))
             if self.path=='/api/abstract': return self.send_json(200,semantic.abstract_preview(source,data.get('path'),self.project))

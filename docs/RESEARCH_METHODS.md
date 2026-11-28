@@ -26,6 +26,15 @@ beam search, or AmbiQT corpus, and this first deterministic rule family has no
 probabilistic ranking. The paper is published by ACL; its code repository is
 MIT-licensed. Neither source code nor benchmark data is copied.
 
+The issue #1 adapter treats Lean's resolved InfoTree as an observation boundary for
+the later scope and alignment stages. It coalesces wrappers only when their source range, syntax, and goal/context
+observations match, preserving their raw multiplicity. It uses recorded tactic
+goals and term assignments, but these are not natural-language semantics: absence of a child
+TermInfo does not imply absence of a proof term, and a syntactic reference list
+does not prove that each reference is logically necessary. The versioned
+contract and deterministic pinned example live in
+[INFOTREE_TRACE.md](INFOTREE_TRACE.md).
+
 ## Boundaries
 
 - One shared semantic interface, not independent natural-language and Lean truth stores.

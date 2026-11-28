@@ -46,7 +46,8 @@ def _run_lean(text, project=None, marker=None, trace=False):
     raise ValueError("No semantic result was produced.")
 
 def _adapter():
-    return (ROOT / "lean" / "Extract.lean").read_text(encoding="utf-8")
+    return ((ROOT / "lean" / "Extract.lean").read_text(encoding="utf-8") + "\n" +
+            (ROOT / "lean" / "InfoTreeTrace.lean").read_text(encoding="utf-8"))
 
 def extract(source, project=None, *, reading_only=False):
     name = _name(source)
@@ -54,6 +55,140 @@ def extract(source, project=None, *, reading_only=False):
         raise ValueError("Incomplete proofs cannot be inspected as verified derivations.")
     return _run_lean("import Lean\n" + source.rstrip() + "\n\n" + _adapter() +
                      ("\n#duet_extract_fast " if reading_only else "\n#duet_extract ") + name + "\n", project)
+
+
+
+def _coalesce_trace_observations(tactics):
+    """Collapse repeated InfoTree wrappers for one source/goal observation.
+
+    Distinct source ranges or goal states remain distinct. The raw node
+    multiplicity is retained in infoNodeCount; counts from duplicate wrappers
+    are not added as if they were independent proof occurrences.
+    """
+    groups = {}
+    order = []
+    for index, tactic in enumerate(tactics):
+        source_range = tactic.get("sourceRange")
+        if source_range is None:
+            key = "unranged:" + str(index)
+        else:
+            key = json.dumps([
+                tactic.get("syntax"), source_range, tactic.get("contextAvailable"),
+                tactic.get("goalsBefore"), tactic.get("goalsAfter")
+            ], ensure_ascii=False, sort_keys=True)
+        if key not in groups:
+            groups[key] = {
+                "record": dict(tactic),
+                "declarations": list(tactic.get("referencedDeclarations", [])),
+                "declaration_set": set(tactic.get("referencedDeclarations", [])),
+                "locals": list(tactic.get("referencedLocals", [])),
+                "local_set": {
+                    (local.get("name"), local.get("contextIndex"))
+                    for local in tactic.get("referencedLocals", [])
+                },
+                "info_node_count": 1,
+                "term_info_count": tactic.get("termInfoCount", 0),
+                "assigned_count": tactic.get("assignedProofTermCount", 0),
+                "saw_assignment": tactic.get("assignedProofTermCount", 0) > 0,
+                "assignments_closed": (
+                    tactic.get("assignedProofTermCount", 0) == 0
+                    or tactic.get("assignedProofTermsClosed", False)
+                ),
+            }
+            order.append(key)
+            continue
+        group = groups[key]
+        group["info_node_count"] += 1
+        group["term_info_count"] = max(
+            group["term_info_count"], tactic.get("termInfoCount", 0)
+        )
+        group["assigned_count"] = max(
+            group["assigned_count"], tactic.get("assignedProofTermCount", 0)
+        )
+        if tactic.get("assignedProofTermCount", 0) > 0:
+            group["saw_assignment"] = True
+            group["assignments_closed"] = (
+                group["assignments_closed"]
+                and tactic.get("assignedProofTermsClosed", False)
+            )
+        for name in tactic.get("referencedDeclarations", []):
+            if name not in group["declaration_set"]:
+                group["declaration_set"].add(name)
+                group["declarations"].append(name)
+        for local in tactic.get("referencedLocals", []):
+            local_key = (local.get("name"), local.get("contextIndex"))
+            if local_key not in group["local_set"]:
+                group["local_set"].add(local_key)
+                group["locals"].append(local)
+    result = []
+    for key in order:
+        group = groups[key]
+        record = group["record"]
+        record["infoNodeCount"] = group["info_node_count"]
+        record["termInfoCount"] = group["term_info_count"]
+        record["assignedProofTermCount"] = group["assigned_count"]
+        record["assignedProofTermsClosed"] = (
+            group["saw_assignment"] and group["assignments_closed"]
+        )
+        record["referencedDeclarations"] = group["declarations"]
+        record["referencedLocals"] = group["locals"]
+        record["opaque"] = record["termInfoCount"] == 0
+        record["opaqueRange"] = record["sourceRange"] if record["opaque"] else None
+        record["opaqueMapping"] = (
+            "No child TermInfo expression was recorded; opaque tactic syntax maps to sourceRange. References may still be observed from assigned goals."
+            if record["opaque"] else None
+        )
+        result.append(record)
+    return result
+
+
+def trace(source, project=None):
+    """Capture tactic ranges and goal/context snapshots from Lean's InfoTree.
+
+    The initial adapter accepts one declaration preceded only by imports. It
+    never treats indentation as proof dependency information.
+    """
+    name = _name(source)
+    match = NAME.search(source)
+    prelude = source[:match.start()]
+    for line in prelude.splitlines():
+        if line.strip() and not line.lstrip().startswith("import "):
+            raise ValueError("InfoTree tracing accepts only imports before the declaration.")
+    declaration = source[match.start():].strip()
+    if re.search(r"\b(?:sorry|admit|sorryAx)\b", declaration):
+        raise ValueError("Incomplete proofs cannot be traced as verified derivations.")
+    adapter = _adapter()
+    prefix = "import Lean\n" + prelude + adapter + "\n#duet_trace\n"
+    output = _run_lean(prefix + declaration + "\n", project, "LEANDUET_TRACE_JSON:")
+    marker = "LEANDUET_TRACE_JSON:"
+    encoded = [line.split(marker, 1)[1] for line in output.splitlines() if marker in line]
+    if len(encoded) != 1:
+        raise ValueError("Lean did not produce exactly one InfoTree trace.")
+    if len(encoded[0].encode("utf-8")) > MAX_OUTPUT:
+        raise ValueError("InfoTree trace exceeds the current inspection limit.")
+    result = json.loads(encoded[0])
+    if result.get("schema") != 1:
+        raise ValueError("Unsupported InfoTree trace schema.")
+    byte_delta = len(prefix.encode("utf-8")) - len(prelude.encode("utf-8"))
+    line_delta = prefix.count("\n") - prelude.count("\n")
+    for tactic in result.get("tactics", []):
+        for range_key in ("sourceRange", "opaqueRange"):
+            source_range = tactic.get(range_key)
+            if source_range is None:
+                continue
+            source_range["startByte"] -= byte_delta
+            source_range["endByte"] -= byte_delta
+            source_range["start"]["line"] -= line_delta
+            source_range["end"]["line"] -= line_delta
+            if source_range["startByte"] < 0 or source_range["endByte"] > len(source.encode("utf-8")):
+                raise ValueError("InfoTree source range lies outside the supplied declaration.")
+    raw_tactics = result.get("tactics", [])
+    result["tactics"] = _coalesce_trace_observations(raw_tactics)
+    result["tacticObservationCount"] = len(result["tactics"])
+    result["declaration"] = name
+    result["sourceEncoding"] = "UTF-8"
+    result["rangeConvention"] = "half-open UTF-8 byte offsets; 1-based lines; 0-based Unicode-scalar columns"
+    return result
 
 def _safe_proof(source):
     if re.search(r"\b(?:sorry|admit|sorryAx)\b", source):
