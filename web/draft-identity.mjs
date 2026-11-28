@@ -212,9 +212,45 @@ export function reconcileDraftIdentity(previous,graph){
   // Stable, structurally matched rows act as anchors. Repeated source rows
   // are paired only when a monotone interval between such anchors contains
   // exactly one occurrence on each side; ambiguous edits stay unmatched.
+  function operationNameRenames(){
+   const oldOperations=oldRows.filter(node=>node.goalOperation),newOperations=newRows.filter(node=>node.goalOperation);
+   const oldGroups=groups(oldOperations,operationLineKey),newGroups=groups(newOperations,operationLineKey);
+   const renames=new Map(),conflicts=new Set();
+   for(const [key,oldGroup] of oldGroups){
+    const newGroup=newGroups.get(key)||[];
+    if(oldGroup.length!==1||newGroup.length!==1)continue;
+    const oldOperation=oldGroup[0].goalOperation,newOperation=newGroup[0].goalOperation;
+    const bindingSlot=operation=>{
+     const name=operation.closure?.name;
+     const matches=(operation.subgoals||[]).flatMap((subgoal,subgoalIndex)=>
+      (subgoal.contextDelta||[]).map((binding,bindingIndex)=>({subgoalIndex,bindingIndex,binding})))
+      .filter(item=>item.binding.name===name);
+     return matches.length===1?matches[0]:null;
+    };
+    const oldSlot=bindingSlot(oldOperation),newSlot=bindingSlot(newOperation);
+    if(!oldSlot||!newSlot||oldSlot.subgoalIndex!==newSlot.subgoalIndex||oldSlot.bindingIndex!==newSlot.bindingIndex)continue;
+    const oldName=oldSlot.binding.name,newName=newSlot.binding.name;
+    if(oldName===newName||!/^[A-Za-z_][A-Za-z0-9_']*$/.test(oldName)||!/^[A-Za-z_][A-Za-z0-9_']*$/.test(newName))continue;
+    if(renames.has(oldName)&&renames.get(oldName)!==newName)conflicts.add(oldName);
+    else renames.set(oldName,newName);
+   }
+   for(const name of conflicts)renames.delete(name);
+   const destinationCounts=new Map();
+   for(const name of renames.values())destinationCounts.set(name,(destinationCounts.get(name)||0)+1);
+   for(const [name,destination] of renames)if(destinationCounts.get(destination)>1)renames.delete(name);
+   return renames;
+  }
+  const scopedNameRenames=operationNameRenames();
+  const renamingLineKey=(node,side)=>{
+   if(node.goalOperation||node.origin==='element-request'||node.origin==='infer-proposition'||!scopedNameRenames.size)
+    return lineKey(node);
+   const raw=String(node.raw||'').replace(/[A-Za-z_][A-Za-z0-9_']*/g,name=>
+    side==='old'?scopedNameRenames.get(name)||name:name);
+   return JSON.stringify([node.origin||node.kind,node.kind,raw]);
+  };
   function uniquePairs(oldStart,oldEnd,newStart,newEnd){
-   const oldGroups=groups(oldRows.slice(oldStart,oldEnd),lineKey);
-   const newGroups=groups(newRows.slice(newStart,newEnd),lineKey);
+   const oldGroups=groups(oldRows.slice(oldStart,oldEnd),node=>renamingLineKey(node,'old'));
+   const newGroups=groups(newRows.slice(newStart,newEnd),node=>renamingLineKey(node,'new'));
    const pairs=[];
    for(const [key,oldGroup] of oldGroups){
     const newGroup=newGroups.get(key)||[];
