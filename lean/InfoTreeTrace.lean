@@ -151,21 +151,17 @@ private partial def collectTacticTrace (fileMap : FileMap) (tree : InfoTree)
         entries := entries ++ (← collectTacticTrace fileMap child childContext)
       return entries
 
-syntax (name := duetTraceCommand) "#duet_trace " command : command
-
-elab_rules : command
-  | `(#duet_trace $declaration:command) => do
-      elabCommand declaration
-      let fileMap ← getFileMap
-      let trees ← getInfoTrees
-      let mut tactics := #[]
-      for tree in trees do
-        tactics := tactics ++ (← collectTacticTrace fileMap tree)
-      let result := Json.mkObj [
-        ("schema", toJson (1 : Nat)),
-        ("tactics", Json.arr tactics)
-      ]
-      logInfo m!"LEANDUET_TRACE_JSON:{result.compress}"
-  | _ => throwUnsupportedSyntax
+elab "#duet_trace " declaration:command : command => do
+  elabCommand declaration
+  let fileMap ← getFileMap
+  let trees ← getInfoTrees
+  let mut tactics := #[]
+  for tree in trees do
+    tactics := tactics ++ (← collectTacticTrace fileMap tree)
+  let result := Json.mkObj [
+    ("schema", toJson (1 : Nat)),
+    ("tactics", Json.arr tactics)
+  ]
+  logInfo m!"LEANDUET_TRACE_JSON:{result.compress}"
 
 end LeanDuetExtract
