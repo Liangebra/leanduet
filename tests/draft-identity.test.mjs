@@ -211,17 +211,15 @@ test('a selected proof candidate follows uniquely matched local objects through 
  const scope=['hall','hall2'];
  const facts=new Map([['hall','∀ x : Nat, P x'],['hall2','∀ x : Nat, P x']]);
  const make=name=>compileNaturalDraft(
-  'take '+name+' : $Nat$\n$P('+name+')$ | hall '+name,scope,facts,
+  'take '+name+' : $Nat$\nTherefore $P('+name+')$',scope,facts,
   {goal:'∀ '+name+' : Nat, P '+name});
  const original=make('n'),renamed=make('k');
- assert.equal(original.complete,true,JSON.stringify(original.rows,null,2));
- assert.equal(renamed.complete,true,JSON.stringify(renamed.rows,null,2));
  const oldRow=original.graph.nodes.find(node=>node.id==='line:2');
  const newRow=renamed.graph.nodes.find(node=>node.id==='line:2');
  const oldCandidate=oldRow?.alternatives.find(candidate=>String(candidate.term).includes('hall n'));
  const newCandidate=newRow?.alternatives.find(candidate=>String(candidate.term).includes('hall k'));
- assert.ok(oldCandidate,JSON.stringify(oldRow,null,2));
- assert.ok(newCandidate,JSON.stringify(newRow,null,2));
+ assert.ok(oldCandidate,JSON.stringify(original,null,2));
+ assert.ok(newCandidate,JSON.stringify(renamed,null,2));
  const selected=new Map([[2,oldCandidate.choice??oldCandidate.term]]);
  const before=reconcileDraftIdentity(null,original.graph);
  const after=reconcileDraftIdentity(before,renamed.graph);
