@@ -207,16 +207,16 @@ test('renaming a universal-introduction variable preserves its object and depend
 });
 
 
-test('a local-name change preserves only dependent lines whose source differs by that rename',()=>{
- const scope=['hall'],facts=new Map([['hall','∀ x : Nat, P x']]);
- const make=(name,prefix='')=>compileNaturalDraft(`take ${name} : $Nat$\n$P(${name})$ | ${prefix}hall ${name}`,scope,facts,
+test('alpha-renaming preserves a later use only when its cited premise identity is unchanged',()=>{
+ const scope=['hall','hall2'],facts=new Map([['hall','∀ x : Nat, P x'],['hall2','∀ x : Nat, P x']]);
+ const make=(name,premise='hall')=>compileNaturalDraft(`take ${name} : $Nat$\n$P(${name})$ | ${premise} ${name}`,scope,facts,
   {goal:`∀ ${name} : Nat, P ${name}`});
- const original=make('n'),renamed=make('k'),routeChanged=make('k','from ');
+ const original=make('n'),renamed=make('k'),differentPremise=make('k','hall2');
  const before=reconcileDraftIdentity(null,original.graph);
  const alpha=reconcileDraftIdentity(before,renamed.graph);
- const changedRoute=reconcileDraftIdentity(before,routeChanged.graph);
+ const changedRoute=reconcileDraftIdentity(before,differentPremise.graph);
  assert.equal(alpha.ids.get('line:1'),before.ids.get('line:1'));
  assert.equal(alpha.ids.get('line:2'),before.ids.get('line:2'));
  assert.notEqual(changedRoute.ids.get('line:2'),before.ids.get('line:2'),
-  'a proof-route wording change is not mistaken for alpha-renaming');
+  'a changed premise identity is not mistaken for alpha-renaming');
 });
