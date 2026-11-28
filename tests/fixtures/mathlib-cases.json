@@ -137,5 +137,56 @@
     "leanTheoremHeader": "theorem linear_map_add_example {R M N : Type*} [Semiring R] [AddCommMonoid M] [AddCommMonoid N] [Module R M] [Module R N] (f : M →ₗ[R] N) (x y : M) : f (x + y) = f x + f y",
     "leanProofBody": "by\n  exact map_add f x y",
     "alignmentStatus": "draft correspondence; original and locally edited candidates are checked against pinned Mathlib 4.19, including the context dependency closure"
+  },
+  {
+    "id": "continuous-function-composition",
+    "domain": "point-set topology",
+    "description": "The composition of continuous functions is continuous.",
+    "naturalProof": "The composite g ∘ f is continuous because f and g are continuous.",
+    "naturalDraft": "因此 $Continuous (g ∘ f)$，由连续映射的复合，使用 hg 和 hf",
+    "goal": "Continuous (g ∘ f)",
+    "scope": [
+      "X",
+      "Y",
+      "Z",
+      "f",
+      "g",
+      "hf",
+      "hg"
+    ],
+    "context": {
+      "f": "X → Y",
+      "g": "Y → Z",
+      "hf": "Continuous f",
+      "hg": "Continuous g"
+    },
+    "expectedStructure": [
+      {
+        "kind": "conclude",
+        "claim": "(Continuous (g ∘ f))",
+        "application": "Continuous.comp hg hf"
+      }
+    ],
+    "expectedStepKinds": [
+      "conclude"
+    ],
+    "expectedContextClosure": [
+      "X",
+      "Y",
+      "Z",
+      "f",
+      "g",
+      "hf",
+      "hg"
+    ],
+    "requiredTypeclassClosure": [
+      "TopologicalSpace X",
+      "TopologicalSpace Y",
+      "TopologicalSpace Z"
+    ],
+    "leanImport": "import Mathlib.Topology.Continuous",
+    "leanTheoremHeader": "theorem continuous_comp_example {X Y Z : Type*} [TopologicalSpace X] [TopologicalSpace Y] [TopologicalSpace Z] (f : X → Y) (g : Y → Z) (hf : Continuous f) (hg : Continuous g) : Continuous (g ∘ f)",
+    "leanProofBody": "by\n  exact Continuous.comp hg hf",
+    "alignmentStatus": "draft correspondence; the named composition rule, three topology instances and Lean candidate are checked against pinned Mathlib 4.19"
   }
 ]
