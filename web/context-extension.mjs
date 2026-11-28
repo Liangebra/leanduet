@@ -1,5 +1,6 @@
 // Consume a goal constructor; never introduce arbitrary assumptions.
 import {compileFormula,renderFormula,scopedFormula} from './math-formula.mjs';
+const identifier=/^[A-Za-z_][A-Za-z0-9_']{0,63}$/;
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 function containsName(ast,name){
  if(ast.kind==='id'&&ast.value===name||['binder','bounded'].includes(ast.kind)&&ast.name===name)return true;
@@ -26,6 +27,18 @@ function negationBody(ast){
  if(ast.kind==='call'&&ast.fn?.kind==='id'&&ast.fn.value==='Not'&&ast.args.length===1)return ast.args[0];
  return null;
 }
+function substituteName(ast,name,replacement){
+ if(ast.kind==='id')return ast.value===name?replacement:ast;
+ if(ast.kind==='number')return ast;
+ if(ast.kind==='binary')return {...ast,left:substituteName(ast.left,name,replacement),right:substituteName(ast.right,name,replacement)};
+ if(ast.kind==='unary')return {...ast,body:substituteName(ast.body,name,replacement)};
+ if(ast.kind==='call')return {...ast,fn:substituteName(ast.fn,name,replacement),args:ast.args.map(arg=>substituteName(arg,name,replacement))};
+ if(ast.kind==='binder')return {...ast,domain:ast.domain?substituteName(ast.domain,name,replacement):null,
+  body:ast.name===name?ast.body:substituteName(ast.body,name,replacement)};
+ if(ast.kind==='bounded')return {...ast,set:substituteName(ast.set,name,replacement),
+  body:ast.name===name?ast.body:substituteName(ast.body,name,replacement)};
+ return ast;
+}
 
 // Lean prints bounded quantifiers in their ordinary Pi/And form. Recover the
 // restriction only when the membership's left side is exactly the binder.
@@ -50,7 +63,7 @@ function inferredIntroductionType(ast,kind){
 }
 
 /** Describe a goal operation before opening its child proof obligations. */
-export function planGoalOperation(goal,{kind,name=null,type=null,source=null,sourceType=null,branchNames=['hp','hq'],witness=null,witnessType=null,witnessId=null}={}){
+export function planGoalOperation(goal,{kind,name=null,type=null,source=null,sourceType=null,branchNames=['hp','hq'],witness=null,witnessType=null,witnessId=null,stepName=null,inductionHypothesisName='ih'}={}){
  if(!goal)throw Error('A proof operation needs the current goal.');
  const ast=compileFormula(goal,{syntax:'lean'}).ast;
  if(kind==='disjunction-elimination'){
@@ -99,6 +112,26 @@ export function planGoalOperation(goal,{kind,name=null,type=null,source=null,sou
   return {kind:'existential-introduction',parentGoal:goal,logic:'dependent-function',witness,witnessId,
    subgoals:[{id:'witness-property',goal:renderFormula(rename(ast.body,ast.name,witness)),contextDelta:[]}],
    closure:{kind:'constructor',name:'Exists.intro',witness}};
+ }
+ if(kind==='nat-induction'){
+  if(ast.kind!=='binder'||ast.op!=='∀'||ast.domain?.kind!=='id'||ast.domain.value!=='Nat')
+   throw Error('Natural-number induction requires an explicit universal Nat goal.');
+  if(typeof name!=='string'||!identifier.test(name))throw Error('Natural-number induction needs a displayed variable name.');
+  if(typeof stepName!=='string'||!identifier.test(stepName)||typeof inductionHypothesisName!=='string'||!identifier.test(inductionHypothesisName)||stepName===inductionHypothesisName)
+   throw Error('Natural-number induction needs distinct step-variable and hypothesis names.');
+  if(hasBinderNamed(ast.body,stepName))throw Error('The generated step variable would be captured by a nested binder.');
+  const base=renderFormula(substituteName(ast.body,ast.name,{kind:'number',value:'0'}));
+  const stepType=renderFormula(substituteName(ast.body,ast.name,{kind:'id',value:stepName}));
+  // `n + 1` is the author-facing arithmetic form of the successor case and
+  // is definitionally equal to the constructor target `Nat.succ n` in Lean.
+  const successor={kind:'binary',op:'+',left:{kind:'id',value:stepName},right:{kind:'number',value:'1'}};
+  const successorGoal=renderFormula(substituteName(ast.body,ast.name,successor));
+  return {kind:'nat-induction',parentGoal:goal,logic:'inductive',inductionVariable:name,stepName,inductionHypothesisName,
+   subgoals:[{id:'base',goal:base,contextDelta:[]},
+    {id:'successor',goal:successorGoal,contextDelta:[
+     {name:stepName,type:'Nat',kind:'induction-variable'},
+     {name:inductionHypothesisName,type:stepType,kind:'induction-hypothesis'}]}],
+   closure:{kind:'recursor',name:'Nat.rec'}};
  }
  if(kind==='classical-reductio'){
   if(typeof name!=='string'||!name)throw Error('Classical reductio needs a fresh name for the temporary negation.');
