@@ -152,12 +152,14 @@ private partial def collectTacticTrace (fileMap : FileMap) (tree : InfoTree)
       return entries
 
 elab "#duet_trace " declaration:command : command => do
-  elabCommand declaration
   let fileMap ← getFileMap
-  let trees ← getInfoTrees
-  let mut tactics := #[]
-  for tree in trees do
-    tactics := tactics ++ (← collectTacticTrace fileMap tree)
+  let tactics ← withEnableInfoTree true do
+    elabCommand declaration
+    let trees ← getInfoTrees
+    let mut tactics := #[]
+    for tree in trees do
+      tactics := tactics ++ (← collectTacticTrace fileMap tree)
+    pure tactics
   let result := Json.mkObj [
     ("schema", toJson (1 : Nat)),
     ("tactics", Json.arr tactics)
