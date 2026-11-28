@@ -765,6 +765,52 @@ $R$ | gr localQ"""
             expect(induction_page.locator("#verifyState")).to_have_text("Lean passed",timeout=120000)
             induction_page.close()
 
+            alpha_page=browser.new_page(viewport={"width":1440,"height":900})
+            alpha_page.on("pageerror",lambda error:errors.append(str(error)))
+            alpha_page.goto(url)
+            alpha_source="""theorem alpha_candidate (P : Nat → Prop)
+    (hall hall2 : ∀ x : Nat, P x) : ∀ n : Nat, P n := by
+  exact fun n => hall n
+"""
+            alpha_page.locator("#lean").fill(alpha_source)
+            alpha_page.once("dialog",lambda d:d.accept())
+            alpha_page.locator("#adopt").click()
+            alpha_page.locator('[data-view="typed"]').click()
+            alpha_page.locator("#extractTerm").click()
+            expect(alpha_page.locator("#typedStatus")).to_contain_text("Extracted from Lean elaboration",timeout=60000)
+            select_typed_edit(alpha_page,exact_type="∀ (n : Nat), P n")
+            alpha_page.locator("#chainEditor summary").click()
+            alpha_page.locator("#chainFormat").select_option("natural")
+            alpha_page.locator("#chainText").fill("take n : $Nat$\nTherefore $P(n)$")
+            rows=alpha_page.locator("#draftTranslation .ruleResult")
+            expect(rows.nth(1)).to_contain_text("hall n")
+            expect(rows.nth(1)).to_contain_text("hall2 n")
+            rows.nth(1).evaluate("""root => {
+                const candidate=[...root.children].find(node=>
+                    node.tagName==="CODE"&&node.textContent.includes("hall n ·"));
+                if(!candidate) throw new Error("The hall n candidate is missing.");
+                let button=candidate.nextElementSibling;
+                while(button&&button.tagName!=="BUTTON"&&button.tagName!=="CODE")
+                    button=button.nextElementSibling;
+                if(!button||button.tagName!=="BUTTON")
+                    throw new Error("The hall n candidate has no selection button.");
+                button.click();
+            }""")
+            expect(rows.nth(1)).to_contain_text("Clear choice")
+            alpha_page.locator("#chainText").fill("take k : $Nat$\nTherefore $P(k)$")
+            expect(rows.nth(1)).to_contain_text("hall k")
+            expect(rows.nth(1)).not_to_contain_text("hall n")
+            expect(rows.nth(1)).to_contain_text("Clear choice")
+            alpha_page.locator("#compileChain").click()
+            expect(alpha_page.locator("#patchTerm")).to_have_value(__import__("re").compile(r"intro k[\s\S]*hall k"))
+            alpha_page.locator("#checkPatch").click()
+            expect(alpha_page.locator("#applyPatch")).to_be_enabled(timeout=120000)
+            alpha_page.once("dialog",lambda d:d.accept())
+            alpha_page.locator("#applyPatch").click()
+            alpha_page.locator("#check").click()
+            expect(alpha_page.locator("#verifyState")).to_have_text("Lean passed",timeout=120000)
+            alpha_page.close()
+
             assert not errors, errors
             browser.close()
         print("Browser smoke test passed")
