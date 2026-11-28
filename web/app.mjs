@@ -21,7 +21,8 @@ import {mountInterface} from './interface-language.mjs';
 const $=id=>document.getElementById(id),lean=$('lean'),prose=$('prose'),notes=$('prompt');
 const local=(location.hostname==='127.0.0.1'||location.hostname==='localhost')&&!new URLSearchParams(location.search).has('demo');
 const staticProofs=new Map();let staticToolchain='';
-const ui=mountInterface(()=>{if(!local)showStaticNarrative();});
+let lastTacticTrace=null;
+const ui=mountInterface(()=>{if(!local)showStaticNarrative();if(lastTacticTrace)renderTacticTrace(lastTacticTrace);});
 const refreshEditor=mountEditor();
 const KEY='leanduet.workspace.v1',THEME='leanduet.theme';
 let typedRoot=null, proofIndex=null, patchNode=null, patchCandidate=null;
@@ -39,7 +40,7 @@ function notice(s,error=false){$('notice').textContent=s;$('notice').classList.t
 function persist(){clearTimeout(saveTimer);try{localStorage.setItem(KEY,JSON.stringify(snapshot(base,{lean:lean.value,prose:prose.value},notes.value,name,exploration,wording)));state('saveState','Saved locally','pass');}catch{state('saveState','Not saved','dirty');}}
 function persistSoon(){clearTimeout(saveTimer);saveTimer=setTimeout(persist,160);}
 window.addEventListener('pagehide',()=>{if(base)persist();});
-function invalidate({retainReading=false}={}){rev++;clearTimeout(liveTimer);clearTimeout(interpretTimer);interpretVersion++;typedRoot=null;proofIndex=null;foldedPaths.clear();patchNode=null;patchCandidate=null;$('typedPatch').hidden=true;$('applyPatch').disabled=true;$('patchPreview').textContent='';if(retainReading){$('typedNarrative').classList.add('staleReading');$('typedTree').classList.add('staleReading');}else{$('typedNarrative').replaceChildren();$('typedTree').replaceChildren();$('typedNarrative').classList.remove('staleReading');$('typedTree').classList.remove('staleReading');}$('informathOutput').textContent='';$('typedStatus').textContent='Proof changed or not inspected. Run extraction for this revision.';candidate=null;narrative=null;$('accept').disabled=true;$('useNarrative').disabled=true;$('proposal').textContent='No proposal yet.';$('output').textContent='Run the local checker to see diagnostics for this revision.';state('verifyState','Not checked');if(!local){state('verifyState','Local server required');$('output').textContent='Browser-only demo. Run python server.py locally for verification.';}}
+function invalidate({retainReading=false}={}){rev++;clearTimeout(liveTimer);clearTimeout(interpretTimer);interpretVersion++;lastTacticTrace=null;$('tacticTrace').replaceChildren();$('traceStatus').textContent=ui.t('Run an explicit capture to inspect this revision.');typedRoot=null;proofIndex=null;foldedPaths.clear();patchNode=null;patchCandidate=null;$('typedPatch').hidden=true;$('applyPatch').disabled=true;$('patchPreview').textContent='';if(retainReading){$('typedNarrative').classList.add('staleReading');$('typedTree').classList.add('staleReading');}else{$('typedNarrative').replaceChildren();$('typedTree').replaceChildren();$('typedNarrative').classList.remove('staleReading');$('typedTree').classList.remove('staleReading');}$('informathOutput').textContent='';$('typedStatus').textContent='Proof changed or not inspected. Run extraction for this revision.';candidate=null;narrative=null;$('accept').disabled=true;$('useNarrative').disabled=true;$('proposal').textContent='No proposal yet.';$('output').textContent='Run the local checker to see diagnostics for this revision.';state('verifyState','Not checked');if(!local){state('verifyState','Local server required');$('output').textContent='Browser-only demo. Run python server.py locally for verification.';}}
 function dirty(){state('leanDirty',lean.value===base.lean?'Synced':'Edited',lean.value===base.lean?'':'dirty');state('proseDirty',prose.value===base.prose?'Synced':'Edited',prose.value===base.prose?'':'dirty');gutter();if(!local)showStaticNarrative();}
 function gutter(){refreshEditor();$('gutter').textContent=lean.value.split('\n').map((_,i)=>i+1).join('\n');$('gutter').scrollTop=lean.scrollTop;$('cursor').textContent='Ln '+(lean.value.slice(0,lean.selectionStart).split('\n').length);}
 function element(tag,txt,cls){const e=document.createElement(tag);if(txt!==undefined)e.textContent=txt;if(cls)e.className=cls;return e;}
@@ -258,6 +259,53 @@ $('completeLean').onclick=async()=>{
 };
 async function api(path,payload){const r=await fetch('/api/'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});if(!r.headers.get('content-type')?.includes('application/json'))throw Error('Local backend not available. Start python server.py.');const d=await r.json();if(!r.ok)throw Error(d.error||'Request failed');return d;}
 $('check').onclick=async()=>{if(!clean()){notice('Synchronize first.',true);return;}const snapshotRev=rev;$('check').disabled=true;state('verifyState','Checking…');$('output').textContent='Running Lean…';try{const r=await api('check',{source:lean.value});if(snapshotRev!==rev)return;$('output').textContent=r.output;state('verifyState',r.status==='passed'?'Lean passed':r.status,r.status==='passed'?'pass':'dirty');notice('Lean check: '+r.status,r.status!=='passed');}catch(e){if(snapshotRev===rev){state('verifyState','Unavailable','dirty');$('output').textContent=e.message;notice('Checker unavailable: '+e.message,true);}}finally{$('check').disabled=false;}};
+
+function traceGoalText(goals){
+  if(!goals.length)return ui.t('No goals remain.');
+  return goals.map((goal,index)=>{
+    const context=(goal.localContext||[]).map(decl=>decl.name+' : '+decl.type).join('\n');
+    return 'Goal '+(index+1)+': '+goal.target+(context?'\n'+ui.t('Local context')+':\n'+context:'');
+  }).join('\n\n');
+}
+function renderTacticTrace(result){
+  const root=$('tacticTrace');root.replaceChildren();
+  const tactics=Array.isArray(result?.tactics)?result.tactics:[];
+  if(!tactics.length){root.append(element('li',ui.t('No tactic entries were recorded for this proof.')));return;}
+  for(const tactic of tactics){
+    const item=element('li',undefined,'traceStep');
+    const range=tactic.sourceRange;
+    if(range){
+      item.append(element('div',ui.t('Source range')+': '+ui.t('line')+' '+range.start.line+':'+range.start.column+'–'+range.end.line+':'+range.end.column+' · '+ui.t('UTF-8 byte range')+' ['+range.startByte+', '+range.endByte+')','traceRange'));
+    }
+    item.append(element('pre',tactic.syntax||'','traceSyntax'));
+    item.append(element('h4',ui.t('Goals before')));
+    item.append(element('pre',traceGoalText(tactic.goalsBefore||[]),'traceGoals'));
+    item.append(element('h4',ui.t('Goals after')));
+    item.append(element('pre',traceGoalText(tactic.goalsAfter||[]),'traceGoals'));
+    const locals=[...new Set((tactic.referencedLocals||[]).map(ref=>ref.name))];
+    const declarations=[...new Set(tactic.referencedDeclarations||[])];
+    const references=[...locals,...declarations];
+    if(references.length)item.append(element('p',ui.t('Recorded references')+': '+references.join(', '),'traceReferences'));
+    if(tactic.opaque)item.append(element('p',ui.t('No child TermInfo expression was recorded; this tactic maps to its whole source range.'),'hint'));
+    else if((tactic.termInfoCount||0)>0)item.append(element('p',ui.t('TermInfo was recorded; this is not necessarily a complete dependency list.'),'hint'));
+    root.append(item);
+  }
+}
+$('traceProof').onclick=async()=>{
+  if(!local){$('traceStatus').textContent=ui.t('Tactic tracing requires the local Lean backend.');return;}
+  const snapshotRev=rev,source=lean.value,button=$('traceProof');
+  button.disabled=true;$('traceStatus').textContent='Tracing this revision in Lean…';
+  try{
+    const result=await api('trace',{source});
+    if(snapshotRev!==rev)return;
+    lastTacticTrace=result;renderTacticTrace(result);
+    $('traceStatus').textContent=ui.t(result.tactics?.length?'Captured tactic trace from Lean\\'s elaboration.':'Lean returned no tactic information for this proof.');
+  }catch(error){
+    if(snapshotRev===rev){$('tacticTrace').replaceChildren();$('traceStatus').textContent=error.message;}
+  }finally{button.disabled=false;}
+};
+if(!local){$('traceProof').disabled=true;$('traceStatus').textContent=ui.t('Tactic tracing requires the local Lean backend.');}
+
 function renderTyped(node,container,depth=0){
   if(!node||typeof node.kind!=='string'||depth>12)return;
   const block=element('details',undefined,'typedNode');block.open=depth<3;
