@@ -211,20 +211,7 @@ test('a selected proof candidate follows uniquely matched local objects through 
  const scope=['hall','hall2'];
  const facts=new Map([['hall','∀ x : Nat, P x'],['hall2','∀ x : Nat, P x']]);
  const make=(name,choices=new Map())=>compileNaturalDraft(
-  'take '+name+' : $Nat$\n$P('+name+')
- const scope=['hall','hall2'],facts=new Map([['hall','∀ x : Nat, P x'],['hall2','∀ x : Nat, P x']]);
- const make=(name,premise='hall')=>compileNaturalDraft(`take ${name} : $Nat$\n$P(${name})$ | ${premise} ${name}`,scope,facts,
-  {goal:`∀ ${name} : Nat, P ${name}`});
- const original=make('n'),renamed=make('k'),differentPremise=make('k','hall2');
- const before=reconcileDraftIdentity(null,original.graph);
- const alpha=reconcileDraftIdentity(before,renamed.graph);
- const changedRoute=reconcileDraftIdentity(before,differentPremise.graph);
- assert.equal(alpha.ids.get('line:1'),before.ids.get('line:1'));
- assert.equal(alpha.ids.get('line:2'),before.ids.get('line:2'));
- assert.notEqual(changedRoute.ids.get('line:2'),before.ids.get('line:2'),
-  'a changed premise identity is not mistaken for alpha-renaming');
-});
-,scope,facts,
+  'take '+name+' : $Nat$\\n$P('+name+')$',scope,facts,
   {goal:'∀ '+name+' : Nat, P '+name,choices});
  const selected=new Map([[2,'hall n']]);
  const original=make('n',selected),renamed=make('k');
