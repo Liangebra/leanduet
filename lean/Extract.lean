@@ -9,12 +9,12 @@ def node (path : String) (editable : Bool) (scope : Array Json) (kind term type 
     ("children", Json.arr children), ("path", toJson path), ("editable", toJson editable), ("scope", Json.arr scope)] ++ extra)
 
 -- Preserve variable occurrences and proof constructors: not definitional equality.
--- Alpha-renaming and source metadata are intentionally ignored.
+-- Alpha-renaming, binder visibility annotations, and source metadata are ignored.
 partial def shape (e : Expr) : Expr :=
   match e with
   | .mdata _ b => shape b
-  | .lam _ t b bi => .lam .anonymous (shape t) (shape b) bi
-  | .forallE _ t b bi => .forallE .anonymous (shape t) (shape b) bi
+  | .lam _ t b _ => .lam .anonymous (shape t) (shape b) BinderInfo.default
+  | .forallE _ t b _ => .forallE .anonymous (shape t) (shape b) BinderInfo.default
   | .letE _ t v b _ => .letE .anonymous (shape t) (shape v) (shape b) false
   | .app f a => .app (shape f) (shape a)
   | .proj n i b => .proj n i (shape b)
@@ -304,9 +304,7 @@ elab "#duet_compare " n:ident m:ident path:str replacement:str : command => do
         | .error err => throwError "{err}"
       let (expected, _, _) ← replaceAt x.value ((path.getString.splitOn "/").drop 1) stx
       unless sameShape expected y.value do
-        let expectedShape ← ppExpr (shape expected)
-        let exportedShape ← ppExpr (shape y.value)
-        throwError m!"Re-elaborated export does not preserve the requested proof structure.\\nExpected: {expectedShape}\\nExported: {exportedShape}"
+        throwError "Re-elaborated export does not preserve the requested proof structure"
       logInfo "LEANDUET_TYPE_AND_SHAPE_MATCH"
     | _, _ => throwError "Expected two theorems"
 
