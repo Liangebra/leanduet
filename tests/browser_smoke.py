@@ -600,6 +600,34 @@ $R$ | gr localQ"""
             expect(false_page.locator("#verifyState")).to_have_text("Lean passed",timeout=120000)
             false_page.close()
 
+            classical_page=browser.new_page(viewport={"width":1440,"height":900})
+            classical_page.on("pageerror",lambda error:errors.append(str(error)))
+            classical_page.goto(url)
+            classical_source="""theorem classical_double_negation (P : Prop) (h : ¬ ¬ P) : P := by
+  exact Classical.byContradiction (fun hnot => h hnot)
+"""
+            classical_page.locator("#lean").fill(classical_source)
+            classical_page.once("dialog",lambda d:d.accept())
+            classical_page.locator("#adopt").click()
+            classical_page.locator('[data-view="typed"]').click()
+            classical_page.locator("#extractTerm").click()
+            expect(classical_page.locator("#typedStatus")).to_contain_text("Extracted from Lean elaboration",timeout=60000)
+            select_typed_edit(classical_page,exact_type="P",summary="Apply Classical.byContradiction")
+            if not classical_page.locator("#chainEditor").evaluate("(editor) => editor.open"):
+                classical_page.locator("#chainEditor summary").click()
+            classical_page.locator("#chainFormat").select_option("natural")
+            classical_page.locator("#chainText").fill("classical reductio hnot\n  contradiction\n    $False$ | h hnot")
+            expect(classical_page.locator("#draftTranslation")).to_contain_text("classical reductio for P with hnot")
+            classical_page.locator("#compileChain").click()
+            expect(classical_page.locator("#patchTerm")).to_have_value(__import__("re").compile(r"Classical\.byContradiction[\s\S]*intro hnot"))
+            classical_page.locator("#checkPatch").click()
+            expect(classical_page.locator("#applyPatch")).to_be_enabled(timeout=120000)
+            classical_page.once("dialog",lambda d:d.accept())
+            classical_page.locator("#applyPatch").click()
+            classical_page.locator("#check").click()
+            expect(classical_page.locator("#verifyState")).to_have_text("Lean passed",timeout=120000)
+            classical_page.close()
+
             assert not errors, errors
             browser.close()
         print("Browser smoke test passed")

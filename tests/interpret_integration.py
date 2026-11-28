@@ -294,6 +294,39 @@ with TemporaryDirectory() as tmp:
     subprocess.run(["lean",str(target)],cwd=root,check=True)
 print("Intuitionistic negation introduction and explicit False elimination accepted by Lean")
 
+# Explicit classical reductio is distinct from constructive negation
+# introduction and ex-falso, and the generated Lean candidate is compiled.
+classical_script="""
+import {compileNaturalDraft} from './web/natural-draft.mjs';
+const facts=new Map([['h','¬ ¬ P']]);
+const result=compileNaturalDraft('classical reductio hnot\\n  contradiction\\n    $False$ | h hnot',['h'],facts,{goal:'P'});
+if(!result.complete||result.semanticFidelity!=='not-assessed')throw new Error(JSON.stringify(result));
+console.log(JSON.stringify(result.term));
+"""
+classical_term=json.loads(subprocess.run(["node","--input-type=module"],input=classical_script,text=True,cwd=root,check=True,capture_output=True).stdout)
+assert "Classical.byContradiction" in classical_term and "h hnot" in classical_term,classical_term
+with TemporaryDirectory() as tmp:
+    target=Path(tmp)/"ClassicalReductio.lean"
+    target.write_text("import Lean\ntheorem double_negation_elimination (P : Prop) (h : ¬ ¬ P) : P := "+classical_term+"\n",encoding="utf-8")
+    subprocess.run(["lean",str(target)],cwd=root,check=True)
+print("Explicit classical reductio candidate accepted by Lean")
+
+# Also exercise the operation under case-local hypotheses; each branch's
+# temporary negation must close before the common result returns to its parent.
+case_classical_script="""
+import {compileNaturalDraft} from './web/natural-draft.mjs';
+const input='cases h, establish result : $P$\\n  left case hp\\n    classical reductio hnot\\n      contradiction\\n        $False$ | hnot hp\\n  right case hq\\n    classical reductio hnot\\n      contradiction\\n        $False$ | hnot hq\\n$P$ | result';
+const result=compileNaturalDraft(input,['h'],new Map([['h','P ∨ P']]),{goal:'P'});
+if(!result.complete)throw new Error(JSON.stringify(result));
+console.log(JSON.stringify(result.term));
+"""
+case_classical_term=json.loads(subprocess.run(["node","--input-type=module"],input=case_classical_script,text=True,cwd=root,check=True,capture_output=True).stdout)
+with TemporaryDirectory() as tmp:
+    target=Path(tmp)/"CaseLocalClassical.lean"
+    target.write_text("import Lean\ntheorem case_local_classical (P : Prop) (h : P ∨ P) : P := "+case_classical_term+"\n",encoding="utf-8")
+    subprocess.run(["lean",str(target)],cwd=root,check=True)
+print("Classical reductio in both isolated disjunction branches accepted by Lean")
+
 # A conjunction goal opens two identity-isolated child scopes. Local assumptions
 # are discharged inside their child, and the same operation composes inside a
 # disjunction branch without exporting branch-local names.
