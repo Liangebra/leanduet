@@ -164,7 +164,9 @@ def check_browser_formula(candidate, theorem_name):
     validate(ir)
     judgment = ir["judgment"]
     assert judgment["formula"]["matchesGoal"], ir
-    assert judgment["formula"]["term"] == judgment["type"], ir
+    # Lean may hygienically rename binder display names in the theorem type.
+    # Compare alpha-normalized shape; matchesGoal is Lean's elaborated check.
+    assert erase_native_binder_names(judgment["formula"]["term"]) == erase_native_binder_names(judgment["type"]), ir
     native_type = judgment["type"]
     assert native_type[0] == "pi", native_type
     assert native_type[3][0] == "const" and "Nat" in json.dumps(native_type[3][1]), native_type
