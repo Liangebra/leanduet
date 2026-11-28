@@ -219,7 +219,10 @@ direct_start=counterexample_source.index(direct_marker)
 let_start=counterexample_source.index(let_marker)
 shared_prefix=counterexample_source[:direct_start]
 direct_source=shared_prefix+counterexample_source[direct_start:let_start]
-local_let_source=shared_prefix+counterexample_source[let_start:]
+fin_direct_marker="\ntheorem fin_witness_refactor_direct"
+fin_let_marker="\ntheorem fin_witness_refactor_local_let"
+fin_start=counterexample_source.index(fin_direct_marker)
+local_let_source=shared_prefix+counterexample_source[let_start:fin_start]
 direct_tree=extract(direct_source,project)["tree"]
 local_let_tree=extract(local_let_source,project)["tree"]
 assert direct_tree["type"]==local_let_tree["type"],(direct_tree,local_let_tree)
@@ -244,8 +247,8 @@ print("Mathlib refactoring counterexample: same-typed premise identity and local
 # A dependent Fin witness adds a second axis to issue #9: the carrier depends
 # on n and the predicate proof depends on x. Keep proof identity distinct from
 # equality of the proposition types while checking the local-let presentation.
-fin_direct_marker="\\ntheorem fin_witness_refactor_direct"
-fin_let_marker="\\ntheorem fin_witness_refactor_local_let"
+fin_direct_marker="\ntheorem fin_witness_refactor_direct"
+fin_let_marker="\ntheorem fin_witness_refactor_local_let"
 assert fin_direct_marker in counterexample_source and fin_let_marker in counterexample_source
 fin_start=counterexample_source.index(fin_direct_marker)
 fin_let_start=counterexample_source.index(fin_let_marker)
