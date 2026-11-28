@@ -729,8 +729,12 @@ $R$ | gr localQ"""
     (hstep : ∀ k : Nat, P k → P (k + 1)) : ∀ n : Nat, P n := by
   intro n
   induction n with
-  | zero => exact hbase
-  | succ k ih => exact hstep k ih
+  | zero =>
+      show P 0
+      exact hbase
+  | succ k ih =>
+      show P (k + 1)
+      exact hstep k ih
 """
             induction_page.locator("#lean").fill(induction_source)
             induction_page.once("dialog",lambda d:d.accept())
