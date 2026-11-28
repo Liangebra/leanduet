@@ -296,7 +296,8 @@ submodule_start=counterexample_source.index(submodule_direct_marker)
 submodule_let_start=counterexample_source.index(submodule_let_marker)
 submodule_prefix=counterexample_source[:direct_start]
 submodule_direct_source=submodule_prefix+counterexample_source[submodule_start:submodule_let_start]
-submodule_local_let_source=submodule_prefix+counterexample_source[submodule_let_start:]
+submodule_end=counterexample_source.index("\ntheorem deriv_add_refactor_direct")
+submodule_local_let_source=submodule_prefix+counterexample_source[submodule_let_start:submodule_end]
 submodule_direct_tree=extract(submodule_direct_source,project)["tree"]
 submodule_local_tree=extract(submodule_local_let_source,project)["tree"]
 assert submodule_direct_tree["type"]==submodule_local_tree["type"],(
