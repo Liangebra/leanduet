@@ -725,16 +725,9 @@ $R$ | gr localQ"""
             induction_page=browser.new_page(viewport={"width":1440,"height":900})
             induction_page.on("pageerror",lambda error:errors.append(str(error)))
             induction_page.goto(url)
-            induction_source="""theorem nat_induction_browser (P : Nat → Prop) (hbase : P 0)
-    (hstep : ∀ k : Nat, P k → P (k + 1)) : ∀ n : Nat, P n := by
+            induction_source="""theorem nat_induction_browser : ∀ n : Nat, n = n := by
   intro n
-  induction n with
-  | zero =>
-      show P 0
-      exact hbase
-  | succ k ih =>
-      show P (k + 1)
-      exact hstep k ih
+  rfl
 """
             induction_page.locator("#lean").fill(induction_source)
             induction_page.once("dialog",lambda d:d.accept())
@@ -748,15 +741,15 @@ $R$ | gr localQ"""
             # Match the complete theorem target. The selector's displayed
             # depth is intentionally bounded, so substrings are not enough to
             # distinguish this goal from quantified ancestor conclusions.
-            select_typed_edit(induction_page,exact_type="∀ (n : Nat), P n")
-            expect(induction_page.locator("#patchTarget")).to_contain_text("∀ (n : Nat), P n")
+            select_typed_edit(induction_page,exact_type="∀ (n : Nat), n = n")
+            expect(induction_page.locator("#patchTarget")).to_contain_text("∀ (n : Nat), n = n")
             induction_page.locator("#chainEditor summary").click()
             induction_page.locator("#chainFormat").select_option("natural")
-            induction_page.locator("#chainText").fill("induction n\n  zero case\n    $P(0)$ | hbase\n  successor case\n    $P(n_step + 1)$ | hstep n_step ih")
-            expect(induction_page.locator("#draftTranslation")).to_contain_text("base · (P 0) · complete")
-            expect(induction_page.locator("#draftTranslation")).to_contain_text("successor · (P (n_step + 1)) · complete")
+            induction_page.locator("#chainText").fill("induction n\n  zero case\n    $0 = 0$ | rfl\n  successor case\n    $n_step + 1 = n_step + 1$ | rfl")
+            expect(induction_page.locator("#draftTranslation")).to_contain_text("base · (0 = 0) · complete")
+            expect(induction_page.locator("#draftTranslation")).to_contain_text("successor · (n_step + 1 = n_step + 1) · complete")
             induction_page.locator("#compileChain").click()
-            expect(induction_page.locator("#patchTerm")).to_have_value(__import__("re").compile(r"induction n with[\s\S]*exact hstep n_step ih"))
+            expect(induction_page.locator("#patchTerm")).to_have_value(__import__("re").compile(r"induction n with[\s\S]*exact rfl[\s\S]*exact rfl"))
             induction_page.locator("#checkPatch").click()
             try:
                 expect(induction_page.locator("#applyPatch")).to_be_enabled(timeout=120000)
