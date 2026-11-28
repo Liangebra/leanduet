@@ -78,13 +78,18 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
                 };
                 return toScopedSemanticsFromJudgment('x + y = y + x',{leanIR:judgment});
             }""")
-            existential_projection=page.evaluate("""async () => {            existential_projection=page.evaluate("""async () => {
+            existential_projection=page.evaluate("""async () => {
                 const {toScopedSemantics}=await import('/math-formula.mjs');
                 return toScopedSemantics('∀ y : Nat, ∃ z : Nat, y + z = z + y');
             }""")
             assert context_projection["context"][0]["id"]=="object-x"
             assert context_projection["formula"]["left"]["left"]=={"kind":"var","index":1}
             assert context_projection["formula"]["left"]["right"]=={"kind":"var","index":0}
+            assert judgment_projection["context"]==[
+                {"id":"context_bridge:root/body/body:slot:0","name":"x","type":"Nat"},
+                {"id":"context_bridge:root/body/body:slot:1","name":"y","type":"Nat"}
+            ]
+            assert judgment_projection["formula"]==context_projection["formula"]
             assert existential_projection["schema"]=="leanduet.scoped-semantics.formula"
             assert existential_projection["formula"]["kind"]=="all"
             assert existential_projection["formula"]["body"]["kind"]=="exists"
