@@ -31,7 +31,7 @@ test('compact image preserves an explicitly named Mathlib rule and premises',()=
 });
 
 test('Mathlib corpus seed matches the existing structural candidate',()=>{
- for(const id of ['compact-image-continuous','subgroup-multiplication-closure','linear-map-additivity'])
+ for(const id of ['compact-image-continuous','subgroup-multiplication-closure','linear-map-additivity','continuous-function-composition'])
   assert.ok(mathlibCases.some(example=>example.id===id),`missing Mathlib fixture: ${id}`);
  for(const example of mathlibCases){
   const result=compileNaturalDraft(example.naturalDraft,example.scope,new Map(Object.entries(example.context)),{goal:example.goal});
@@ -40,6 +40,15 @@ test('Mathlib corpus seed matches the existing structural candidate',()=>{
   assert.equal(result.rows.at(-1).proofStatus,'candidate',example.id);
   assert.match(example.alignmentStatus,/draft correspondence/);
  }
+});
+
+test('continuous composition keeps its named Mathlib rule and both hypotheses',()=>{
+ const example=mathlibCases.find(value=>value.id==='continuous-function-composition');
+ const result=compileNaturalDraft(example.naturalDraft,example.scope,new Map(Object.entries(example.context)),{goal:example.goal});
+ assert.equal(result.complete,true);
+ assert.deepEqual(result.steps.map(step=>({kind:step.kind,claim:step.type,application:step.application})),example.expectedStructure);
+ assert.match(result.term,/Continuous\.comp hg hf/);
+ assert.equal(result.semanticFidelity,'not-assessed');
 });
 
 test('the subgroup fixture keeps its cited rule and both membership premises',()=>{

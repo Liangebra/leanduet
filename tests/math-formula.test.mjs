@@ -76,6 +76,16 @@ test('set intersection and union bind inside membership and subset relations',()
   assert.deepEqual(compileFormula(compileFormula(input).lean,{syntax:'lean'}).scoped,compileFormula(input).scoped,input);
 });
 
+test('function composition follows Lean precedence and round-trips through the scoped AST',()=>{
+ const composition=compileFormula('g ∘ f');
+ assert.equal(composition.lean,'(g ∘ f)');
+ assert.deepEqual(composition.scoped,{kind:'binary',op:'∘',left:{kind:'free',name:'g'},right:{kind:'free',name:'f'}});
+ const nested=compileFormula('h ∘ g ∘ f');
+ assert.equal(nested.lean,'(h ∘ (g ∘ f))','Lean composition is right-associative');
+ assert.deepEqual(compileFormula(nested.lean,{syntax:'lean'}).scoped,nested.scoped);
+ assert.equal(compileFormula('Continuous (g ∘ f)').lean,'(Continuous (g ∘ f))');
+});
+
 test('set image uses Lean precedence and retains its operation in the scoped tree',()=>{
  const image=compileFormula("f '' s");
  assert.equal(image.lean,"(f '' s)");
