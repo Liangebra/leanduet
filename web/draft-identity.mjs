@@ -85,7 +85,7 @@ function candidateKey(c,ids,nodesById=new Map(),renamedNames=new Map()){
  const dependencyNames=new Map(),ambiguousNames=new Set();
  for(const id of c.dependencies){
   const node=nodesById.get(id),identity=ids.get(id);
-  if(typeof node.name!=='string'||identity===undefined)continue;
+  if(!node||typeof node.name!=='string'||identity===undefined)continue;
   if(dependencyNames.has(node.name)&&dependencyNames.get(node.name)!==identity)ambiguousNames.add(node.name);
   else dependencyNames.set(node.name,identity);
  }
