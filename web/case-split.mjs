@@ -218,7 +218,7 @@ export function compileCaseProgram(input,frame,{goal=null,choices=new Map(),line
   // must match the remaining goal, not merely the original declaration.
   // This conservative structural check does not replace Lean elaboration.
   const conclusion=result.steps.at(-1);
-  if(!['conclude','and-intro','iff-intro','exists-intro'].includes(conclusion?.kind)||!sameScopedFormula(conclusion.type,result.remainingGoal??parsed.type)){
+  if(!['conclude','and-intro','iff-intro','exists-intro','classical-reductio'].includes(conclusion?.kind)||!sameScopedFormula(conclusion.type,result.remainingGoal??parsed.type)){
    const last=result.rows.at(-1);
    const reason='The branch conclusion does not structurally match its remaining goal.';
    firstOpen??={line:last?.line||branch.line,reason};

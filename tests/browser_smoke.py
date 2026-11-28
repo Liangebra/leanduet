@@ -607,7 +607,7 @@ $R$ | gr localQ"""
             if not classical_page.locator("#chainEditor").evaluate("(editor) => editor.open"):
                 classical_page.locator("#chainEditor summary").click()
             classical_page.locator("#chainFormat").select_option("natural")
-            classical_page.locator("#chainText").fill("classical reductio hnot\\n  contradiction\\n    $False$ | h hnot")
+            classical_page.locator("#chainText").fill("classical reductio hnot\n  contradiction\n    $False$ | h hnot")
             expect(classical_page.locator("#draftTranslation")).to_contain_text("classical reductio for P with hnot")
             classical_page.locator("#compileChain").click()
             expect(classical_page.locator("#patchTerm")).to_have_value(__import__("re").compile(r"Classical\\.byContradiction[\\s\\S]*intro hnot"))
@@ -619,7 +619,8 @@ $R$ | gr localQ"""
             expect(classical_page.locator("#verifyState")).to_have_text("Lean passed",timeout=120000)
             classical_page.close()
 
-            assert not errors, errors            assert not errors, errors
+
+            assert not errors, errors
             browser.close()
         print("Browser smoke test passed")
     finally:

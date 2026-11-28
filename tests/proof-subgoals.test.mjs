@@ -48,7 +48,15 @@ test('classical reductio is explicit and its temporary negation stays local',()=
  assert.equal(collision.term,null);
 });
 
-test('equivalence introduction opens both directions without a classical principle',()=>{test('equivalence introduction opens both directions without a classical principle',()=>{
+test('classical reductio composes in isolated disjunction branches',()=>{
+ const input='cases h, establish result : $P$\n  left case hp\n    classical reductio hnot\n      contradiction\n        $False$ | hnot hp\n  right case hq\n    classical reductio hnot\n      contradiction\n        $False$ | hnot hq\n$P$ | result';
+ const result=compileNaturalDraft(input,['h'],new Map([['h','P ∨ P']]),{goal:'P'});
+ assert.equal(result.complete,true,JSON.stringify(result.rows,null,2));
+ assert.match(result.term,/Classical\.byContradiction[\s\S]*inr hq[\s\S]*Classical\.byContradiction/);
+ assert.ok(!result.graph.nodes.some(item=>item.name==='hnot'));
+});
+
+test('equivalence introduction opens both directions without a classical principle',()=>{
  const operation=planGoalOperation('P ↔ Q',{kind:'iff-introduction'});
  assert.equal(operation.logic,'intuitionistic');
  assert.equal(operation.closure.name,'Iff.intro');
