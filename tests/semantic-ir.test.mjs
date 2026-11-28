@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {natObjectContextFromJudgment,validateJudgment} from '../web/semantic-ir.mjs';import {validateJudgment} from '../web/semantic-ir.mjs';
+import {natObjectContextFromJudgment,validateJudgment} from '../web/semantic-ir.mjs';
 const n=s=>[[],'str',s];
 const base={schema:1,format:'leanduet.kernel-judgment',declaration:n('demo'),path:'root',universes:[],judgment:{kind:'proof',context:[{slot:0,name:n('P'),binder:'explicit',internal:false,type:['sort',['zero']],value:null}],term:['lambda',n('h'),'explicit',['local',0],['bound',0]],type:['pi',n('h'),'explicit',['local',0],['local',0]],formula:null}};
 test('structural IR validates context slots and binder scopes',()=>assert.equal(validateJudgment(base),base));
