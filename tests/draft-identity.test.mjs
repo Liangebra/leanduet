@@ -211,7 +211,7 @@ test('a selected proof candidate follows uniquely matched local objects through 
  const scope=['hall','hall2'];
  const facts=new Map([['hall','∀ x : Nat, P x'],['hall2','∀ x : Nat, P x']]);
  const make=(name,choices=new Map())=>compileNaturalDraft(
-  'take '+name+' : $Nat$\\n$P('+name+')$',scope,facts,
+  'take '+name+' : $Nat$\n$P('+name+')$',scope,facts,
   {goal:'∀ '+name+' : Nat, P '+name,choices});
  const selected=new Map([[2,'hall n']]);
  const original=make('n',selected),renamed=make('k');
