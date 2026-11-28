@@ -680,8 +680,11 @@ $R$ | gr localQ"""
             # Induction is a goal operation on the explicit quantified target.
             # Selecting the nested proof of `P n` instead would ask the
             # operation planner to induct on an unquantified leaf goal.
-            select_typed_edit(induction_page,includes=("∀","P n"))
-            expect(induction_page.locator("#patchTarget")).to_contain_text("∀")
+            # Match the complete theorem target. The selector's displayed
+            # depth is intentionally bounded, so substrings are not enough to
+            # distinguish this goal from quantified ancestor conclusions.
+            select_typed_edit(induction_page,exact_type="∀ (n : Nat), P n")
+            expect(induction_page.locator("#patchTarget")).to_contain_text("∀ (n : Nat), P n")
             induction_page.locator("#chainEditor summary").click()
             induction_page.locator("#chainFormat").select_option("natural")
             induction_page.locator("#chainText").fill("induction n\n  zero case\n    $P(0)$ | hbase\n  successor case\n    $P(n_step + 1)$ | hstep n_step ih")
