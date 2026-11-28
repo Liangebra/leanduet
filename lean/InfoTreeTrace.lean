@@ -154,7 +154,7 @@ private partial def collectTacticTrace (fileMap : FileMap) (tree : InfoTree)
 elab "#duet_trace " declaration:command : command => do
   let fileMap ← getFileMap
   let tactics ← withEnableInfoTree true do
-    elabCommand declaration
+    elabCommandTopLevel declaration
     let trees ← getInfoTrees
     let mut tactics := #[]
     for tree in trees do
