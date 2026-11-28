@@ -59,6 +59,25 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
                     {id:'object-y',name:'y',type:'Nat'}
                 ]});
             }""")
+            judgment_projection=page.evaluate("""async () => {
+                const {toScopedSemanticsFromJudgment}=await import('/math-formula.mjs');
+                const name=s=>[[],'str',s];
+                const nat=['const',name('Nat'),[]];
+                const judgment={
+                    schema:1,format:'leanduet.kernel-judgment',declaration:name('context_bridge'),
+                    path:'root/body/body',universes:[],judgment:{
+                        kind:'expression',
+                        context:[
+                            {slot:0,name:name('x'),display:'x',binder:'explicit',internal:false,type:nat,value:null},
+                            {slot:1,name:name('y'),display:'y',binder:'explicit',internal:false,type:nat,value:null}
+                        ],
+                        term:['local',1],type:nat,formula:null,
+                        roundTrip:{checked:true,shapePreserved:true,encodingPreserved:true,typeDefEq:true,
+                            freshContextChecked:true,mode:'same-environment-fresh-context'}
+                    }
+                };
+                return toScopedSemanticsFromJudgment('x + y = y + x',{leanIR:judgment});
+            }""")
             existential_projection=page.evaluate("""async () => {
                 const {toScopedSemantics}=await import('/math-formula.mjs');
                 return toScopedSemantics('∀ y : Nat, ∃ z : Nat, y + z = z + y');
@@ -66,6 +85,11 @@ with subprocess.Popen([sys.executable,"server.py","--port",str(port)],cwd=ROOT,s
             assert context_projection["context"][0]["id"]=="object-x"
             assert context_projection["formula"]["left"]["left"]=={"kind":"var","index":1}
             assert context_projection["formula"]["left"]["right"]=={"kind":"var","index":0}
+            assert judgment_projection["context"]==[
+                {"id":"context_bridge:root/body/body:slot:0","name":"x","type":"Nat"},
+                {"id":"context_bridge:root/body/body:slot:1","name":"y","type":"Nat"}
+            ]
+            assert judgment_projection["formula"]==context_projection["formula"]
             assert existential_projection["schema"]=="leanduet.scoped-semantics.formula"
             assert existential_projection["formula"]["kind"]=="all"
             assert existential_projection["formula"]["body"]["kind"]=="exists"

@@ -1,3 +1,5 @@
+import {natObjectContextFromJudgment} from './semantic-ir.mjs';
+
 // A deliberately small presentation-math grammar. Tokens -> AST -> Lean
 // candidate. TeX is not executed; unknown macros and ambiguous adjacency fail.
 const commands={land:'∧',wedge:'∧',lor:'∨',vee:'∨',neg:'¬',lnot:'¬',to:'→',implies:'→',Rightarrow:'→',iff:'↔',Leftrightarrow:'↔',le:'≤',leq:'≤',ge:'≥',geq:'≥',ne:'≠',neq:'≠',in:'∈',subseteq:'⊆',cap:'∩',inter:'∩',cup:'∪',union:'∪',cdot:'*',times:'*',forall:'∀',exists:'∃',alpha:'α',beta:'β',gamma:'γ',delta:'δ',epsilon:'ε',theta:'θ',lambda:'λ',mu:'μ',pi:'π',rho:'ρ',sigma:'σ',phi:'φ',psi:'ψ',omega:'ω',top:'True',bot:'False'};
@@ -351,4 +353,15 @@ export function toScopedSemanticsInContext(text,{syntax='math',context=[]}={}) {
   context:typedContext.objects,
   formula:contextualProp(compiled.scoped,typedContext,0)
  };
+}
+
+
+/**
+ * Project a supported formula using the checked Nat locals of a serialized
+ * Lean judgment. This remains one-way and depends on the judgment producer's
+ * same-environment fresh-context round-trip record.
+ */
+export function toScopedSemanticsFromJudgment(text,{syntax='math',leanIR}={}){
+ const context=natObjectContextFromJudgment(leanIR);
+ return toScopedSemanticsInContext(text,{syntax,context});
 }
