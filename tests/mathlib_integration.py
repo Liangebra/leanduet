@@ -253,7 +253,9 @@ assert fin_direct_marker in counterexample_source and fin_let_marker in countere
 fin_start=counterexample_source.index(fin_direct_marker)
 fin_let_start=counterexample_source.index(fin_let_marker)
 fin_direct_source=shared_prefix+counterexample_source[fin_start:fin_let_start]
-fin_local_let_source=shared_prefix+counterexample_source[fin_let_start:]
+submodule_direct_marker="\ntheorem submodule_add_refactor_direct"
+submodule_start=counterexample_source.index(submodule_direct_marker)
+fin_local_let_source=shared_prefix+counterexample_source[fin_let_start:submodule_start]
 fin_direct_tree=extract(fin_direct_source,project)["tree"]
 fin_local_let_tree=extract(fin_local_let_source,project)["tree"]
 assert fin_direct_tree["type"]==fin_local_let_tree["type"],(fin_direct_tree,fin_local_let_tree)
