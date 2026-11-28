@@ -22,6 +22,38 @@ test('goal operations distinguish intuitionistic negation from a two-child conju
  assert.deepEqual(cases.subgoals.map(subgoal=>subgoal.contextDelta[0].type),['P','Q']);
 });
 
+test('classical reductio is explicit and its temporary negation stays local',()=>{
+ const operation=planGoalOperation('P',{kind:'classical-reductio',name:'hnot'});
+ assert.equal(operation.logic,'classical');
+ assert.equal(operation.closure.name,'Classical.byContradiction');
+ assert.deepEqual(operation.subgoals.map(goal=>goal.goal),['False']);
+ assert.deepEqual(operation.subgoals[0].contextDelta.map(binding=>binding.type),['(¬ P)']);
+ assert.equal(planGoalOperation('¬ P',{kind:'assume',name:'hp',type:'P'}).logic,'intuitionistic');
+ const input='classical reductio hnot\n  contradiction\n    $False$ | h hnot';
+ const facts=new Map([['h','¬ ¬ P']]);
+ const result=compileNaturalDraft(input,['h'],facts,{goal:'P'});
+ assert.equal(result.complete,true,JSON.stringify(result.rows,null,2));
+ assert.equal(result.steps.at(-1).kind,'classical-reductio');
+ assert.equal(result.steps.at(-1).goalOperation.logic,'classical');
+ assert.match(result.term,/Classical\.byContradiction[\s\S]*intro hnot[\s\S]*change \(¬ P\) at hnot[\s\S]*exact h hnot/);
+ const node=result.graph.nodes.find(item=>item.kind==='classical-reductio');
+ assert.ok(node);
+ assert.equal(node.subgoals[0].goal,'False');
+ assert.ok(node.subgoals[0].graph.nodes.some(item=>item.name==='hnot'&&item.kind==='context'));
+ assert.ok(!result.graph.nodes.some(item=>item.name==='hnot'),'the temporary negation must not escape to the parent graph');
+ const unresolved=compileNaturalDraft('$P$ | ?', ['h'],facts,{goal:'P'});
+ assert.ok(!unresolved.term?.includes('Classical.byContradiction'),'ordinary candidate generation must not insert classical reasoning');
+ assert.throws(()=>compileNaturalDraft(input,['h','hnot'],new Map([['h','¬ ¬ P'],['hnot','Q']]),{goal:'P'}),/must be fresh/);
+});
+
+test('classical reductio composes in isolated disjunction branches',()=>{
+ const input='cases h, establish result : $P$\n  left case hp\n    classical reductio hnot\n      contradiction\n        $False$ | hnot hp\n  right case hq\n    classical reductio hnot\n      contradiction\n        $False$ | hnot hq\n$P$ | result';
+ const result=compileNaturalDraft(input,['h'],new Map([['h','P ∨ P']]),{goal:'P'});
+ assert.equal(result.complete,true,JSON.stringify(result.rows,null,2));
+ assert.match(result.term,/Classical\.byContradiction[\s\S]*inr hq[\s\S]*Classical\.byContradiction/);
+ assert.ok(!result.graph.nodes.some(item=>item.name==='hnot'));
+});
+
 test('equivalence introduction opens both directions without a classical principle',()=>{
  const operation=planGoalOperation('P ↔ Q',{kind:'iff-introduction'});
  assert.equal(operation.logic,'intuitionistic');
