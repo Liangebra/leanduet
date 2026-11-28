@@ -441,3 +441,16 @@ conflicting annotation is rejected before emitting Lean. This is a narrow
 surface check; compound set expressions, coercions, aliases, and other
 container types are not inferred. The emitted candidate still needs Lean
 elaboration, and unresolved carrier information is not treated as a match.
+
+
+## Explicit classical reductio
+
+The structured proof editor accepts `classical reductio hnot` (or
+`经典反证 hnot`) followed by a `contradiction` (or `矛盾`) subgoal. For
+a target `P`, the planner creates a child obligation `False` under a fresh
+local binding `hnot : ¬ P` and renders the closure with
+`Classical.byContradiction`. This operation is explicitly classical.
+Intuitionistic negation introduction remains a separate operation proving
+`False` from an assumption `P`; ex falso remains elimination from an
+existing `False` proof. The temporary negation has child-scope identity and
+is discharged when the child closes.

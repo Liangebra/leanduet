@@ -22,7 +22,33 @@ test('goal operations distinguish intuitionistic negation from a two-child conju
  assert.deepEqual(cases.subgoals.map(subgoal=>subgoal.contextDelta[0].type),['P','Q']);
 });
 
-test('equivalence introduction opens both directions without a classical principle',()=>{
+test('classical reductio is explicit and its temporary negation stays local',()=>{
+ const operation=planGoalOperation('P',{kind:'classical-reductio',name:'hnot'});
+ assert.equal(operation.logic,'classical');
+ assert.equal(operation.closure.name,'Classical.byContradiction');
+ assert.deepEqual(operation.subgoals.map(goal=>goal.goal),['False']);
+ assert.deepEqual(operation.subgoals[0].contextDelta.map(binding=>binding.type),['(¬ P)']);
+ assert.equal(planGoalOperation('¬ P',{kind:'assume',name:'hp',type:'P'}).logic,'intuitionistic');
+ const input='classical reductio hnot\n  contradiction\n    $False$ | h hnot';
+ const facts=new Map([['h','¬ ¬ P']]);
+ const result=compileNaturalDraft(input,['h'],facts,{goal:'P'});
+ assert.equal(result.complete,true,JSON.stringify(result.rows,null,2));
+ assert.equal(result.steps.at(-1).kind,'classical-reductio');
+ assert.equal(result.steps.at(-1).goalOperation.logic,'classical');
+ assert.match(result.term,/Classical\.byContradiction[\s\S]*intro hnot[\s\S]*change \(¬ P\) at hnot[\s\S]*exact h hnot/);
+ const node=result.graph.nodes.find(item=>item.kind==='classical-reductio');
+ assert.ok(node);
+ assert.equal(node.subgoals[0].goal,'False');
+ assert.ok(node.subgoals[0].graph.nodes.some(item=>item.name==='hnot'&&item.kind==='context'));
+ assert.ok(!result.graph.nodes.some(item=>item.name==='hnot'),'the temporary negation must not escape to the parent graph');
+ const unresolved=compileNaturalDraft('$P$ | ?', ['h'],facts,{goal:'P'});
+ assert.ok(!unresolved.term?.includes('Classical.byContradiction'),'ordinary candidate generation must not insert classical reasoning');
+ const collision=compileNaturalDraft(input,['h','hnot'],new Map([['h','¬ ¬ P'],['hnot','Q']]),{goal:'P'});
+ assert.equal(collision.complete,false,'temporary negation names must be fresh');
+ assert.equal(collision.term,null);
+});
+
+test('equivalence introduction opens both directions without a classical principle',()=>{test('equivalence introduction opens both directions without a classical principle',()=>{
  const operation=planGoalOperation('P ↔ Q',{kind:'iff-introduction'});
  assert.equal(operation.logic,'intuitionistic');
  assert.equal(operation.closure.name,'Iff.intro');

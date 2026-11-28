@@ -10,6 +10,8 @@ const operations=[
   subgoals:[{id:'first',heading:/^(?:first goal|第一子目标)$/iu},{id:'second',heading:/^(?:second goal|第二子目标)$/iu}]},
  {kind:'iff-introduction',header:/^(?:prove equivalence|证明等价命题)$/iu,
   subgoals:[{id:'forward',heading:/^(?:forward direction|正向)$/iu},{id:'reverse',heading:/^(?:reverse direction|反向)$/iu}]},
+ {kind:'classical-reductio',header:/^(?:classical reductio|经典反证)\s+([A-Za-z_][A-Za-z0-9_']{0,63})$/iu,
+  subgoals:[{id:'contradiction',heading:/^(?:contradiction|矛盾)$/iu}]},
  {kind:'existential-introduction',header:/^(?:construct witness|choose witness|构造见证|选取见证)\s+([A-Za-z_][A-Za-z0-9_']{0,63})$/iu,
   subgoals:[{id:'witness-property',heading:/^(?:witness property|见证性质)$/iu}]}
 ];
@@ -40,7 +42,8 @@ export function goalOperationHeader(text){
  if(!first)return null;
  for(const operation of operations){
   const match=operation.header.exec(first.trim());
-  if(match)return {kind:operation.kind,witness:match[1]||null,subgoals:operation.subgoals};
+  if(match)return {kind:operation.kind,name:operation.kind==='classical-reductio'?match[1]||null:null,
+   witness:operation.kind==='existential-introduction'?match[1]||null:null,subgoals:operation.subgoals};
  }
  return null;
 }
@@ -101,7 +104,7 @@ export function compileGoalOperationProgram(input,frame,{goal=null,choices=new M
   if(witnessBinding.status!=='resolved'||typeof witnessBinding.binding.type!=='string')
    throw Error('Existential construction needs a uniquely visible typed local witness.');
  }
- const operation=planGoalOperation(target,{kind:parsed.kind,witness:parsed.witness,
+ const operation=planGoalOperation(target,{kind:parsed.kind,name:parsed.name,witness:parsed.witness,
   witnessType:witnessBinding?.binding.type,witnessId:witnessBinding?.binding.id});
  const reserved=parsed.subgoals.map(subgoal=>{
   const names=new Set();
@@ -114,14 +117,15 @@ export function compileGoalOperationProgram(input,frame,{goal=null,choices=new M
  const results=[];let firstOpen=null;
  for(let index=0;index<parsed.subgoals.length;index++){
   const subgoal=parsed.subgoals[index],plan=operation.subgoals[index],childId=frame.id+'/subgoal:'+parsed.head.line+':'+subgoal.id;
-  const child=forkGoalScope(frame,{id:childId,goal:plan.goal});
+  const bindings=(plan.contextDelta||[]).map((binding,bindingIndex)=>({...binding,id:childId+'/binding:'+bindingIndex}));
+  const child=forkGoalScope(frame,{id:childId,goal:plan.goal,bindings});
   const siblingNames=reserved.flatMap((names,siblingIndex)=>siblingIndex===index?[]:[...names]);
   const result=compileSegment(subgoal.sourceLines.join('\n'),child,{goal:plan.goal,choices,lineOffset:subgoal.bodyLineOffset,
    closedNames:[...new Set([...closedNames,...siblingNames])],openBindings,cache});
   let closed=null;
   if(result.complete){
    const conclusion=result.steps.at(-1);
-   if(!['conclude','and-intro','iff-intro','exists-intro'].includes(conclusion?.kind)){
+   if(!['conclude','and-intro','iff-intro','exists-intro','classical-reductio'].includes(conclusion?.kind)){
     firstOpen??={line:subgoal.line,reason:'A child proof did not end with a conclusion.'};
    }else{
     const localIds=graphNodes(result.graph).filter(node=>!parentIds.has(node.id)&&node.kind!=='context').map(node=>node.id);
@@ -143,8 +147,9 @@ export function compileGoalOperationProgram(input,frame,{goal=null,choices=new M
  const subgoalRecords=results.map(({plan,child,result,status,resultId,dependencies:returned})=>({
   id:child.id,key:plan.id,kind:'subgoal',goal:plan.goal,resultId,dependencies:returned,graph:result.graph,status
  }));
- const stepKind=parsed.kind==='conjunction-introduction'?'and-intro':parsed.kind==='iff-introduction'?'iff-intro':'exists-intro';
- const step=!structurallyComplete?null:{kind:stepKind,type:target,witness:parsed.witness,goalOperation:operation,
+ const stepKind=parsed.kind==='conjunction-introduction'?'and-intro':parsed.kind==='iff-introduction'?'iff-intro':parsed.kind==='classical-reductio'?'classical-reductio':'exists-intro';
+ const step=!structurallyComplete?null:{kind:stepKind,type:target,witness:parsed.witness,
+  assumptionName:parsed.name,assumptionType:operation.subgoals[0]?.contextDelta?.[0]?.type,goalOperation:operation,
   subgoals:results.map(({plan,result})=>({id:plan.id,goal:plan.goal,steps:result.steps}))};
  const scopedOperation={...operation,subgoals:results.map(({plan,child})=>({...plan,scopeId:child.id}))};
  if(step)step.goalOperation=scopedOperation;

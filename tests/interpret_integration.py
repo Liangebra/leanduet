@@ -294,7 +294,24 @@ with TemporaryDirectory() as tmp:
     subprocess.run(["lean",str(target)],cwd=root,check=True)
 print("Intuitionistic negation introduction and explicit False elimination accepted by Lean")
 
-# A conjunction goal opens two identity-isolated child scopes. Local assumptions
+# Explicit classical reductio is distinct from constructive negation
+# introduction and ex-falso, and the generated Lean candidate is compiled.
+classical_script="""
+import {compileNaturalDraft} from './web/natural-draft.mjs';
+const facts=new Map([['h','¬ ¬ P']]);
+const result=compileNaturalDraft('classical reductio hnot\\n  contradiction\\n    $False$ | h hnot',['h'],facts,{goal:'P'});
+if(!result.complete||result.semanticFidelity!=='not-assessed')throw new Error(JSON.stringify(result));
+console.log(JSON.stringify(result.term));
+"""
+classical_term=json.loads(subprocess.run(["node","--input-type=module"],input=classical_script,text=True,cwd=root,check=True,capture_output=True).stdout)
+assert "Classical.byContradiction" in classical_term and "h hnot" in classical_term,classical_term
+with TemporaryDirectory() as tmp:
+    target=Path(tmp)/"ClassicalReductio.lean"
+    target.write_text("import Lean\\ntheorem double_negation_elimination (P : Prop) (h : ¬ ¬ P) : P := "+classical_term+"\\n",encoding="utf-8")
+    subprocess.run(["lean",str(target)],cwd=root,check=True)
+print("Explicit classical reductio candidate accepted by Lean")
+
+# A conjunction goal opens two identity-isolated child scopes.# A conjunction goal opens two identity-isolated child scopes. Local assumptions
 # are discharged inside their child, and the same operation composes inside a
 # disjunction branch without exporting branch-local names.
 subgoal_script="""

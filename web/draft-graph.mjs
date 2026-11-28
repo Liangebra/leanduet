@@ -72,7 +72,7 @@ export function buildDraftGraph(scope,facts,rows,{goal=null}={}){
    binding:{id:branch.bindingId,name:branch.name,type:branch.type},
    dependencies:branch.dependencies||[],graph:branch.graph||null,status:branch.status||'open'
   })):undefined;
-  const subgoalKinds=new Set(['and-intro','iff-intro','exists-intro','local-lemma']);
+  const subgoalKinds=new Set(['and-intro','iff-intro','exists-intro','classical-reductio','local-lemma']);
   const subgoalStep=subgoalKinds.has(step?.kind)||subgoalKinds.has(row.kind);
   const subgoals=subgoalStep?(row.subgoals||step?.subgoals||[]).map(subgoal=>({
    id:subgoal.id,key:subgoal.key||null,kind:'subgoal',goal:subgoal.goal,resultId:subgoal.resultId||null,

@@ -100,6 +100,13 @@ export function planGoalOperation(goal,{kind,name=null,type=null,source=null,sou
    subgoals:[{id:'witness-property',goal:renderFormula(rename(ast.body,ast.name,witness)),contextDelta:[]}],
    closure:{kind:'constructor',name:'Exists.intro',witness}};
  }
+ if(kind==='classical-reductio'){
+  if(typeof name!=='string'||!name)throw Error('Classical reductio needs a fresh name for the temporary negation.');
+  const negatedGoal=renderFormula({kind:'unary',op:'¬',body:ast});
+  return {kind:'classical-reductio',parentGoal:goal,logic:'classical',
+   subgoals:[{id:'contradiction',goal:'False',contextDelta:[{name,type:negatedGoal,kind:'classical-assumption'}]}],
+   closure:{kind:'classical-principle',name:'Classical.byContradiction'}};
+ }
  if(!['introduce','assume'].includes(kind))throw Error('Unknown goal operation.');
  const restricted=kind==='introduce'?restrictedQuantifier(ast,'∀'):null;
  if(restricted){
