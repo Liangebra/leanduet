@@ -32,6 +32,7 @@ The [online editor](https://liangebra.github.io/leanduet/) is a static demo. Run
 
 - Read a mathematical proof next to its Lean source, with native Lean completion (Ctrl+Space), or switch to a notebook layout.
 - Inspect elaborated proof terms, local hypotheses and their types.
+- Capture actual tactic ranges, goal states and local references on demand with the local Lean backend; see [the trace schema](docs/INFOTREE_TRACE.md).
 - Select a proof occurrence, search applicable rules, and review a checked replacement.
 - Enter a supported LaTeX formula for typed proof completion, or compose controlled mathematical sentences with intermediate propositions inferred by Lean.
 - Edit existential witnesses together with their dependent evidence.

@@ -441,3 +441,18 @@ conflicting annotation is rejected before emitting Lean. This is a narrow
 surface check; compound set expressions, coercions, aliases, and other
 container types are not inferred. The emitted candidate still needs Lean
 elaboration, and unresolved carrier information is not treated as a match.
+
+
+## Lean elaboration trace seam (issue #1)
+
+The local Lean 4.19 adapter resolves deferred InfoTree assignments before
+reading tactic nodes. It records actual tactic syntax ranges, goals before and
+after, local contexts, child TermInfo references and references visible from
+assigned proof terms. This is useful input for later region alignment and
+scope-aware dependency views; it is not a replacement for the shared partial
+mathematical graph.
+
+Ranges refer back to the user's original UTF-8 source after the adapter
+preamble is removed. Opaque means that no child TermInfo expression was
+recorded; assigned proof terms can still provide references. No dependency is
+inferred from indentation. See [the schema and limits](INFOTREE_TRACE.md).
