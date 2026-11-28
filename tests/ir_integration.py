@@ -278,10 +278,11 @@ def lean_formula(node, context_size):
             "(LeanDuet.ScopedSemantics.Formula."+constructor+" ("+left+") ("+right+")"
             +" : "+formula_type+")"
         )
-    if kind=="all":
+    if kind in ("all","exists"):
         body=lean_formula(node["body"],context_size+1)
+        constructor="all" if kind=="all" else "existsNat"
         return (
-            "(LeanDuet.ScopedSemantics.Formula.all ("+body+" : "
+            "(LeanDuet.ScopedSemantics.Formula."+constructor+" ("+body+" : "
             +"LeanDuet.ScopedSemantics.Formula "+str(context_size+1)+")"
             +" : "+formula_type+")"
         )
@@ -310,10 +311,11 @@ def lean_erased_formula(node, context_size):
     term_type="LeanDuet.Scoped.Term "+str(context_size)
     if kind=="free" and node["name"] in ("True","False"):
         return "(LeanDuet.Scoped.Term.atom \""+node["name"]+"\" : "+term_type+")"
-    if kind=="binder" and node["op"]=="∀" and node["domain"]=={"kind":"free","name":"Nat"}:
+    if kind=="binder" and node["op"] in ("∀","∃") and node["domain"]=={"kind":"free","name":"Nat"}:
         body=lean_erased_formula(node["body"],context_size+1)
+        binder="∀ Nat" if node["op"]=="∀" else "∃ Nat"
         return (
-            "(LeanDuet.Scoped.Term.bind \"∀ Nat\""
+            "(LeanDuet.Scoped.Term.bind \""+binder+"\""
             +" (LeanDuet.Scoped.Term.atom \"Nat\" : "+term_type+")"
             +" ("+body+" : LeanDuet.Scoped.Term "+str(context_size+1)+")"
             +" : "+term_type+")"
@@ -341,6 +343,8 @@ bridge_inputs = {
     "connectives": r"\forall n : \mathbb{N}, n = 0 \to (n + 0 = n \land n = n)",
     "truth": r"\top",
     "falsity": r"\bot",
+    "exists": r"\exists n : \mathbb{N}, n + 0 = n",
+    "mixed_quantifiers": r"\forall n : \mathbb{N}, \exists n : \mathbb{N}, n = n",
 }
 bridge = {}
 for name, formula_text in bridge_inputs.items():
@@ -351,6 +355,9 @@ for name, formula_text in bridge_inputs.items():
     bridge[name]={"candidate":candidate,"projected":projected}
 assert bridge["nested"]["projected"]["formula"]==bridge["alpha"]["projected"]["formula"]
 assert bridge["shadow"]["projected"]["formula"]==bridge["shadow_fresh"]["projected"]["formula"]
+assert bridge["mixed_quantifiers"]["projected"]["formula"]=={
+    "kind":"all","body":{"kind":"exists","body":{"kind":"equal",
+    "left":{"kind":"var","index":0},"right":{"kind":"var","index":0}}}}
 
 lean_checks=[]
 for name, item in bridge.items():
@@ -541,4 +548,36 @@ with TemporaryDirectory() as tmp:
     )
     subprocess.run(["lean",str(target)],cwd=root,check=True,capture_output=True,text=True)
 print("Versioned browser context projections commute with substitutions under one and two binders")
+
+
+# The same verified lowering and substitution law now covers an existential
+# binder. Replacing the outer context object must preserve its witness slot.
+exists_source=compile_context_scoped_formula(
+    "∀ y : Nat, ∃ z : Nat, x + y = z + x",
+    [{"id":"object-x","name":"x","type":"Nat"}])
+exists_target=compile_context_scoped_formula(
+    "∀ y : Nat, ∃ z : Nat, 0 + y = z + 0",[])
+exists_source_core=lean_formula(exists_source["formula"],1)
+exists_target_core=lean_formula(exists_target["formula"],0)
+exists_browser=compile_browser_formula("∀ y : Nat, ∃ z : Nat, 0 + y = z + 0")
+exists_checks=[
+    "example : LeanDuet.ScopedSemantics.substFormula "+x_to_zero+" ("
+    +exists_source_core+" : LeanDuet.ScopedSemantics.Formula 1) = ("
+    +exists_target_core+" : LeanDuet.ScopedSemantics.Formula 0) := by rfl",
+    "example (ρ : LeanDuet.ScopedSemantics.Env 0) : LeanDuet.ScopedSemantics.denote ("
+    +exists_target_core+" : LeanDuet.ScopedSemantics.Formula 0) (fun i => Fin.elim0 i) ↔ ("
+    +exists_browser["lean"]+" : Prop) := by rfl",
+    "example (ρ : LeanDuet.ScopedSemantics.Env 0) : LeanDuet.ScopedSemantics.denote "
+    "(LeanDuet.ScopedSemantics.substFormula "+x_to_zero+" ("
+    +exists_source_core+" : LeanDuet.ScopedSemantics.Formula 1)) ρ = "
+    "LeanDuet.ScopedSemantics.denote ("+exists_source_core
+    +" : LeanDuet.ScopedSemantics.Formula 1) "
+    "(fun i => LeanDuet.ScopedSemantics.denoteNat ("+x_to_zero+" i) ρ) "
+    ":= by exact LeanDuet.ScopedSemantics.denote_subst _ _ _"
+]
+with TemporaryDirectory() as tmp:
+    target=Path(tmp)/"BrowserScopedExistentialSubstitution.lean"
+    target.write_text(scoped_source+"\n\n"+"\n".join(exists_checks)+"\n",encoding="utf-8")
+    subprocess.run(["lean",str(target)],cwd=root,check=True,capture_output=True,text=True)
+print("Existential browser formulas preserve witness scope under context substitution")
 

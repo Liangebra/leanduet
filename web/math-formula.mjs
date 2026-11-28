@@ -32,7 +32,9 @@ function tokenize(s,{syntax='math'}={}){
    if(!Object.hasOwn(commands,cmd))throw Error('Unsupported macro \\'+cmd);
    const v=commands[cmd];push(bin[v]||'¬∀∃'.includes(v)?'op':'id',v,pos);continue;
   }
-  const name=/^[\p{L}][\p{L}\p{N}_']*/u.exec(s.slice(i));
+  const name=(syntax==='lean'
+   ?/^[\p{L}][\p{L}\p{N}_']*(?:\.[\p{L}][\p{L}\p{N}_']*)*/u
+   :/^[\p{L}][\p{L}\p{N}_']*/u).exec(s.slice(i));
   if(name){
    // Lean's elaborated targets often contain predicate-valued binders such
    // as `(P : Nat → Prop)`. Prop (and universe sort Type) is a sort in that
@@ -217,11 +219,12 @@ function scopedProp(node,contextSize) {
   scopedSemanticsFailure('unresolved-free-name','free identifier '+node.name+' has no proposition identity');
  }
  if(node?.kind==='binder'){
-  if(node.op!=='∀')scopedSemanticsFailure('unsupported-quantifier','only universal quantification over Nat is supported');
+  const constructor=node.op==='∀'?'all':node.op==='∃'?'exists':null;
+  if(!constructor)scopedSemanticsFailure('unsupported-quantifier','only universal and existential quantification over Nat are supported');
   if(!node.domain)scopedSemanticsFailure('missing-domain-annotation','a Nat binder must have an explicit domain');
   if(node.domain.kind!=='free'||node.domain.name!=='Nat')
    scopedSemanticsFailure('unsupported-binder-domain','only an explicit Nat binder is supported');
-  return {kind:'all',body:scopedProp(node.body,contextSize+1)};
+  return {kind:constructor,body:scopedProp(node.body,contextSize+1)};
  }
  if(node?.kind==='binary'){
   if(node.op==='=')
@@ -310,11 +313,12 @@ function contextualProp(node,context,depth) {
   scopedSemanticsFailure('unresolved-proposition-name','free name '+node.name+' has no proposition declaration in this fragment');
  }
  if(node?.kind==='binder'){
-  if(node.op!=='∀')scopedSemanticsFailure('unsupported-quantifier','only universal quantification over Nat is supported');
+  const constructor=node.op==='∀'?'all':node.op==='∃'?'exists':null;
+  if(!constructor)scopedSemanticsFailure('unsupported-quantifier','only universal and existential quantification over Nat are supported');
   if(!node.domain)scopedSemanticsFailure('missing-domain-annotation','a Nat binder must have an explicit domain');
   if(node.domain.kind!=='free'||node.domain.name!=='Nat')
    scopedSemanticsFailure('unsupported-binder-domain','only an explicit Nat binder is supported');
-  return {kind:'all',body:contextualProp(node.body,context,depth+1)};
+  return {kind:constructor,body:contextualProp(node.body,context,depth+1)};
  }
  if(node?.kind==='binary'){
   if(node.op==='=')
