@@ -6,7 +6,7 @@ Updated 2026-11-28 (UTC).
 
 - Main is `f1cd98152c1b92d3cf3911204ccc291689d3aafe` and includes PR #22, #37/#38, #39, #40, #42, #45 and #46. PR #22's branch-scope, source-position and residual-goal fixes are already in the baseline.
 - Main's latest Full Tests run `46087674165`, Mathlib integration `46087674089`, and Pages deployment `46087674048` succeeded.
-- PR #47 adds the pinned Lean 4.19 InfoTree trace adapter, an explicit local `/api/trace` path, and an on-demand browser view. The code-bearing head has passed adapter compilation, the semantic integration and Mathlib integration; the full browser workflow is being checked before the documented schema commit is accepted.
+- PR #47 adds the pinned Lean 4.19 InfoTree trace adapter, an explicit local `/api/trace` path, and an on-demand browser view. The code-bearing head passed adapter compilation, semantic integration, Mathlib integration, and the full browser workflow. Its actual fixture revealed repeated InfoTree wrappers for identical tactic ranges and goals; PR #47 now coalesces only exact duplicate observations and preserves their multiplicity for review. The revised schema and sample require a fresh full run.
 - PR #44 (Urdu language pack) remains open from a fork with workflow `action_required`; it is not treated as validated.
 - The real-math fixture has three small checked seeds: compact image in topology, subgroup multiplication closure, and linear-map additivity. These are acceptance anchors, not broad mathematical-language coverage.
 

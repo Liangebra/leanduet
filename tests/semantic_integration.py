@@ -171,13 +171,14 @@ assert {d["name"] for d in constructor["goalsBefore"][0]["localContext"]} >= {"h
 exact_hp = next(node for node in trace_nodes if node["syntax"].strip() == "exact hp")
 assert len(exact_hp["goalsBefore"]) == 1 and exact_hp["goalsAfter"] == [], exact_hp
 assert exact_hp["goalsBefore"][0]["target"] == "P", exact_hp
-assert "hp" in {d["name"] for d in exact_hp["referencedLocals"]}, exact_hp
+assert exact_hp["referencedLocals"] == [{"name": "hp", "contextIndex": 3}], exact_hp
 assert exact_hp["assignedProofTermCount"] == 1 and exact_hp["assignedProofTermsClosed"], exact_hp
 assert trace_result["infoTreeEnabled"] is True and trace_result["infoTreeCount"] > 0, trace_result
-assert trace_result["tacticInfoCount"] == len(trace_nodes), (trace_result["tacticInfoCount"], len(trace_nodes))
-assert exact_hp["termInfoCount"] == 0 and exact_hp["opaque"] is True, exact_hp
-assert exact_hp["opaqueRange"] == exact_hp["sourceRange"], exact_hp
-assert exact_hp["referencedLocals"] == [{"name": "hp", "contextIndex": 2}], exact_hp
+assert trace_result["tacticObservationCount"] == len(trace_nodes), (trace_result["tacticObservationCount"], len(trace_nodes))
+assert trace_result["tacticInfoCount"] > trace_result["tacticObservationCount"], trace_result
+assert exact_hp["infoNodeCount"] == 3, exact_hp
+assert exact_hp["termInfoCount"] == 2 and exact_hp["opaque"] is False, exact_hp
+assert exact_hp["opaqueRange"] is None and exact_hp["opaqueMapping"] is None, exact_hp
 assert exact_hp["sourceRange"]["start"]["line"] == 6, exact_hp
 mapped_source = trace_source.encode("utf-8")[exact_hp["sourceRange"]["startByte"]:exact_hp["sourceRange"]["endByte"]].decode("utf-8")
 assert mapped_source.strip() == "exact hp", (mapped_source, exact_hp)

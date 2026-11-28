@@ -448,7 +448,8 @@ elaboration, and unresolved carrier information is not treated as a match.
 The local Lean 4.19 adapter resolves deferred InfoTree assignments before
 reading tactic nodes. It records actual tactic syntax ranges, goals before and
 after, local contexts, child TermInfo references and references visible from
-assigned proof terms. This is useful input for later region alignment and
+assigned proof terms. Identical source/syntax/context/goal wrappers are
+coalesced for display, with raw multiplicity retained per observation. This is useful input for later region alignment and
 scope-aware dependency views; it is not a replacement for the shared partial
 mathematical graph.
 

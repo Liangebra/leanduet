@@ -28,28 +28,32 @@ parent tactic such as `constructor` can cover an entire nested block.
 | `declaration` | string | Name of the traced Lean declaration. |
 | `infoTreeEnabled` | boolean | Whether Lean InfoTree collection was enabled. |
 | `infoTreeCount` | integer | Number of resolved top-level InfoTrees. |
-| `tacticInfoCount` | integer | Number of TacticInfo nodes found in those trees. |
+| `tacticInfoCount` | integer | Raw number of TacticInfo nodes found in those trees before coalescing. |\n| `tacticObservationCount` | integer | Number of source/goal observations exposed in `tactics` after exact duplicate wrappers are coalesced. |
 | `tactics` | array | Tactic records in depth-first InfoTree traversal order. |
 | `sourceEncoding` | string | Currently `UTF-8`. |
 | `rangeConvention` | string | Range and position convention, repeated in the response for clients. |
 
 The adapter resolves synchronous and deferred InfoTree assignments before
-traversal. `tacticInfoCount` counts elaborator nodes, not source lines.
+traversal. Repeated wrappers are coalesced only when source range, reprinted
+syntax, context availability, and goals before/after all match. The first
+occurrence sets display order; `infoNodeCount` preserves raw multiplicity.
+Unranged nodes are not coalesced. Neither raw nodes nor coalesced observations
+are source-line counts.
 
 ## Tactic record
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `syntax` | string | Lean's reprinted syntax for the tactic node. It may include surrounding whitespace. |
+| `syntax` | string | Lean's reprinted syntax for the tactic node. It may include surrounding whitespace. |\n| `infoNodeCount` | integer | Number of raw TacticInfo wrappers coalesced into this identical source/syntax/context/goal observation. |
 | `sourceRange` | range or null | Mapped half-open range in the original submitted source. |
 | `contextAvailable` | boolean | Whether a Lean context was attached to the node. |
 | `goalsBefore`, `goalsAfter` | arrays | Lean metavariable goals before and after this node. |
-| `termInfoCount` | integer | Child TermInfo/DelabTermInfo expressions recorded under this tactic. |
-| `assignedProofTermCount` | integer | Goals from `goalsBefore` with an assignment in the node's post-state. |
+| `termInfoCount` | integer | Maximum child TermInfo/DelabTermInfo expression count among wrappers coalesced into this observation. |
+| `assignedProofTermCount` | integer | Maximum count across wrappers of goals from `goalsBefore` assigned in the node's post-state. |
 | `assignedProofTermsClosed` | boolean | True only when at least one such assignment exists and each assigned expression has no remaining expression metavariables after instantiation. This is not a statement about authorial intent. |
-| `referencedDeclarations` | string array | Constants occurring syntactically in recorded term expressions or assigned proof terms. |
-| `referencedLocals` | object array | Local variables occurring syntactically in those expressions; each has a display `name` and a context-local `contextIndex`. |
-| `opaque` | boolean | True exactly when `termInfoCount` is zero. It means no child TermInfo was recorded, not that the tactic has no proof term. |
+| `referencedDeclarations` | string array | Deduplicated constants occurring syntactically in recorded term expressions or assigned proof terms. |
+| `referencedLocals` | object array | Deduplicated local variables occurring syntactically in those expressions; each has a display `name` and a context-local `contextIndex`. |
+| `opaque` | boolean | True exactly when the coalesced `termInfoCount` is zero. It means no child TermInfo was recorded for any coalesced wrapper, not that the tactic has no proof term. |
 | `opaqueRange` | range or null | When opaque, the whole `sourceRange`; otherwise null. |
 | `opaqueMapping` | string or null | Explains the opaque-range mapping and that assigned-goal references may still be present. |
 
@@ -87,33 +91,30 @@ the tactic, so the byte range verifies the adapter-preamble remapping.
     {
       "target": "P",
       "localContext": [
-        { "name": "P", "contextIndex": 0, "type": "Prop" },
-        { "name": "Q", "contextIndex": 1, "type": "Prop" },
-        { "name": "hp", "contextIndex": 2, "type": "P" },
-        { "name": "hq", "contextIndex": 3, "type": "Q" }
+        { "name": "P", "contextIndex": 1, "type": "Prop" },
+        { "name": "Q", "contextIndex": 2, "type": "Prop" },
+        { "name": "hp", "contextIndex": 3, "type": "P" },
+        { "name": "hq", "contextIndex": 4, "type": "Q" }
       ]
     }
   ],
   "goalsAfter": [],
-  "termInfoCount": 0,
+  "infoNodeCount": 3,
+  "termInfoCount": 2,
   "assignedProofTermCount": 1,
   "assignedProofTermsClosed": true,
   "referencedDeclarations": [],
-  "referencedLocals": [{ "name": "hp", "contextIndex": 2 }],
-  "opaque": true,
-  "opaqueRange": {
-    "startByte": 159,
-    "endByte": 167,
-    "start": { "line": 6, "column": 4 },
-    "end": { "line": 6, "column": 12 }
-  },
-  "opaqueMapping": "No child TermInfo expression was recorded; opaque tactic syntax maps to sourceRange. References may still be observed from assigned goals."
+  "referencedLocals": [{ "name": "hp", "contextIndex": 3 }],
+  "opaque": false,
+  "opaqueRange": null,
+  "opaqueMapping": null
 }
 ```
 
-The integration test checks the schema, deterministic repeat output, this
-local reference and assignment behavior, the source-byte slice, the nested
-conjunction goals, and the opaque `assumption` mapping. The browser smoke test
+The integration test checks the schema, deterministic repeat output, duplicate
+wrapper coalescing, this local reference and assignment behavior, the
+source-byte slice, nested conjunction goals, and the opaque `assumption`
+mapping. The browser smoke test
 captures a trace only after an explicit user action and verifies the localized
 goal display. These checks validate the adapter behavior, not a prose/Lean
 round trip.
