@@ -360,8 +360,10 @@ analysis_direct_source=analysis_prefix+analysis_file[analysis_direct_start:analy
 analysis_local_let_source=analysis_prefix+analysis_file[analysis_let_start:]
 analysis_direct_tree=extract(analysis_direct_source,project)["tree"]
 analysis_local_let_tree=extract(analysis_local_let_source,project)["tree"]
-assert analysis_direct_tree["type"]==analysis_local_let_tree["type"],(
+assert analysis_direct_tree["typeShape"]==analysis_local_let_tree["typeShape"],(
     analysis_direct_tree["type"],analysis_local_let_tree["type"])
+assert analysis_direct_tree["type"]!=analysis_local_let_tree["type"],(
+    "The fixture should exercise different display names for alpha-equivalent binders.")
 assert "HasDerivAt" in analysis_direct_tree["type"],analysis_direct_tree["type"]
 
 def is_derivative_add(node):
