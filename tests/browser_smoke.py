@@ -661,6 +661,38 @@ $R$ | gr localQ"""
             expect(classical_page.locator("#verifyState")).to_have_text("Lean passed",timeout=120000)
             classical_page.close()
 
+            induction_page=browser.new_page(viewport={"width":1440,"height":900})
+            induction_page.on("pageerror",lambda error:errors.append(str(error)))
+            induction_page.goto(url)
+            induction_source="""theorem nat_induction_browser (P : Nat → Prop) (hbase : P 0)
+    (hstep : ∀ k : Nat, P k → P (k + 1)) : ∀ n : Nat, P n := by
+  intro n
+  induction n with
+  | zero => exact hbase
+  | succ k ih => exact hstep k ih
+"""
+            induction_page.locator("#lean").fill(induction_source)
+            induction_page.once("dialog",lambda d:d.accept())
+            induction_page.locator("#adopt").click()
+            induction_page.locator('[data-view="typed"]').click()
+            induction_page.locator("#extractTerm").click()
+            expect(induction_page.locator("#typedStatus")).to_contain_text("Extracted from Lean elaboration",timeout=60000)
+            select_typed_edit(induction_page,includes=("P n",))
+            induction_page.locator("#chainEditor summary").click()
+            induction_page.locator("#chainFormat").select_option("natural")
+            induction_page.locator("#chainText").fill("induction n\n  zero case\n    $P(0)$ | hbase\n  successor case\n    $P(n_step + 1)$ | hstep n_step ih")
+            expect(induction_page.locator("#draftTranslation")).to_contain_text("zero · (P 0) · complete")
+            expect(induction_page.locator("#draftTranslation")).to_contain_text("successor · (P (n_step + 1)) · complete")
+            induction_page.locator("#compileChain").click()
+            expect(induction_page.locator("#patchTerm")).to_have_value(__import__("re").compile(r"induction n with[\s\S]*exact hstep n_step ih"))
+            induction_page.locator("#checkPatch").click()
+            expect(induction_page.locator("#applyPatch")).to_be_enabled(timeout=120000)
+            induction_page.once("dialog",lambda d:d.accept())
+            induction_page.locator("#applyPatch").click()
+            induction_page.locator("#check").click()
+            expect(induction_page.locator("#verifyState")).to_have_text("Lean passed",timeout=120000)
+            induction_page.close()
+
             assert not errors, errors
             browser.close()
         print("Browser smoke test passed")
