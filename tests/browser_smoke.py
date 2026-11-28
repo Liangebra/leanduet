@@ -802,7 +802,7 @@ $R$ | gr localQ"""
             expect(rows.nth(1)).not_to_contain_text("hall n")
             expect(rows.nth(1)).to_contain_text("Clear choice")
             alpha_page.locator("#compileChain").click()
-            expect(alpha_page.locator("#patchTerm")).to_have_value(__import__("re").compile(r"intro k[\\s\\S]*hall k"))
+            expect(alpha_page.locator("#patchTerm")).to_have_value(__import__("re").compile(r"intro k[\s\S]*hall k"))
             alpha_page.locator("#checkPatch").click()
             expect(alpha_page.locator("#applyPatch")).to_be_enabled(timeout=120000)
             alpha_page.once("dialog",lambda d:d.accept())
