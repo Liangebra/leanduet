@@ -175,7 +175,7 @@ test('renaming an operation-local assumption preserves its scoped object identit
 });
 test('renaming an introduced universal variable preserves its operation and local object identities',()=>{
  const scope=['hall'],facts=new Map([['hall','∀ n : Nat, P n']]),goal='∀ n : Nat, P n';
- const compile=name=>compileNaturalDraft(`take ${name}\\n$P(${name})$ | hall ${name}`,scope,facts,{goal});
+ const compile=name=>compileNaturalDraft(`take ${name}\n$P(${name})$ | hall ${name}`,scope,facts,{goal});
  const original=compile('n'),renamed=compile('k');
  assert.equal(original.complete,true,JSON.stringify(original.rows,null,2));
  assert.equal(renamed.complete,true,JSON.stringify(renamed.rows,null,2));
