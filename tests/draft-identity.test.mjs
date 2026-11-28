@@ -211,11 +211,12 @@ test('a selected proof candidate follows uniquely matched local objects through 
  const scope=['hall','hall2'];
  const facts=new Map([['hall','∀ x : Nat, P x'],['hall2','∀ x : Nat, P x']]);
  const make=(name,choices=new Map())=>compileNaturalDraft(
-  'take '+name+' : $Nat$\\n$P('+name+')$',scope,facts,
+  'take '+name+' : $Nat$\n$P('+name+')$ | hall '+name,scope,facts,
   {goal:'∀ '+name+' : Nat, P '+name,choices});
  const selected=new Map([[2,'hall n']]);
  const original=make('n',selected),renamed=make('k');
  assert.equal(original.complete,true,JSON.stringify(original.rows,null,2));
+ assert.equal(renamed.complete,true,JSON.stringify(renamed.rows,null,2));
  const oldRow=original.graph.nodes.find(node=>node.id==='line:2');
  const newRow=renamed.graph.nodes.find(node=>node.id==='line:2');
  assert.ok(oldRow?.alternatives.some(candidate=>(candidate.choice??candidate.term)==='hall n'));
