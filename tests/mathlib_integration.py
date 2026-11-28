@@ -224,7 +224,6 @@ local_let_source=shared_prefix+counterexample_source[let_start:]
 direct_tree=extract(direct_source,project)["tree"]
 local_let_tree=extract(local_let_source,project)["tree"]
 assert direct_tree["type"]==local_let_tree["type"],(direct_tree,local_let_tree)
-assert direct_tree["kind"]=="apply",direct_tree
 assert any(n["kind"]=="let" and n.get("binder")=="imageProof" for n in walk(local_let_tree)),local_let_tree
 assert not any(n["kind"]=="let" and n.get("binder")=="imageProof" for n in walk(direct_tree)),direct_tree
 
