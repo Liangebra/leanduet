@@ -134,7 +134,7 @@ private def referencesFromAssignedGoals (ctx? : Option ContextInfo) (info : Tact
         allAssignmentsClosed := false
       let termReferences := referencesFromTerm assignment localContext
       references := mergeTermReferences references {termReferences with termInfoCount := 0}
-  return (references, assignmentCount, allAssignmentsClosed)
+  return (references, assignmentCount, assignmentCount > 0 && allAssignmentsClosed)
 
 private def traceTacticJson (fileMap : FileMap) (ctx? : Option ContextInfo)
     (info : TacticInfo) (children : PersistentArray InfoTree) : IO Json := do
