@@ -152,7 +152,11 @@ export function compileGoalOperationProgram(input,frame,{goal=null,choices=new M
    if(!['conclude','and-intro','iff-intro','exists-intro','classical-reductio','nat-induction'].includes(conclusion?.kind)){
     firstOpen??={line:subgoal.line,reason:'A child proof did not end with a conclusion.'};
    }else{
-    const localIds=graphNodes(result.graph).filter(node=>!parentIds.has(node.id)&&node.kind!=='context').map(node=>node.id);
+    // Context nodes in a nested operation can themselves be local to this
+    // child (for example, a Nat induction variable and its IH). Discharge
+    // every identity introduced below the current parent boundary, including
+    // those context nodes, rather than only non-context proof rows.
+    const localIds=graphNodes(result.graph).filter(node=>!parentIds.has(node.id)).map(node=>node.id);
     closed=closeProofScope(frame,child,{proofType:plan.goal,dependencies:proofContextDependencies(result.graph),localIds});
    }
   }else{

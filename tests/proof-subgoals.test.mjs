@@ -61,6 +61,13 @@ test('natural induction exposes a local induction hypothesis and keeps it out of
  const stepContext=subgoals[1].graph.nodes.filter(item=>item.kind==='context');
  assert.ok(stepContext.some(item=>item.name==='n_step'&&item.type==='Nat'),stepContext);
  assert.ok(stepContext.some(item=>item.name==='ih'&&item.type==='Q'),stepContext);
+ const operationNode=result.graph.nodes.find(item=>item.kind==='nat-induction');
+ assert.equal(operationNode.subgoals.length,2,'the shared graph must retain both induction branches');
+ assert.ok(operationNode.dependencies.includes('context:1'),
+  'the parent graph must retain the base proof dependency, not only the row projection');
+ assert.ok(!operationNode.dependencies.some(id=>stepContext.some(binding=>
+  ['n_step','ih'].includes(binding.name)&&binding.id===id)),
+  'the induction variable and hypothesis must not escape into the parent dependency graph');
  const dependent=compileNaturalDraft(`induction n
   zero case
     $0 = 0$ | rfl
