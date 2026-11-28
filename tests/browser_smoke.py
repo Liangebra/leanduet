@@ -677,7 +677,11 @@ $R$ | gr localQ"""
             induction_page.locator('[data-view="typed"]').click()
             induction_page.locator("#extractTerm").click()
             expect(induction_page.locator("#typedStatus")).to_contain_text("Extracted from Lean elaboration",timeout=60000)
-            select_typed_edit(induction_page,includes=("P n",))
+            # Induction is a goal operation on the explicit quantified target.
+            # Selecting the nested proof of `P n` instead would ask the
+            # operation planner to induct on an unquantified leaf goal.
+            select_typed_edit(induction_page,includes=("∀","P n"))
+            expect(induction_page.locator("#patchTarget")).to_contain_text("∀")
             induction_page.locator("#chainEditor summary").click()
             induction_page.locator("#chainFormat").select_option("natural")
             induction_page.locator("#chainText").fill("induction n\n  zero case\n    $P(0)$ | hbase\n  successor case\n    $P(n_step + 1)$ | hstep n_step ih")
