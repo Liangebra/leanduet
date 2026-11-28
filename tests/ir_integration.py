@@ -152,7 +152,25 @@ renamed_formula = compile_browser_formula(
 assert renamed_formula["scoped"] == scoped
 assert renamed_formula["lean"] != browser_formula["lean"]
 
-def check_browser_formula(candidate, theorem_name):
+# Reusing a display name in a nested binder is lexical shadowing, not a
+# reference to the outer object. The canonical term should match a fresh-name
+# presentation that refers to its innermost binder twice.
+shadowed_formula = compile_browser_formula(
+    r"\forall n : \mathbb{N}, \forall n : \mathbb{N}, n = n"
+)
+fresh_shadow_equivalent = compile_browser_formula(
+    r"\forall outer : \mathbb{N}, \forall inner : \mathbb{N}, inner = inner"
+)
+shadowed_scoped = shadowed_formula["scoped"]
+shadowed_equality = shadowed_scoped["body"]["body"]
+assert shadowed_scoped["body"]["kind"] == "binder", shadowed_scoped
+assert shadowed_equality["kind"] == "binary" and shadowed_equality["op"] == "=", shadowed_scoped
+assert shadowed_equality["left"] == {"kind": "bound", "index": 0}, shadowed_scoped
+assert shadowed_equality["right"] == {"kind": "bound", "index": 0}, shadowed_scoped
+assert shadowed_scoped == fresh_shadow_equivalent["scoped"]
+assert shadowed_formula["lean"] != fresh_shadow_equivalent["lean"]
+
+def check_browser_formula(candidate, theorem_name, expected_bound_indices=(0, 0, 1, 1)):
     source = (
         f"theorem {theorem_name} : {candidate['lean']} := by\n"
         "  intro _ _\n"
@@ -176,12 +194,19 @@ def check_browser_formula(candidate, theorem_name):
     body = inner[4]
     indices = [node[1] for node in expression_nodes(body)
                if len(node) == 2 and node[0] == "bound"]
-    assert sorted(indices) == [0, 0, 1, 1], native_type
+    assert sorted(indices) == list(expected_bound_indices), native_type
     assert "Eq" in json.dumps(body), native_type
     return native_type
 
 native_type = check_browser_formula(browser_formula, "browser_formula_native_ir")
 renamed_native_type = check_browser_formula(renamed_formula, "browser_formula_alpha_native_ir")
 assert erase_native_binder_names(native_type) == erase_native_binder_names(renamed_native_type)
+shadowed_native_type = check_browser_formula(
+    shadowed_formula, "browser_formula_shadowed_native_ir", expected_bound_indices=(0, 0)
+)
+fresh_shadow_native_type = check_browser_formula(
+    fresh_shadow_equivalent, "browser_formula_fresh_shadow_native_ir", expected_bound_indices=(0, 0)
+)
+assert erase_native_binder_names(shadowed_native_type) == erase_native_binder_names(fresh_shadow_native_type)
 
 print("Browser formula binders retain de Bruijn identity through Lean elaboration and native IR")
