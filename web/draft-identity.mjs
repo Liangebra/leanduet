@@ -121,10 +121,12 @@ export function reconcileDraftIdentity(previous,graph){
   const trialIds=new Map(ids),pairs=[];
   for(let index=0;index<oldDelta.length;index++){
    const prior=oldDelta[index],current=newDelta[index];
-   if(prior.kind!==current.kind||prior.name!==current.name||!prior.id||!current.id)return false;
-   const priorIdentity=previous?.ids.get(prior.id);
+   const priorId=prior.id||oldSubgoal.id+'/binding:'+index;
+   const currentId=current.id||newSubgoal.id+'/binding:'+index;
+   if(prior.kind!==current.kind||prior.name!==current.name)return false;
+   const priorIdentity=previous?.ids.get(priorId);
    if(priorIdentity===undefined)return false;
-   const oldContext=oldContexts.get(prior.id),newContext=newContexts.get(current.id);
+   const oldContext=oldContexts.get(priorId),newContext=newContexts.get(currentId);
    if(!oldContext||!newContext||oldContext.ambiguousName||newContext.ambiguousName)return false;
    const oldType=oldContext.formula?.tree,newType=newContext.formula?.tree;
    let sameType=oldContext.type===newContext.type;
@@ -133,9 +135,9 @@ export function reconcileDraftIdentity(previous,graph){
     catch{sameType=false;}
    }
    if(!sameType)return false;
-   if(trialIds.has(current.id)&&trialIds.get(current.id)!==priorIdentity)return false;
-   trialIds.set(current.id,priorIdentity);
-   pairs.push([current.id,prior.id]);
+   if(trialIds.has(currentId)&&trialIds.get(currentId)!==priorIdentity)return false;
+   trialIds.set(currentId,priorIdentity);
+   pairs.push([currentId,priorId]);
   }
   for(const [currentId,priorId] of pairs)if(!mapToPrior(currentId,priorId))return false;
   return true;
