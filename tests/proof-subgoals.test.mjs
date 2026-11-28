@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {compileNaturalDraft,createDraftSession} from '../web/natural-draft.mjs';
 import {planGoalOperation} from '../web/context-extension.mjs';
+import {goalOperationHeader} from '../web/proof-subgoals.mjs';
 
 const pair=(first,second='hq')=>`split conjunction\n  first goal\n    ${first}\n  second goal\n    $Q$ | ${second}`;
 
@@ -20,6 +21,155 @@ test('goal operations distinguish intuitionistic negation from a two-child conju
  assert.equal(cases.logic,'intuitionistic');
  assert.equal(cases.closure.name,'Or.elim');
  assert.deepEqual(cases.subgoals.map(subgoal=>subgoal.contextDelta[0].type),['P','Q']);
+});
+
+test('natural induction expands only an explicit universal Nat goal into isolated base and successor scopes',()=>{
+ const operation=planGoalOperation('∀ n : Nat, P n',{
+  kind:'nat-induction',name:'k',stepName:'k_step',inductionHypothesisName:'ih'
+ });
+ assert.equal(operation.logic,'inductive');
+ assert.equal(operation.closure.name,'Nat.rec');
+ assert.deepEqual(operation.subgoals.map(goal=>goal.id),['base','successor']);
+ assert.equal(operation.subgoals[0].goal,'(P 0)');
+ assert.equal(operation.subgoals[1].goal,'(P (k_step + 1))');
+ assert.deepEqual(operation.subgoals[1].contextDelta,[
+  {name:'k_step',type:'Nat',kind:'induction-variable'},
+  {name:'ih',type:'(P k_step)',kind:'induction-hypothesis'}
+ ]);
+ assert.equal(goalOperationHeader('induction n').kind,'nat-induction');
+ assert.equal(goalOperationHeader('对 n 归纳').name,'n');
+ assert.throws(()=>planGoalOperation('∀ n : Int, P n',{
+  kind:'nat-induction',name:'n',stepName:'n_step'
+ }),/explicit universal Nat goal/);
+ assert.throws(()=>planGoalOperation('P',{kind:'nat-induction',name:'n',stepName:'n_step'}),/explicit universal Nat goal/);
+ assert.throws(()=>planGoalOperation('∀ n : Nat, ∀ k : Nat, k = n',{
+  kind:'nat-induction',name:'n',stepName:'k'
+ }),/captured/);
+});
+
+test('natural induction exposes a local induction hypothesis and keeps it out of the parent dependencies',()=>{
+ const result=compileNaturalDraft(`induction n
+  zero case
+    $Q$ | hq
+  successor case
+    $Q$ | ih`,['Q','hq'],new Map([['Q','Prop'],['hq','Q']]),{goal:'∀ n : Nat, Q'});
+ assert.equal(result.complete,true,JSON.stringify(result.rows,null,2));
+ assert.equal(result.steps.at(-1).kind,'nat-induction');
+ assert.match(result.term,/intro n[\s\S]*induction n with[\s\S]*\| zero =>[\s\S]*exact hq[\s\S]*\| succ n_step ih =>[\s\S]*exact ih/);
+ const subgoals=result.rows[0].subgoals;
+ assert.deepEqual(subgoals.map(goal=>goal.status),['complete','complete']);
+ const stepContext=subgoals[1].graph.nodes.filter(item=>item.kind==='context');
+ assert.ok(stepContext.some(item=>item.name==='n_step'&&item.type==='Nat'),stepContext);
+ assert.ok(stepContext.some(item=>item.name==='ih'&&item.type==='Q'),stepContext);
+ const operationNode=result.graph.nodes.find(item=>item.kind==='nat-induction');
+ assert.equal(operationNode.subgoals.length,2,'the shared graph must retain both induction branches');
+ assert.ok(operationNode.dependencies.includes('context:1'),
+  'the parent graph must retain the base proof dependency, not only the row projection');
+ assert.ok(!operationNode.dependencies.some(id=>stepContext.some(binding=>
+  ['n_step','ih'].includes(binding.name)&&binding.id===id)),
+  'the induction variable and hypothesis must not escape into the parent dependency graph');
+ const dependent=compileNaturalDraft(`induction n
+  zero case
+    $0 = 0$ | rfl
+  successor case
+    $n_step + 1 = n_step + 1$ | rfl`,[],new Map(),{goal:'∀ n : Nat, n = n'});
+ const dependentContext=dependent.rows[0].subgoals[1].graph.nodes.filter(item=>item.kind==='context');
+ const stepObject=dependentContext.find(item=>item.name==='n_step');
+ const inductionHypothesis=dependentContext.find(item=>item.name==='ih');
+ assert.ok(inductionHypothesis.dependencies.includes(stepObject.id),inductionHypothesis);
+ const dependentStep=compileNaturalDraft(`induction n
+  zero case
+    $P(0)$ | hbase
+  successor case
+    $P(n_step + 1)$ | hstep n_step ih`,['P','hbase','hstep'],new Map([
+   ['P','Nat → Prop'],['hbase','P(0)'],['hstep','∀ k : Nat, P(k) → P(k + 1)']
+  ]),{goal:'∀ n : Nat, P(n)'});
+ assert.equal(dependentStep.complete,true,JSON.stringify(dependentStep.rows,null,2));
+ assert.match(dependentStep.term,/exact hstep n_step ih/);
+ assert.ok(result.rows[0].dependencies.includes('context:1'),'the base proof dependency and its type are returned');
+ assert.ok(!result.rows[0].dependencies.some(id=>stepContext.some(binding=>
+  ['n_step','ih'].includes(binding.name)&&binding.id===id)),
+  'the step variable and induction hypothesis must be discharged when the child closes');
+});
+
+test('dependent Nat induction substitutes the successor without capture and is incrementally stable',()=>{
+ const input=`induction n
+  zero case
+    $0 = 0$ | rfl
+  successor case
+    $n_step + 1 = n_step + 1$ | rfl`;
+ const session=createDraftSession();
+ const first=session.evaluate(input,[],new Map(),{goal:'∀ n : Nat, n = n'});
+ const cold=compileNaturalDraft(input,[],new Map(),{goal:'∀ n : Nat, n = n'});
+ assert.equal(first.complete,true,JSON.stringify(first.rows,null,2));
+ assert.deepEqual(first.rows,cold.rows);
+ assert.deepEqual(first.graph,cold.graph);
+ assert.equal(first.term,cold.term);
+ const editedInput=input.replace('$0 = 0$ | rfl','$0 = 0$ | Eq.refl');
+ const replay=session.evaluate(editedInput,[],new Map(),{goal:'∀ n : Nat, n = n'});
+ const editedCold=compileNaturalDraft(editedInput,[],new Map(),{goal:'∀ n : Nat, n = n'});
+ const stripReuse=({reusedRows,...rest})=>rest;
+ assert.deepEqual(stripReuse(replay),stripReuse(editedCold));
+ const occupied=compileNaturalDraft(`induction n
+  zero case
+    $0 = 0$ | rfl
+  successor case
+    $n_step_1 + 1 = n_step_1 + 1$ | rfl`,
+  ['n_step','ih'],new Map([['n_step','Nat'],['ih','Prop']]),{goal:'∀ n : Nat, n = n'});
+ assert.equal(occupied.complete,true,JSON.stringify(occupied.rows,null,2));
+ assert.equal(occupied.rows[0].goalOperation.stepName,'n_step_1');
+ assert.equal(occupied.rows[0].goalOperation.inductionHypothesisName,'ih_1');
+});
+
+test('nested Nat induction remains compositional and an open branch preserves its sibling graph',()=>{
+ const nested=compileNaturalDraft(`induction n
+  zero case
+    induction m
+      zero case
+        $0 = 0$ | rfl
+      successor case
+        $m_step + 1 = m_step + 1$ | rfl
+  successor case
+    induction m
+      zero case
+        $0 = 0$ | rfl
+      successor case
+        $m_step + 1 = m_step + 1$ | rfl`,[],new Map(),{goal:'∀ n : Nat, ∀ m : Nat, m = m'});
+ assert.equal(nested.complete,true,JSON.stringify(nested.rows,null,2));
+ assert.match(nested.term,/induction n with[\s\S]*induction m with[\s\S]*\| succ n_step ih =>[\s\S]*induction m with/);
+
+ const open=compileNaturalDraft(`induction n
+  zero case
+    $Q$ | ?
+  successor case
+    $Q$ | hq`,['Q','hq'],new Map([['Q','Prop'],['hq','Q']]),{goal:'∀ n : Nat, Q'});
+ assert.equal(open.complete,true,'a renderable proof draft may still contain an open exact-search obligation');
+ assert.equal(open.rows[0].proofStatus,'open');
+ assert.deepEqual(open.rows[0].subgoals.map(goal=>goal.status),['open-obligation','complete']);
+ assert.equal(open.rows[0].subgoals.length,2,'an open base obligation must not erase the usable successor structure');
+});
+
+test('Nat induction closes independently inside both disjunction branches',()=>{
+ const text=`case split h, establish hN : $∀ n : Nat, n = n$
+  left case hp
+    induction n
+      zero case
+        $0 = 0$ | rfl
+      successor case
+        $n_step + 1 = n_step + 1$ | rfl
+  right case hq
+    induction n
+      zero case
+        $0 = 0$ | rfl
+      successor case
+        $n_step + 1 = n_step + 1$ | rfl`;
+ const result=compileNaturalDraft(text,['h'],new Map([['h','P ∨ Q']]),{goal:'∀ n : Nat, n = n'});
+ assert.equal(result.complete,true,JSON.stringify(result.rows,null,2));
+ assert.deepEqual(result.rows[0].branches.map(branch=>branch.status),['complete','complete']);
+ assert.equal((result.term.match(/induction n with/g)||[]).length,2);
+ assert.ok(result.rows[0].dependencies.includes('context:0'));
+ assert.deepEqual(result.rows[0].branches.map(branch=>branch.dependencies),[[],[]],
+  'branch-local case assumptions are discharged when each induction closes');
 });
 
 test('classical reductio is explicit and its temporary negation stays local',()=>{

@@ -98,6 +98,20 @@ const localLemmaLineShift='\n'+localLemma;
 const localLemmaSession=createDraftSession();
 const fullLocalLemma=text=>compileNaturalDraft(text,localLemmaScope,localLemmaFacts,{goal:'R'});
 
+const inductionFacts=new Map([['Q','Prop'],['hq','Q'],['hq2','Q']]);
+for(let i=0;i<32;i++)inductionFacts.set('inductionNoise'+i,'Noise'+i);
+const inductionScope=[...inductionFacts.keys()];
+const natInduction=[
+ 'induction n',
+ '  zero case',
+ '    $Q$ | hq',
+ '  successor case',
+ '    $Q$ | ih'
+].join('\n');
+const natInductionBaseEdit=natInduction.replace('$Q$ | hq','$Q$ | hq2');
+const natInductionSession=createDraftSession();
+const fullNatInduction=text=>compileNaturalDraft(text,inductionScope,inductionFacts,{goal:'∀ n : Nat, Q'});
+
 const results=[
  measure({name:'cold full evaluation · 16 proof lines / 62 typed locals',evaluate:cold.evaluate,reference:cold.reference,inputAt:()=>lastH14}),
  measure({name:'warm exact replay · 16 proof lines / 62 typed locals',evaluate:text=>warm.evaluate(text,scope,facts),reference:cold.reference,inputAt:()=>lastH14,expectedReuse:16}),
@@ -117,7 +131,10 @@ const results=[
  measure({name:'local lemma · cold / 51 typed locals',evaluate:fullLocalLemma,reference:fullLocalLemma,inputAt:()=>localLemma}),
  measure({name:'local lemma · exact replay',evaluate:text=>localLemmaSession.evaluate(text,localLemmaScope,localLemmaFacts,{goal:'R'}),reference:fullLocalLemma,inputAt:()=>localLemma}),
  measure({name:'local lemma · one-premise edit',evaluate:text=>localLemmaSession.evaluate(text,localLemmaScope,localLemmaFacts,{goal:'R'}),reference:fullLocalLemma,inputAt:()=>localLemmaOneCharEdit,beforeSample:()=>{localLemmaSession.reset();localLemmaSession.evaluate(localLemma,localLemmaScope,localLemmaFacts,{goal:'R'});}}),
- measure({name:'local lemma · source-line shift',evaluate:text=>localLemmaSession.evaluate(text,localLemmaScope,localLemmaFacts,{goal:'R'}),reference:fullLocalLemma,inputAt:()=>localLemmaLineShift,beforeSample:()=>{localLemmaSession.reset();localLemmaSession.evaluate(localLemma,localLemmaScope,localLemmaFacts,{goal:'R'});}})
+ measure({name:'local lemma · source-line shift',evaluate:text=>localLemmaSession.evaluate(text,localLemmaScope,localLemmaFacts,{goal:'R'}),reference:fullLocalLemma,inputAt:()=>localLemmaLineShift,beforeSample:()=>{localLemmaSession.reset();localLemmaSession.evaluate(localLemma,localLemmaScope,localLemmaFacts,{goal:'R'});}}),
+ measure({name:'Nat induction · cold / two child scopes / 35 typed locals',evaluate:fullNatInduction,reference:fullNatInduction,inputAt:()=>natInduction}),
+ measure({name:'Nat induction · exact replay',evaluate:text=>natInductionSession.evaluate(text,inductionScope,inductionFacts,{goal:'∀ n : Nat, Q'}),reference:fullNatInduction,inputAt:()=>natInduction}),
+ measure({name:'Nat induction · base proof edit',evaluate:text=>natInductionSession.evaluate(text,inductionScope,inductionFacts,{goal:'∀ n : Nat, Q'}),reference:fullNatInduction,inputAt:()=>natInductionBaseEdit,beforeSample:()=>{natInductionSession.reset();natInductionSession.evaluate(natInduction,inductionScope,inductionFacts,{goal:'∀ n : Nat, Q'});}})
 ];
 
 textOutput({node:process.version,platform:process.platform,architecture:process.arch,warmup,samples,results});

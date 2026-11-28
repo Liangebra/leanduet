@@ -6,6 +6,8 @@ import {renderChain} from './proof-chain.mjs';
 import {graphNodes,proofContextDependencies,proofResultId,remapProofGraph} from './case-split.mjs';
 
 const operations=[
+ {kind:'nat-induction',header:/^(?:induction|by induction)\s+([A-Za-z_][A-Za-z0-9_']{0,63})$|^(?:对\s*|关于\s*)?([A-Za-z_][A-Za-z0-9_']{0,63})\s*(?:作|进行)?(?:自然数)?归纳$/iu,
+  subgoals:[{id:'base',heading:/^(?:base case|zero case|基例|零步)$/iu},{id:'successor',heading:/^(?:successor case|inductive step|后继步|归纳步)$/iu}]},
  {kind:'conjunction-introduction',header:/^(?:split conjunction|prove conjunction|分解合取目标|证明合取目标)$/iu,
   subgoals:[{id:'first',heading:/^(?:first goal|第一子目标)$/iu},{id:'second',heading:/^(?:second goal|第二子目标)$/iu}]},
  {kind:'iff-introduction',header:/^(?:prove equivalence|证明等价命题)$/iu,
@@ -42,7 +44,8 @@ export function goalOperationHeader(text){
  if(!first)return null;
  for(const operation of operations){
   const match=operation.header.exec(first.trim());
-  if(match)return {kind:operation.kind,name:operation.kind==='classical-reductio'?match[1]||null:null,
+  if(match)return {kind:operation.kind,name:operation.kind==='classical-reductio'?match[1]||null:
+   operation.kind==='nat-induction'?match[1]||match[2]||null:null,
    witness:operation.kind==='existential-introduction'?match[1]||null:null,subgoals:operation.subgoals};
  }
  return null;
@@ -104,8 +107,29 @@ export function compileGoalOperationProgram(input,frame,{goal=null,choices=new M
   if(witnessBinding.status!=='resolved'||typeof witnessBinding.binding.type!=='string')
    throw Error('Existential construction needs a uniquely visible typed local witness.');
  }
+ let stepName=null,inductionHypothesisName='ih';
+ if(parsed.kind==='nat-induction'){
+  const reserved=new Set(frame.bindings.map(binding=>binding.name));
+  function collectNames(ast){
+   if(!ast||typeof ast!=='object')return;
+   if(ast.kind==='id')reserved.add(ast.value);
+   if(['binder','bounded'].includes(ast.kind))reserved.add(ast.name);
+   for(const value of Object.values(ast))if(Array.isArray(value))value.forEach(collectNames);else if(value&&typeof value==='object')collectNames(value);
+  }
+  collectNames(compileFormula(target,{syntax:'lean'}).ast);
+  function fresh(base){
+   const stem=base.slice(0,52)||'x';let candidate=stem,index=0;
+   while(reserved.has(candidate)){
+    index++;
+    const suffix='_'+index;candidate=stem.slice(0,64-suffix.length)+suffix;
+   }
+   reserved.add(candidate);return candidate;
+  }
+  stepName=fresh(parsed.name+'_step');
+  inductionHypothesisName=fresh('ih');
+ }
  const operation=planGoalOperation(target,{kind:parsed.kind,name:parsed.name,witness:parsed.witness,
-  witnessType:witnessBinding?.binding.type,witnessId:witnessBinding?.binding.id});
+  witnessType:witnessBinding?.binding.type,witnessId:witnessBinding?.binding.id,stepName,inductionHypothesisName});
  const reserved=parsed.subgoals.map(subgoal=>{
   const names=new Set();
   for(const raw of subgoal.sourceLines){
@@ -125,10 +149,14 @@ export function compileGoalOperationProgram(input,frame,{goal=null,choices=new M
   let closed=null;
   if(result.complete){
    const conclusion=result.steps.at(-1);
-   if(!['conclude','and-intro','iff-intro','exists-intro','classical-reductio'].includes(conclusion?.kind)){
+   if(!['conclude','and-intro','iff-intro','exists-intro','classical-reductio','nat-induction'].includes(conclusion?.kind)){
     firstOpen??={line:subgoal.line,reason:'A child proof did not end with a conclusion.'};
    }else{
-    const localIds=graphNodes(result.graph).filter(node=>!parentIds.has(node.id)&&node.kind!=='context').map(node=>node.id);
+    // Context nodes in a nested operation can themselves be local to this
+    // child (for example, a Nat induction variable and its IH). Discharge
+    // every identity introduced below the current parent boundary, including
+    // those context nodes, rather than only non-context proof rows.
+    const localIds=graphNodes(result.graph).filter(node=>!parentIds.has(node.id)).map(node=>node.id);
     closed=closeProofScope(frame,child,{proofType:plan.goal,dependencies:proofContextDependencies(result.graph),localIds});
    }
   }else{
@@ -147,8 +175,9 @@ export function compileGoalOperationProgram(input,frame,{goal=null,choices=new M
  const subgoalRecords=results.map(({plan,child,result,status,resultId,dependencies:returned})=>({
   id:child.id,key:plan.id,kind:'subgoal',goal:plan.goal,resultId,dependencies:returned,graph:result.graph,status
  }));
- const stepKind=parsed.kind==='conjunction-introduction'?'and-intro':parsed.kind==='iff-introduction'?'iff-intro':parsed.kind==='classical-reductio'?'classical-reductio':'exists-intro';
+ const stepKind=parsed.kind==='conjunction-introduction'?'and-intro':parsed.kind==='iff-introduction'?'iff-intro':parsed.kind==='classical-reductio'?'classical-reductio':parsed.kind==='nat-induction'?'nat-induction':'exists-intro';
  const step=!structurallyComplete?null:{kind:stepKind,type:target,witness:parsed.witness,
+  inductionVariable:parsed.kind==='nat-induction'?parsed.name:undefined,
   assumptionName:parsed.name,assumptionType:operation.subgoals[0]?.contextDelta?.[0]?.type,goalOperation:operation,
   subgoals:results.map(({plan,result})=>({id:plan.id,goal:plan.goal,steps:result.steps}))};
  const scopedOperation={...operation,subgoals:results.map(({plan,child})=>({...plan,scopeId:child.id}))};
