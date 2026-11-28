@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {compileFormula,sameScopedFormula,toScopedSemantics,toScopedSemanticsInContext,toScopedSemanticsFromJudgment} from '../web/math-formula.mjs';import {compileFormula,sameScopedFormula,toScopedSemantics,toScopedSemanticsInContext} from '../web/math-formula.mjs';
+import {compileFormula,sameScopedFormula,toScopedSemantics,toScopedSemanticsInContext,toScopedSemanticsFromJudgment} from '../web/math-formula.mjs';
 test('math expression grammar preserves precedence and binder structure',()=>{
  assert.equal(compileFormula(String.raw`$b = a$`).lean,'(b = a)');
  assert.equal(compileFormula(String.raw`P \land Q \to R`).lean,'((P ∧ Q) → R)');
